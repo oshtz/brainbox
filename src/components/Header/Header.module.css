@@ -1,0 +1,141 @@
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-lg) var(--space-xl) var(--space-md);
+  border-bottom: 1px solid var(--color-border);
+  background:
+    linear-gradient(to bottom, rgba(0,0,0,0.02), rgba(0,0,0,0));
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background-color: var(--color-surface);
+}
+
+.title {
+  font-size: 2.25rem;
+  font-weight: 500;
+  color: var(--color-text-primary);
+  margin: 0;
+  font-style: italic;
+  font-family: var(--font-family-title);
+}
+
+.tabs {
+  display: flex;
+  gap: var(--space-md);
+}
+
+.tab {
+  background: transparent;
+  border: none;
+  padding: var(--space-sm) var(--space-md);
+  font-size: 1rem;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: all var(--transition-duration) var(--transition-timing);
+  font-family: var(--font-family-body);
+}
+
+.tab:hover {
+  color: var(--color-text-primary);
+}
+
+.tab.active {
+  color: var(--color-primary);
+  border-bottom: 2px solid var(--color-primary);
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+/* Primary button - New Note (most prominent) */
+.primaryButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--color-primary);
+  color: var(--color-background);
+  border: 1px solid var(--color-primary);
+  border-radius: 999px;
+  padding: 12px 18px;
+  font-size: 0.95rem;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease, opacity 0.15s ease;
+  font-family: var(--font-family-sans);
+  font-weight: var(--font-weight-medium);
+  box-shadow: 0 2px 8px rgba(var(--color-primary-rgb), 0.2);
+}
+
+.primaryButton:hover,
+.primaryButton:focus-visible {
+  background-color: var(--color-primary-hover);
+  border-color: var(--color-primary-hover);
+  opacity: 0.95;
+}
+
+/* Secondary button - New Vault (same styling but muted with overlay) */
+.secondaryButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--color-primary);
+  color: var(--color-background);
+  border: 1px solid var(--color-primary);
+  border-radius: 999px;
+  padding: 12px 18px;
+  font-size: 0.95rem;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease, opacity 0.15s ease;
+  font-family: var(--font-family-sans);
+  font-weight: var(--font-weight-medium);
+  box-shadow: 0 2px 8px rgba(var(--color-primary-rgb), 0.2);
+  position: relative;
+  opacity: 0.8;
+}
+
+.secondaryButton:hover,
+.secondaryButton:focus-visible {
+  background-color: var(--color-primary-hover);
+  border-color: var(--color-primary-hover);
+  opacity: 0.9;
+}
+
+/* Legacy createButton for backward compatibility */
+.createButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--color-primary);
+  color: var(--color-background);
+  border: 1px solid var(--color-primary);
+  border-radius: 999px;
+  padding: 10px 14px;
+  font-size: 0.92rem;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease, opacity 0.15s ease;
+  font-family: var(--font-family-sans);
+  font-weight: var(--font-weight-medium);
+  box-shadow: 0 2px 8px rgba(var(--color-primary-rgb), 0.2);
+}
+
+.createButton:hover,
+.createButton:focus-visible {
+  background-color: var(--color-primary-hover);
+  border-color: var(--color-primary-hover);
+  opacity: 0.95;
+}
+
+/* Gradient style applied per-letter so it works with SplitText spans */
+/* titleGradient removed per request to use solid text color */
+
+.icon {
+  font-size: 1.2rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}

@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>brainbox Capture Bridge</title>
+    <style>
+        body {
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: #f9f9f9;
+            color: #333;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            padding: 20px;
+            text-align: center;
+        }
+        .status {
+            margin: 20px 0;
+            padding: 15px;
+            border-radius: 8px;
+            background-color: #e9f5e9;
+            border-left: 4px solid #4caf50;
+            max-width: 500px;
+        }
+        .spinner {
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            border-left-color: #4caf50;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+    <meta name="robots" content="noindex" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+</head>
+<body>
+    <h1>brainbox Capture</h1>
+    <div class="spinner"></div>
+    <div class="status" id="status">
+        Capturing page content...
+    </div>
+
+    <script>
+        window.onload = function() {
+            // Get current URL parameters
+            const urlParams = new URLSearchParams(window.location.search);
+            const pageUrl = urlParams.get('url');
+            const pageTitle = urlParams.get('title');
+            
+            if (pageUrl) {
+                // Construct the brainbox protocol URL with proper encoding
+                const brainboxUrl = `brainbox://capture?url=${encodeURIComponent(pageUrl)}&title=${encodeURIComponent(pageTitle || '')}`;
+                
+                document.getElementById('status').textContent = 'Sending to brainbox...';
+                
+                // Create an iframe to launch the protocol without browser warnings
+                const iframe = document.createElement('iframe');
+                iframe.style.display = 'none';
+                document.body.appendChild(iframe);
+                
+                // Try different methods to launch the protocol
+                try {
+                    // Method 1: Direct location change
+                    window.location.href = brainboxUrl;
+                    
+                    // Method 2: Use iframe as fallback
+                    setTimeout(function() {
+                        try {
+                            iframe.src = brainboxUrl;
+                        } catch (e) {
+                            console.error("Iframe method failed:", e);
+                        }
+                        
+                        // Attempt to close this window after a delay
+                        setTimeout(function() {
+                            document.getElementById('status').textContent = 'Captured in brainbox!';
+                            try {
+                                window.close();
+                            } catch (e) {
+                                document.getElementById('status').textContent = 'Captured! You can close this tab.';
+                            }
+                        }, 1000);
+                    }, 300);
+                } catch (e) {
+                    document.getElementById('status').textContent = 'Error: ' + e.message;
+                }
+            } else {
+                document.getElementById('status').textContent = 'Error: No URL specified';
+            }
+        };
+    </script>
+</body>
+</html>
+

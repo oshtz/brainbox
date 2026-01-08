@@ -1,0 +1,226 @@
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  width: 68px;
+  height: 100%;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  padding: var(--space-sm);
+  border-radius: var(--border-radius-lg);
+  box-shadow: var(--shadow-md);
+  transition: width 0.3s ease, box-shadow 0.2s ease, transform 0.2s ease;
+  position: relative;
+  z-index: 10;
+}
+
+.logo {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: var(--space-md) 0;
+  margin-bottom: var(--space-md);
+}
+/* Logos: preserve aspect ratio */
+.logoImg { /* expanded lockup */
+  height: 90px; /* ~3x nav icon size for prominence */
+  width: auto;
+}
+.logoImgSmall { /* collapsed mark */
+  height: 50px; /* slightly larger than nav icons */
+  width: auto;
+}
+
+.nav {
+  flex: 1;
+}
+
+.nav ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.navButton {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  width: 100%;
+  padding: var(--space-sm);
+  border: none;
+  background: transparent;
+  border-radius: var(--border-radius-md);
+  cursor: pointer;
+  color: var(--color-text-secondary);
+  transition: background-color var(--transition-duration) var(--transition-timing),
+              color var(--transition-duration) var(--transition-timing);
+}
+
+.navButton:hover {
+  background-color: var(--color-surface-hover);
+  color: var(--color-text-primary);
+}
+
+.active .navButton {
+  background-color: rgba(var(--color-primary-rgb), 0.12);
+  color: var(--color-primary);
+  border: 1px solid rgba(var(--color-primary-rgb), 0.25);
+}
+
+.icon {
+  font-size: 1.2rem;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-width: 24px; /* Ensure icon has minimum width */
+}
+/* Navigation icons */
+.navIcon {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+/* When collapsed, center icons and remove gap/label to avoid extra right spacing */
+.sidebar:not(.expanded) .navButton {
+  justify-content: center;
+  gap: 0;
+}
+.sidebar:not(.expanded) .label { display: none; }
+
+/* Dark theme: invert only the compact icon mark */
+[data-theme='dark'] .sidebar .logoImgSmall {
+  filter: invert(1) brightness(1.1);
+}
+
+.label {
+  white-space: nowrap;
+  opacity: 0;
+  max-width: 0;
+  overflow: hidden;
+  transition: max-width 0.3s ease, opacity 0.3s ease;
+}
+
+.themeToggle {
+  padding: var(--space-md) 0;
+  display: flex;
+  justify-content: center;
+}
+
+.iconButton {
+  background: transparent;
+  border: none;
+  border-radius: 50%;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background-color var(--transition-duration) var(--transition-timing),
+              transform var(--transition-duration) var(--transition-timing);
+}
+
+.iconButton:hover {
+  background-color: var(--color-surface-hover);
+  transform: scale(1.1);
+}
+
+.themeIcon {
+  width: 20px;
+  height: 20px;
+  stroke: currentColor;
+  color: var(--color-text-primary); /* ensure sun/moon follow theme color */
+}
+
+/* Toggle button for expand/collapse */
+.toggleButton {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--color-text-secondary);
+  transition: background-color var(--transition-duration) var(--transition-timing),
+              transform var(--transition-duration) var(--transition-timing);
+}
+
+.toggleButton:hover {
+  background-color: var(--color-surface-hover);
+}
+
+.toggleIcon {
+  width: 16px;
+  height: 16px;
+}
+
+/* When sidebar is expanded via toggle */
+.expanded {
+  width: 180px;
+}
+
+.expanded .label {
+  opacity: 1;
+  max-width: 120px;
+}
+
+/* Media queries for responsive sidebar */
+@media (max-width: 576px) {
+  .sidebar {
+    position: fixed;
+    bottom: var(--space-md);
+    left: var(--space-md);
+    right: var(--space-md);
+    width: auto;
+    height: 60px;
+    flex-direction: row;
+    align-items: center;
+    padding: var(--space-xs) var(--space-sm);
+    border-right: none;
+    border-top: 1px solid var(--color-border);
+    border-radius: var(--border-radius-lg);
+  }
+  
+  .logo {
+    padding: 0;
+    margin-bottom: 0;
+    margin-right: var(--space-md);
+  }
+  
+  .nav {
+    flex: 1;
+  }
+  
+  .nav ul {
+    flex-direction: row;
+    justify-content: space-around;
+  }
+  
+  .themeToggle {
+    padding: 0;
+    margin-left: var(--space-md);
+  }
+  
+  /* Disable hover expansion on mobile */
+  .expanded {
+    width: 100%;
+  }
+  
+  .label {
+    display: none;
+  }
+
+  /* Hide toggle button on mobile bottom bar layout */
+  .toggleButton {
+    display: none;
+  }
+}

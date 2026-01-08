@@ -1,0 +1,20 @@
+.grid {
+  display: grid;
+  gap: var(--grid-gap, var(--space-md)); /* Use variable passed from component, fallback to md */
+
+  /* 
+  Default to auto-fitting columns, adjust as needed. 
+  Example: repeat(auto-fit, minmax(250px, 1fr)) 
+  */
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); 
+}
+
+/* Add modifiers for different column counts or layouts if needed */
+/* 
+.twoColumns {
+  grid-template-columns: repeat(2, 1fr);
+}
+.threeColumns {
+  grid-template-columns: repeat(3, 1fr);
+}
+*/

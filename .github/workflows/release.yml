@@ -1,0 +1,414 @@
+name: Release
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  release:
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: 'macos-14'  # Native Apple Silicon runner
+            args: '--target aarch64-apple-darwin'
+          - platform: 'windows-latest'
+            args: ''
+
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Rust setup
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.platform == 'macos-14' && 'aarch64-apple-darwin' || '' }}
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 'lts/*'
+          cache: 'pnpm'
+
+      - name: Install frontend dependencies
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Debug build environment
+        run: |
+          echo "Node version: $(node --version)"
+          echo "pnpm version: $(pnpm --version)"
+          echo "Tauri CLI version: $(pnpm tauri --version)"
+          echo "Rust version: $(rustc --version)"
+          echo "Platform: ${{ matrix.platform }}"
+          echo "Args: ${{ matrix.args }}"
+
+      - name: Verify icon files (macOS only)
+        if: matrix.platform == 'macos-14'
+        run: |
+          echo "Checking icon files..."
+          ls -la src-tauri/icons/
+          if [ -f "src-tauri/icons/icon.icns" ]; then
+            echo "✓ icon.icns found"
+            file src-tauri/icons/icon.icns
+          else
+            echo "✗ icon.icns missing"
+            exit 1
+          fi
+
+      - name: Build the app (macOS)
+        if: matrix.platform == 'macos-14'
+        uses: tauri-apps/tauri-action@v0.5
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Apple code signing and notarization (macOS only)
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        with:
+          tagName: v__VERSION__
+          releaseName: 'brainbox v__VERSION__'
+          releaseBody: 'See the assets to download and install this version.'
+          releaseDraft: false
+          prerelease: false
+          args: ${{ matrix.args }}
+
+      - name: Build the app (Windows)
+        if: matrix.platform == 'windows-latest'
+        uses: tauri-apps/tauri-action@v0.5
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: v__VERSION__
+          releaseName: 'brainbox v__VERSION__'
+          releaseBody: 'See the assets to download and install this version.'
+          releaseDraft: false
+          prerelease: false
+          args: ${{ matrix.args }}
+
+      - name: Fix macOS app bundle (macOS only)
+        if: matrix.platform == 'macos-14'
+        run: |
+          TARGET_DIR="src-tauri/target/aarch64-apple-darwin/release"
+          BUNDLE_DIR="$TARGET_DIR/bundle/macos/brainbox.app"
+          
+          if [ -d "$BUNDLE_DIR" ]; then
+            echo "Fixing app bundle permissions and attributes..."
+            
+            # Fix permissions
+            chmod -R 755 "$BUNDLE_DIR"
+            chmod +x "$BUNDLE_DIR/Contents/MacOS/brainbox"
+            
+            # Remove quarantine attributes that might cause "damaged" errors
+            xattr -cr "$BUNDLE_DIR" || echo "No extended attributes to clear"
+            
+            # Ensure proper bundle structure
+            if [ ! -f "$BUNDLE_DIR/Contents/Info.plist" ]; then
+              echo "Warning: Info.plist missing"
+            fi
+            
+            echo "App bundle fixed"
+          else
+            echo "No app bundle found to fix"
+          fi
+
+      - name: Verify build artifacts (macOS only)
+        if: matrix.platform == 'macos-14'
+        run: |
+          echo "Verifying ARM64 build artifacts..."
+          TARGET_DIR="src-tauri/target/aarch64-apple-darwin/release"
+          EXPECTED_ARCH="arm64"
+          
+          if [ -f "$TARGET_DIR/brainbox" ]; then
+            echo "✓ Binary found"
+            file "$TARGET_DIR/brainbox"
+            otool -L "$TARGET_DIR/brainbox" | head -10
+          else
+            echo "✗ Binary not found in $TARGET_DIR"
+            ls -la src-tauri/target/*/release/ || true
+          fi
+          
+          # Check for app bundle
+          BUNDLE_DIR="$TARGET_DIR/bundle/macos/brainbox.app"
+          if [ -d "$BUNDLE_DIR" ]; then
+            echo "✓ App bundle found"
+            echo "Bundle structure:"
+            find "$BUNDLE_DIR" -type f | head -20
+            
+            # Check Info.plist
+            if [ -f "$BUNDLE_DIR/Contents/Info.plist" ]; then
+              echo "✓ Info.plist found"
+              echo "Info.plist contents:"
+              cat "$BUNDLE_DIR/Contents/Info.plist"
+            else
+              echo "✗ Info.plist missing"
+            fi
+            
+            # Check for icon files
+            echo "Icon files in bundle:"
+            find "$BUNDLE_DIR" -name "*.icns" -o -name "*.png" | head -10
+            
+            # Check app signature status
+            echo "Checking code signature:"
+            codesign -dv "$BUNDLE_DIR" 2>&1 || echo "App is unsigned (expected)"
+            
+            # Verify binary architecture
+            echo "Checking binary architecture:"
+            BINARY_PATH="$BUNDLE_DIR/Contents/MacOS/brainbox"
+            if [ -f "$BINARY_PATH" ]; then
+              file "$BINARY_PATH"
+              lipo -info "$BINARY_PATH" 2>/dev/null || echo "Not a fat binary (single architecture)"
+              
+              # Check if architecture matches expected
+              if file "$BINARY_PATH" | grep -q "$EXPECTED_ARCH"; then
+                echo "✓ Native $EXPECTED_ARCH binary confirmed"
+              else
+                echo "✗ WARNING: Binary is not $EXPECTED_ARCH!"
+                echo "Architecture mismatch detected"
+              fi
+            else
+              echo "✗ Binary not found at expected path"
+            fi
+            
+          else
+            echo "✗ App bundle not found"
+            echo "Available files in target:"
+            find "$TARGET_DIR" -name "*.app" -o -name "*.dmg" | head -10
+          fi
+
+      - name: Cache EVB installer (Windows only)
+        if: matrix.platform == 'windows-latest'
+        id: cache-evb
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/enigmavb_setup.exe
+          key: evb-installer-v10.80
+
+      - name: Download EVB installer (Windows only)
+        if: matrix.platform == 'windows-latest' && steps.cache-evb.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: |
+          # Download EVB installer with multiple fallback sources
+          $evbUrls = @(
+            "https://www.enigmaprotector.com/assets/files/enigmavb.exe",
+            "https://enigmaprotector.com/assets/files/enigmavb.exe",
+            "https://web.archive.org/web/2024/https://www.enigmaprotector.com/assets/files/enigmavb.exe",
+            "https://web.archive.org/web/20231201000000*/https://www.enigmaprotector.com/assets/files/enigmavb.exe"
+          )
+          $evbInstaller = Join-Path $env:RUNNER_TEMP "enigmavb_setup.exe"
+          Remove-Item -Path $evbInstaller -Force -ErrorAction SilentlyContinue
+
+          $downloaded = $false
+          foreach ($evbUrl in $evbUrls) {
+            Write-Host "Trying: $evbUrl"
+            for ($attempt = 1; $attempt -le 3; $attempt++) {
+              try {
+                # Use Invoke-WebRequest with browser-like headers
+                $headers = @{
+                  "User-Agent" = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+                  "Accept" = "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"
+                  "Accept-Language" = "en-US,en;q=0.9"
+                  "Referer" = "https://www.enigmaprotector.com/en/downloads.html"
+                }
+                Invoke-WebRequest -Uri $evbUrl -OutFile $evbInstaller -UseBasicParsing -Headers $headers -MaximumRedirection 10 -TimeoutSec 120
+
+                if ((Test-Path $evbInstaller) -and (Get-Item $evbInstaller).Length -gt 1MB) {
+                  $downloaded = $true
+                  Write-Host "Downloaded successfully from $evbUrl"
+                  break
+                }
+              } catch {
+                Write-Host "Attempt $attempt failed: $_"
+              }
+              Start-Sleep -Seconds 5
+            }
+            if ($downloaded) { break }
+          }
+
+          if (-not $downloaded) {
+            # Final fallback: try using curl with different options
+            Write-Host "Trying curl as final fallback..."
+            $curlUrls = @(
+              "https://www.enigmaprotector.com/assets/files/enigmavb.exe"
+            )
+            foreach ($url in $curlUrls) {
+              try {
+                curl.exe -L -o $evbInstaller -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" -H "Referer: https://www.enigmaprotector.com/en/downloads.html" --retry 3 --retry-delay 5 $url
+                if ((Test-Path $evbInstaller) -and (Get-Item $evbInstaller).Length -gt 1MB) {
+                  $downloaded = $true
+                  Write-Host "Downloaded successfully using curl from $url"
+                  break
+                }
+              } catch {
+                Write-Host "Curl attempt failed: $_"
+              }
+            }
+          }
+
+          if (-not $downloaded) {
+            Write-Host "::error::Failed to download EVB installer from all sources."
+            Write-Host "::error::The enigmaprotector.com site may be blocking CI downloads."
+            Write-Host "::error::Portable exe will be skipped for this build."
+            # Create a marker file to indicate download failure
+            "DOWNLOAD_FAILED" | Out-File -FilePath (Join-Path $env:RUNNER_TEMP "evb_download_failed.txt")
+          }
+
+      - name: Install Enigma Virtual Box (Windows only)
+        if: matrix.platform == 'windows-latest'
+        shell: pwsh
+        run: |
+          $evbInstaller = Join-Path $env:RUNNER_TEMP "enigmavb_setup.exe"
+          $failMarker = Join-Path $env:RUNNER_TEMP "evb_download_failed.txt"
+          
+          # Check if download failed
+          if (Test-Path $failMarker) {
+            Write-Host "::warning::EVB download failed previously. Skipping portable exe creation."
+            "SKIP_PORTABLE" | Out-File -FilePath (Join-Path $env:RUNNER_TEMP "skip_portable.txt")
+            exit 0
+          }
+          
+          # Verify installer exists
+          if (-not (Test-Path $evbInstaller)) {
+            Write-Host "::warning::EVB installer not found. Skipping portable exe creation."
+            "SKIP_PORTABLE" | Out-File -FilePath (Join-Path $env:RUNNER_TEMP "skip_portable.txt")
+            exit 0
+          }
+
+          # Install silently
+          $process = Start-Process -FilePath $evbInstaller -ArgumentList "/VERYSILENT","/NORESTART" -Wait -PassThru
+          if ($process.ExitCode -ne 0) {
+            Write-Host "::warning::EVB installer failed with exit code $($process.ExitCode). Skipping portable exe creation."
+            "SKIP_PORTABLE" | Out-File -FilePath (Join-Path $env:RUNNER_TEMP "skip_portable.txt")
+            exit 0
+          }
+
+          # Verify
+          if (Test-Path "C:\Program Files (x86)\Enigma Virtual Box\enigmavbconsole.exe") {
+            Write-Host "EVB installed successfully"
+          } else {
+            Write-Host "::warning::EVB installation verification failed. Skipping portable exe creation."
+            "SKIP_PORTABLE" | Out-File -FilePath (Join-Path $env:RUNNER_TEMP "skip_portable.txt")
+          }
+
+      - name: Create portable exe (Windows only)
+        if: matrix.platform == 'windows-latest'
+        shell: pwsh
+        run: |
+          # Check if we should skip portable exe creation
+          $skipMarker = Join-Path $env:RUNNER_TEMP "skip_portable.txt"
+          if (Test-Path $skipMarker) {
+            Write-Host "::warning::Skipping portable exe creation due to EVB issues."
+            exit 0
+          }
+
+          # Install @insco/enigma-virtualbox CLI globally
+          npm install -g @insco/enigma-virtualbox
+          if ($LASTEXITCODE -ne 0) {
+            throw "Failed to install @insco/enigma-virtualbox"
+          }
+
+          $inputExe = Resolve-Path "src-tauri\target\release\brainbox.exe"
+          $outputExe = Join-Path $PWD "src-tauri\target\release\brainbox-portable.exe"
+          $webviewDll = Get-ChildItem -Path "src-tauri\target" -Filter "WebView2Loader.dll" -Recurse | Select-Object -First 1
+          if (-not $webviewDll) {
+            throw "WebView2Loader.dll not found under src-tauri\\target"
+          }
+          $webviewDllPath = $webviewDll.FullName
+
+          # Use enigmavirtualbox to generate a compatible EVB project file
+          $evbStaging = Join-Path $PWD "evb-staging"
+          New-Item -ItemType Directory -Force -Path $evbStaging | Out-Null
+          Copy-Item -Path $webviewDllPath -Destination $evbStaging -Force
+          $evbProject = Join-Path $PWD "brainbox.evb"
+          enigmavirtualbox generate $evbStaging --input $inputExe --output $outputExe --project-name $evbProject
+          if ($LASTEXITCODE -ne 0) {
+            throw "enigmavirtualbox generate failed"
+          }
+          $evbConsole = "C:\Program Files (x86)\Enigma Virtual Box\enigmavbconsole.exe"
+          if (-not (Test-Path $evbConsole)) {
+            throw "enigmavbconsole.exe not found at $evbConsole"
+          }
+          & $evbConsole $evbProject
+          if ($LASTEXITCODE -ne 0) {
+            throw "enigmavbconsole failed"
+          }
+
+          # Verify output
+          if (Test-Path $outputExe) {
+            $size = [math]::Round((Get-Item $outputExe).Length / 1MB, 2)
+            Write-Host "Portable exe created: $size MB"
+          } else {
+            throw "Failed to create portable exe"
+          }
+
+      - name: Upload portable exe artifact (Windows only)
+        if: matrix.platform == 'windows-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: brainbox-portable
+          path: src-tauri/target/release/brainbox-portable.exe
+          if-no-files-found: ignore
+
+      - name: Upload portable exe to release (Windows only)
+        if: matrix.platform == 'windows-latest' && github.ref == 'refs/heads/main'
+        shell: pwsh
+        run: |
+          $portableExe = "src-tauri/target/release/brainbox-portable.exe"
+          
+          # Check if portable exe exists
+          if (-not (Test-Path $portableExe)) {
+            Write-Host "::warning::Portable exe not found. Skipping upload to release."
+            exit 0
+          }
+          
+          $version = (Get-Content package.json | ConvertFrom-Json).version
+          $tag = "v$version"
+          
+          # Wait for release to be created by tauri-action
+          $maxAttempts = 30
+          $attempt = 0
+          $releaseFound = $false
+          
+          while ($attempt -lt $maxAttempts -and -not $releaseFound) {
+            $attempt++
+            Write-Host "Checking for release $tag (attempt $attempt/$maxAttempts)..."
+            
+            try {
+              $release = gh release view $tag --json id 2>$null
+              if ($release) {
+                $releaseFound = $true
+                Write-Host "Release $tag found!"
+              }
+            } catch {
+              Write-Host "Release not found yet, waiting..."
+            }
+            
+            if (-not $releaseFound) {
+              Start-Sleep -Seconds 10
+            }
+          }
+          
+          if ($releaseFound) {
+            Write-Host "Uploading portable exe to release $tag..."
+            gh release upload $tag $portableExe --clobber
+            Write-Host "Portable exe uploaded successfully!"
+          } else {
+            Write-Host "Warning: Release $tag not found after $maxAttempts attempts. Portable exe not uploaded to release."
+          }
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+

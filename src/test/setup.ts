@@ -1,0 +1,70 @@
+import '@testing-library/jest-dom';
+import { afterEach, vi } from 'vitest';
+import { cleanup } from '@testing-library/react';
+
+// Cleanup after each test case
+afterEach(() => {
+  cleanup();
+});
+
+// Mock Tauri API
+const mockInvoke = vi.fn();
+const mockListen = vi.fn();
+const mockEmit = vi.fn();
+
+vi.mock('@tauri-apps/api/core', () => ({
+  invoke: mockInvoke
+}));
+
+vi.mock('@tauri-apps/api/event', () => ({
+  listen: mockListen,
+  emit: mockEmit
+}));
+
+// Mock window.matchMedia
+Object.defineProperty(window, 'matchMedia', {
+  writable: true,
+  value: vi.fn().mockImplementation(query => ({
+    matches: false,
+    media: query,
+    onchange: null,
+    addListener: vi.fn(), // deprecated
+    removeListener: vi.fn(), // deprecated
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    dispatchEvent: vi.fn(),
+  })),
+});
+
+// Mock localStorage
+const localStorageMock = {
+  getItem: vi.fn(),
+  setItem: vi.fn(),
+  removeItem: vi.fn(),
+  clear: vi.fn(),
+};
+Object.defineProperty(window, 'localStorage', {
+  value: localStorageMock
+});
+
+// Mock ResizeObserver
+(globalThis as any).ResizeObserver = vi.fn().mockImplementation(() => ({
+  observe: vi.fn(),
+  unobserve: vi.fn(),
+  disconnect: vi.fn(),
+}));
+
+// Mock IntersectionObserver
+(globalThis as any).IntersectionObserver = vi.fn().mockImplementation(() => ({
+  observe: vi.fn(),
+  unobserve: vi.fn(),
+  disconnect: vi.fn(),
+}));
+
+// Export mocks for use in tests
+export {
+  mockInvoke,
+  mockListen,
+  mockEmit,
+  localStorageMock
+};

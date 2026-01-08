@@ -1,0 +1,94 @@
+ .titlebar {
+  height: var(--titlebar-height);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 var(--space-sm);
+  background: transparent;
+  border-radius: 0;
+  box-shadow: none;
+  /* no external margin to keep overall height math exact */
+  user-select: none;
+}
+
+/* When using native overlay titlebar on macOS, reserve space for traffic lights */
+.overlay-titlebar .titlebar {
+  padding-left: 84px; /* approximate width of macOS traffic lights area */
+}
+
+ .left {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  height: 100%;
+  user-select: none;
+ }
+
+.wordmark {
+  height: 14px;
+  display: block;
+}
+
+ .spacer {
+  flex: 1;
+  user-select: none;
+  /* Ensure spacer is interactive for dragging */
+  min-height: 100%;
+ }
+
+ .controls {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 100%;
+  z-index: 10; /* Ensure controls are above drag region */
+ }
+
+ .btn {
+  width: 36px;
+  height: calc(var(--titlebar-height) - 2px);
+  border: none;
+  background: transparent;
+  color: var(--color-text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--border-radius-sm);
+  cursor: pointer;
+  /* Ensure buttons are interactive */
+  position: relative;
+  z-index: 11;
+ }
+
+ .btn:hover {
+  background: var(--color-surface-hover);
+ }
+
+ .btn.close:hover {
+  background: var(--color-danger);
+  color: white;
+ }
+
+ .close {}
+
+ .icon {
+  width: 14px;
+  height: 14px;
+  display: inline-block;
+  line-height: 0;
+  pointer-events: none;
+ }
+
+ @media (max-width: 576px) {
+  .btn {
+    width: 32px;
+  }
+  .wordmark {
+    height: 12px;
+  }
+ }
+
+/* Dark mode: invert wordmark for better contrast */
+[data-theme="dark"] .titlebar .wordmark {
+  filter: invert(1) hue-rotate(180deg);
+}

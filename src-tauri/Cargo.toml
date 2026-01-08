@@ -1,0 +1,75 @@
+[package]
+name = "brainbox"
+version = "1.0.0"
+description = "A knowledge management and capture tool for organizing thoughts and ideas"
+authors = ["oshtz"]
+license = "MIT"
+repository = "https://github.com/oshtz/brainbox"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+# The `_lib` suffix may seem redundant but it is necessary
+# to make the lib name unique and wouldn't conflict with the bin name.
+# This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
+name = "brainboxcore"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.0.0-rc.15", features = [] } # Use specific RC version
+
+[dependencies]
+# Enable image features for tray/icon APIs used from JS (png/ico)
+tauri = { version = "2.0.0-rc.15", features = ["image-png", "image-ico", "tray-icon"] } # Enable tray support + image features
+tauri-plugin-shell = "2.0.0-rc.15" # Use specific RC version for shell plugin
+
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+urlencoding = "2"
+
+# brainbox Core Dependencies
+rusqlite = { version = "0.31", features = ["bundled", "limits"] } # Bundled for easy setup, limits for safety
+tantivy = "0.22"
+chacha20poly1305 = { version = "0.10", features = ["alloc"] } # Using XChaCha20 variant
+rand = "0.8"
+chrono = { version = "0.4", features = ["serde"] } # Timestamps
+thiserror = "1.0" # Error handling
+lazy_static = "1.4.0" # For singleton patterns
+pbkdf2 = "0.12"
+sha2 = "0.10"
+
+# Cross-platform dependencies
+whoami = "1.4"
+dirs = "5"
+tauri-plugin-global-shortcut = "2.0.0-rc.15"
+tauri-plugin-single-instance = "2.2.0"
+tiny_http = "0.12"
+screenshots = "0.7"
+image = "0.24"
+reqwest = { version = "0.11", features = ["blocking", "json", "rustls-tls", "stream"] }
+futures-util = "0.3"
+regex = "1"
+scraper = "0.18"
+quick-xml = { version = "0.31", features = ["serialize"] }
+
+# Windows-specific dependencies
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.56", features = [
+    "Win32_Foundation",
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_System_Threading",
+    "Win32_System_ProcessStatus"
+] }
+winreg = "0.50"
+
+[features]
+# This feature is used for production builds or when `devPath` points to the filesystem
+# DO NOT REMOVE!!
+custom-protocol = ["tauri/custom-protocol"]
+
+# Release profile optimizations for performance
+[profile.release]
+opt-level = 3          # Maximum optimization
+lto = "thin"           # Thin LTO for faster builds
+strip = true           # Remove debug symbols

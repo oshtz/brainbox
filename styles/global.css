@@ -1,0 +1,132 @@
+/* Apply base styles using tokens */
+html {
+  box-sizing: border-box;
+  font-size: var(--font-size-base); /* Set base font size */
+  height: 100%;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: inherit;
+}
+
+body {
+  margin: 0; /* Remove default body margin */
+  padding: var(--space-xs) var(--space-md) var(--space-md) var(--space-md); /* App gutter: reduced top padding for custom titlebar */
+  font-family: var(--font-family-body);
+  color: var(--color-text-primary);
+  /* Simplified background for better performance on macOS */
+  background: var(--color-background);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  height: 100%;
+  overflow: hidden; /* prevent page scrollbars */
+}
+
+:root {
+  --scrollbar-size: 10px;
+  --scrollbar-track: rgba(15, 23, 42, 0.06);
+  --scrollbar-thumb: rgba(15, 23, 42, 0.35);
+  --scrollbar-thumb-hover: rgba(15, 23, 42, 0.55);
+}
+
+/* Add subtle gradient overlay that's more performant */
+body::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background:
+    radial-gradient(800px 400px at -5% -5%, rgba(99,102,241,0.08), transparent 50%),
+    radial-gradient(600px 300px at 105% 5%, rgba(236,72,153,0.06), transparent 50%);
+  pointer-events: none;
+  z-index: -1;
+}
+
+/* Basic heading styles */
+h1, h2, h3, h4, h5, h6 {
+  margin-top: 0;
+  margin-bottom: var(--space-sm);
+  font-weight: var(--font-weight-bold);
+  font-family: var(--font-family-title);
+  line-height: 1.2;
+}
+
+/* Remove default list styles */
+ul, ol {
+  padding-left: var(--space-md);
+  margin-top: 0;
+  margin-bottom: var(--space-sm);
+}
+
+/* Basic link styling */
+a {
+  color: var(--color-primary);
+  text-decoration: none;
+  transition: color var(--transition-duration) var(--transition-timing);
+}
+
+a:hover {
+  color: var(--color-primary-hover);
+  text-decoration: underline;
+}
+
+/* Buttons, inputs, and focus outlines */
+button, input, select, textarea {
+  font-family: var(--font-family-sans);
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+/* Custom scrollbars that match the design system */
+* {
+  scrollbar-width: thin; /* Firefox */
+  scrollbar-color: var(--scrollbar-thumb) transparent;
+  -ms-overflow-style: auto;
+}
+
+*::-webkit-scrollbar {
+  width: var(--scrollbar-size);
+  height: var(--scrollbar-size);
+}
+
+*::-webkit-scrollbar-track {
+  background: var(--scrollbar-track);
+  border-radius: var(--border-radius-lg);
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: var(--border-radius-lg);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
+}
+
+/* macOS WebKit tweaks: scope heavy effects only to interactive states */
+@supports (-webkit-appearance: none) {
+  /* Only apply will-change to animating elements */
+  button:hover,
+  [role="button"]:hover,
+  .masonry-card:hover,
+  .card:hover {
+    will-change: transform, opacity;
+  }
+  
+  button:not(:hover),
+  [role="button"]:not(:hover),
+  .masonry-card:not(:hover),
+  .card:not(:hover) {
+    will-change: auto;
+  }
+}

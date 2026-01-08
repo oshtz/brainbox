@@ -1,0 +1,21 @@
+/* Google Fonts imports */
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Averia+Serif+Libre:wght@400;500;700&display=swap');
+
+/* 
+Other good serif alternatives available on Google Fonts:
+- Merriweather
+- Libre Baskerville
+- Lora
+- Source Serif Pro
+- Crimson Text
+*/
+
+/* Font utility classes */
+.title-font {
+  font-family: var(--font-family-title);
+}
+
+.body-font {
+  font-family: var(--font-family-body);
+}

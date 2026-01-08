@@ -1,0 +1,195 @@
+.card {
+  position: relative;
+  height: 200px;
+  border-radius: calc(var(--border-radius-lg) + 4px);
+  background-size: cover;
+  background-position: center;
+  overflow: hidden; /* Clip children and effects to rounded corners */
+  /* Ensure proper compositing so backdrop-filter and children don't bleed past corners */
+  -webkit-mask-image: -webkit-radial-gradient(white, black);
+  isolation: isolate;
+  transition: transform var(--transition-duration) var(--transition-timing),
+              box-shadow var(--transition-duration) var(--transition-timing);
+  cursor: pointer;
+  border: 1px solid var(--color-border);
+}
+
+/* Create a shadow layer that gets clipped by the parent's radius */
+/* Use a simpler shadow approach to reduce GPU load */
+.card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  /* Simplified shadow for better performance */
+  box-shadow: inset 0 0 0 1px var(--color-border);
+  pointer-events: none;
+  z-index: 0;
+  transition: opacity var(--transition-duration) var(--transition-timing);
+}
+
+.card:hover {
+  /* Use opacity instead of transform for better performance */
+  opacity: 0.95;
+}
+
+.card:hover::before {
+  opacity: 0.8;
+}
+
+.content {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: var(--space-md);
+  background: linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0) 0%,
+    rgba(0, 0, 0, 0.22) 50%,
+    rgba(0, 0, 0, 0.55) 100%
+  );
+  position: relative;
+  z-index: 1; /* Keep content above the shadow layer */
+}
+
+.title {
+  margin: 0 0 var(--space-sm) 0;
+  color: white;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+  font-weight: 500;
+  font-size: 1.2rem;
+  font-family: var(--font-family-title);
+}
+
+.body {
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 0.9rem;
+  line-height: 1.4;
+  font-family: var(--font-family-body);
+}
+
+.footer {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: var(--space-sm) var(--space-md);
+  background-color: rgba(255, 255, 255, 0.12);
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: space-between; /* label left, menu right */
+  z-index: 1; /* Keep footer above the shadow layer */
+  /* Match the parent's curved bottom corners to avoid visual square edges */
+  border-bottom-left-radius: inherit;
+  border-bottom-right-radius: inherit;
+  overflow: visible; /* allow dropdown to render above footer */
+}
+
+.label {
+  color: white;
+  font-size: 1.2rem; /* match top title size */
+  font-weight: 500;
+  font-family: var(--font-family-title); /* use title font */
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+  flex: 1; /* take remaining space to the left */
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.priceTag {
+  position: absolute;
+  top: var(--space-sm);
+  right: var(--space-sm);
+  background-color: white;
+  color: var(--color-text-primary);
+  font-size: 0.8rem;
+  padding: var(--space-xs) var(--space-sm);
+  border-radius: 999px;
+  z-index: 1;
+  font-family: var(--font-family-body);
+  font-weight: var(--font-weight-medium);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+/* Options menu (three dots) */
+.menuWrap { position: relative; z-index: 2; }
+
+.menuButton {
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent; /* no button background */
+  color: #fff; /* base color; will blend for contrast */
+  border: 0; /* no border */
+  border-radius: 0;
+  box-shadow: none;
+  cursor: pointer;
+  text-shadow: none;
+}
+
+.menuButton:hover {
+  background: transparent; /* keep backgroundless on hover */
+  box-shadow: none;
+  opacity: 0.9;
+}
+
+.menuIcon {
+  width: 20px;
+  height: 20px;
+}
+
+.menuButton:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* Adaptive contrast for the three dots over varying covers */
+@supports (mix-blend-mode: difference) {
+  .menuButton {
+    mix-blend-mode: difference; /* white dots turn dark on light backgrounds */
+  }
+}
+
+/* Fallback when blend-mode unsupported: use subtle shadow */
+@supports not (mix-blend-mode: difference) {
+  .menuButton {
+    text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+  }
+}
+
+.menu {
+  position: absolute;
+  bottom: calc(100% + 6px); /* open upwards from footer */
+  right: 0;
+  min-width: 180px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-md);
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
+}
+
+.menuItem,
+.menuItemDanger {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 10px 12px;
+  background: transparent;
+  border: 0;
+  color: var(--color-text-primary);
+  cursor: pointer;
+  font-family: var(--font-family-body);
+  font-size: 0.95rem;
+}
+
+.menuItem:hover { background: var(--color-surface-hover); }
+.menuItemDanger { color: var(--color-danger); }
+.menuItemDanger:hover { background: rgba(220,38,38,0.06); }

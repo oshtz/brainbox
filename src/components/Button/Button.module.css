@@ -1,0 +1,115 @@
+/* Base Button Styles */
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 14px;
+  font-family: var(--font-family-sans);
+  font-size: 0.95rem;
+  font-weight: var(--font-weight-medium);
+  line-height: 1.25;
+  border-radius: var(--border-radius-md);
+  cursor: pointer;
+  text-decoration: none;
+  border: 1px solid transparent;
+  transition: background-color var(--transition-duration) var(--transition-timing),
+              border-color var(--transition-duration) var(--transition-timing),
+              color var(--transition-duration) var(--transition-timing),
+              box-shadow var(--transition-duration) var(--transition-timing),
+              transform var(--transition-duration) var(--transition-timing);
+  user-select: none; /* Prevent text selection */
+  white-space: nowrap; /* Prevent wrapping */
+}
+
+/* Primary Variant */
+.primary {
+  background-color: var(--color-primary);
+  color: var(--color-background);
+  border-color: var(--color-primary);
+  box-shadow: 0 2px 8px rgba(var(--color-primary-rgb), 0.2);
+}
+
+.primary:hover,
+.primary:focus-visible {
+  background-color: var(--color-primary-hover);
+  border-color: var(--color-primary-hover);
+  box-shadow: 0 4px 12px rgba(var(--color-primary-rgb), 0.3);
+}
+
+/* Secondary Variant (Example) */
+.secondary {
+  background-color: var(--color-surface);
+  color: var(--color-text-primary);
+  border-color: var(--color-border);
+}
+
+.secondary:hover,
+.secondary:focus-visible {
+  background-color: var(--color-surface-hover);
+  border-color: var(--color-border);
+}
+
+/* Ghost Variant: minimal, pill-shaped */
+.ghost {
+  background: transparent;
+  color: var(--color-text-secondary);
+  border-color: var(--color-border);
+  border-radius: 999px;
+}
+
+.ghost:hover,
+.ghost:focus-visible {
+  background: var(--color-surface-hover);
+  color: var(--color-text-primary);
+}
+
+/* Danger Variant */
+.danger {
+  background-color: var(--color-danger);
+  color: var(--color-background);
+  border-color: var(--color-danger);
+}
+
+.danger:hover,
+.danger:focus-visible {
+  background-color: var(--color-danger-dark);
+  border-color: var(--color-danger-dark);
+}
+
+/* Loading state */
+.loading {
+  cursor: not-allowed;
+  opacity: 0.7;
+  position: relative;
+}
+
+.spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid transparent;
+  border-top: 2px solid currentColor;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+.loadingText {
+  opacity: 0.7;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Add styles for disabled state, different sizes, etc. */
+.button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Sizes */
+.sm { padding: 8px 12px; font-size: 0.9rem; }
+.md { padding: 10px 14px; font-size: 0.95rem; }
+.lg { padding: 12px 16px; font-size: 1rem; }
