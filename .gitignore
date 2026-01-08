@@ -1,0 +1,76 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Node modules and build output
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Storybook
+*storybook.log
+
+# Rust/Cargo
+/target/
+.cargo/
+
+# Tauri
+src-tauri/target/
+src-tauri/.cargo/
+
+# Tauri signing keys (NEVER commit these!)
+*.key
+*.key.pub
+~/.tauri/
+.tauri/
+
+# SQLite databases
+*.db
+*.sqlite
+*.sqlite3
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Docker/Env
+.env
+.env.*
+docker-compose.override.yml
+
+# System files
+Thumbs.db
+
+# Coverage
+coverage/
+.coverage
+
+# Playwright
+playwright-report/
+test-results/
+blob-report/
+
+# TypeScript incremental build
+*.tsbuildinfo
+
+# Local tooling
+.claude/
