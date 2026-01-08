@@ -1,0 +1,25 @@
+/* Base Card Styles */
+.card {
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-md);
+  padding: var(--space-md);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden; /* Ensure content stays within rounded corners */
+  font-family: var(--font-family-body); /* Apply body font to all card content */
+}
+
+/* Optional: Add styles for card variants (e.g., elevated, outlined) */
+
+/* Optional: Add BEM-style nested elements if needed later */
+/* 
+.card__header {
+  ...
+}
+.card__body {
+  ...
+}
+.card__footer {
+  ...
+}
+*/

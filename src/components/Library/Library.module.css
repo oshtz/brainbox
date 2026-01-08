@@ -1,0 +1,55 @@
+.wrap {
+  padding: 1rem 1.5rem 2rem;
+}
+
+.toolbar {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.segmented {
+  display: inline-flex;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.segmented button {
+  padding: 6px 10px;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+
+.segmented button.active {
+  background: var(--color-elevated);
+  color: var(--color-text-primary);
+}
+
+.active {}
+
+.select,
+.search {
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+}
+
+.hint {
+  margin-left: auto;
+  color: var(--color-text-secondary);
+  font-size: 0.9rem;
+}
+
+.empty {
+  text-align: center;
+  color: var(--color-text-secondary);
+  padding: 2rem 0;
+}

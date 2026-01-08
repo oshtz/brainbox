@@ -1,0 +1,110 @@
+.errorBoundary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: var(--space-lg);
+  background: var(--color-background);
+}
+
+.errorContent {
+  max-width: 600px;
+  text-align: center;
+  padding: var(--space-xl);
+  background: var(--color-surface);
+  border-radius: var(--border-radius-lg);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-lg);
+}
+
+.errorIcon {
+  margin-bottom: var(--space-md);
+  display: flex;
+  justify-content: center;
+}
+
+.errorIconSvg {
+  width: 64px;
+  height: 64px;
+  color: var(--color-warning);
+}
+
+.errorTitle {
+  color: var(--color-text-primary);
+  margin-bottom: var(--space-sm);
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-bold);
+}
+
+.errorMessage {
+  color: var(--color-text-secondary);
+  margin-bottom: var(--space-lg);
+  font-size: var(--font-size-md);
+  line-height: 1.6;
+}
+
+.errorDetails {
+  margin: var(--space-lg) 0;
+  text-align: left;
+}
+
+.errorDetails summary {
+  cursor: pointer;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  margin-bottom: var(--space-sm);
+  user-select: none;
+}
+
+.errorDetails summary:hover {
+  color: var(--color-text-primary);
+}
+
+.errorStack {
+  background: var(--color-background);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-md);
+  padding: var(--space-md);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.errorActions {
+  display: flex;
+  gap: var(--space-md);
+  justify-content: center;
+  margin-bottom: var(--space-lg);
+  flex-wrap: wrap;
+}
+
+.errorTimestamp {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-xs);
+  margin: 0;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .errorBoundary {
+    padding: var(--space-md);
+  }
+  
+  .errorContent {
+    padding: var(--space-lg);
+  }
+  
+  .errorActions {
+    flex-direction: column;
+    align-items: center;
+  }
+  
+  .errorActions button {
+    width: 100%;
+    max-width: 200px;
+  }
+}
