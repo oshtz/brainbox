@@ -38,6 +38,7 @@ thiserror = "1.0" # Error handling
 lazy_static = "1.4.0" # For singleton patterns
 pbkdf2 = "0.12"
 sha2 = "0.10"
+uuid = { version = "1.6", features = ["v4"] }
 
 # Cross-platform dependencies
 whoami = "1.4"

@@ -6,6 +6,7 @@ import { useHotkey } from '../../contexts/HotkeyContext';
 import { KeyManagement } from '../KeyManagement';
 import { ExportImport } from '../ExportImport';
 import { AISettings } from '../AISettings';
+import { SyncSettings } from '../SyncSettings';
 
 const BOOKMARKLET_PROTOCOL = `javascript:(function(){try{var u=encodeURIComponent(location.href),t=encodeURIComponent(document.title),p='brainbox://capture?url='+u+'&title='+t;location.href=p;setTimeout(function(){try{window.stop();}catch(e){}},350);}catch(e){console.log('Bookmarklet error:',e&&e.message?e.message:e);}})();`;
 
@@ -317,6 +318,8 @@ const Settings = ({ scrollToSection, onScrollComplete }) => {
       >
         <ExportImport />
       </SettingCard>
+
+      <SyncSettings />
 
       <SettingCard
         id="ai-settings"

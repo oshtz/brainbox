@@ -43,6 +43,7 @@ import { useVaultPassword } from './contexts/VaultPasswordContext';
 import { useToast } from './contexts/ToastContext';
 import { useConfirm } from './contexts/ConfirmContext';
 import { usePrompt } from './contexts/PromptContext';
+import { useSyncManager } from './utils/useSyncManager';
 
 const getErrorMessage = (err: unknown): string => {
   if (typeof err === 'string') return err;
@@ -88,9 +89,29 @@ const transformBackendItem = (item: BackendVaultItem): VaultItem => {
 function App() {
   // Vault password management
   const { getVaultKey, setVaultPassword, clearKey } = useVaultPassword();
-  const { showSuccess, showError } = useToast();
+  const { showSuccess, showError, showInfo, showWarning } = useToast();
   const confirmDialog = useConfirm();
   const promptDialog = usePrompt();
+
+  // Sync manager for startup check and sync on close
+  useSyncManager({
+    onSyncAvailable: (preview) => {
+      // Show a persistent info toast about available sync
+      showInfo(
+        `Sync available from ${preview.device_name}: ${preview.vault_count} vaults, ${preview.item_count} items. Go to Settings > Sync to import.`,
+        'Sync Available'
+      );
+    },
+    onSyncError: (error) => {
+      console.error('Sync check error:', error);
+    },
+    showToast: (type, message) => {
+      if (type === 'success') showSuccess(message);
+      else if (type === 'error') showError(message);
+      else if (type === 'warning') showWarning(message);
+      else showInfo(message);
+    },
+  });
 
   // State for the capture modal
   const [isCaptureModalOpen, setIsCaptureModalOpen] = useState<boolean>(false);
@@ -128,8 +149,15 @@ function App() {
   // State for brainy chat panel
   const [isBrainyChatOpen, setIsBrainyChatOpen] = useState<boolean>(false);
   const [brainyMode, setBrainyMode] = useState<'sidebar' | 'full'>(aiService.getBrainyMode());
+  // State for conflict filter in vault view
+  const [showConflictsOnly, setShowConflictsOnly] = useState<boolean>(false);
   const skeletonCards = Array.from({ length: 8 }, (_, i) => i);
   const isDetailOpen = Boolean(selectedItem || searchSelectedItem);
+
+  // Compute conflict count and filtered items
+  const conflictItems = vaultItems.filter(item => item.title?.includes('[Conflict]'));
+  const hasConflicts = conflictItems.length > 0;
+  const displayedVaultItems = showConflictsOnly ? conflictItems : vaultItems;
 
   // Change cover handlers
   const handleCoverFromUrl = async (vaultId: string, url: string) => {
@@ -770,9 +798,24 @@ function App() {
             }} />
           ) : currentView === 'vaults' && selectedVaultId ? (
             <section className={styles.vaults}>
-              <Button variant="ghost" onClick={() => setSelectedVaultId(null)} style={{ marginBottom: '1rem' }} aria-label="Back to vaults">
-                ← Back to vaults
-              </Button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
+                <Button variant="ghost" onClick={() => { setSelectedVaultId(null); setShowConflictsOnly(false); }} aria-label="Back to vaults">
+                  ← Back to vaults
+                </Button>
+                {hasConflicts && (
+                  <Button
+                    variant={showConflictsOnly ? 'secondary' : 'ghost'}
+                    onClick={() => setShowConflictsOnly(!showConflictsOnly)}
+                    style={{
+                      background: showConflictsOnly ? 'rgba(245, 158, 11, 0.15)' : undefined,
+                      border: showConflictsOnly ? '1px solid #f59e0b' : undefined,
+                      color: showConflictsOnly ? '#f59e0b' : undefined,
+                    }}
+                  >
+                    {showConflictsOnly ? 'Show All Items' : `View Conflicts (${conflictItems.length})`}
+                  </Button>
+                )}
+              </div>
               <div style={{padding: '0 0 2rem 0'}}>
                 {isLoadingVaultItems ? (
                   <div className={styles.skeletonGrid} aria-busy="true">
@@ -780,17 +823,25 @@ function App() {
                       <div key={`vault-skel-${key}`} className={styles.skeletonCard} />
                     ))}
                   </div>
-                ) : vaultItems.length === 0 ? (
+                ) : displayedVaultItems.length === 0 ? (
                   <div className={styles.emptyState}>
-                    <h3 className={styles.emptyStateTitle}>No items yet</h3>
-                    <p className={styles.emptyStateBody}>Capture a note or link to start building this vault.</p>
+                    <h3 className={styles.emptyStateTitle}>{showConflictsOnly ? 'No conflicts' : 'No items yet'}</h3>
+                    <p className={styles.emptyStateBody}>
+                      {showConflictsOnly
+                        ? 'All sync conflicts have been resolved.'
+                        : 'Capture a note or link to start building this vault.'}
+                    </p>
                     <div className={styles.emptyStateActions}>
-                      <Button onClick={() => setIsCaptureModalOpen(true)}>Create note</Button>
+                      {showConflictsOnly ? (
+                        <Button onClick={() => setShowConflictsOnly(false)}>Show All Items</Button>
+                      ) : (
+                        <Button onClick={() => setIsCaptureModalOpen(true)}>Create note</Button>
+                      )}
                     </div>
                   </div>
                 ) : (
                   <Masonry
-                    data={vaultItems.map(item => ({
+                    data={displayedVaultItems.map(item => ({
                       ...item,
                       image: item.image || '',
                       height: item.height || 260
