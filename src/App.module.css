@@ -33,6 +33,10 @@
   padding: var(--space-lg);
 }
 
+.contentNoTopPadding {
+  padding-top: 0;
+}
+
 .quickCapture {
   margin-bottom: var(--space-xl);
 }
