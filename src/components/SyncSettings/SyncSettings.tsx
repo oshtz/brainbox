@@ -1,5 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { emit } from '@tauri-apps/api/event';
+import styles from './SyncSettings.module.css';
 
 interface SyncStatus {
   sync_enabled: boolean;
@@ -44,183 +46,15 @@ interface LockedVault {
   name: string;
 }
 
-// Styles
-const cardStyle: React.CSSProperties = {
-  background: 'var(--color-elevated)',
-  borderRadius: 16,
-  border: '1px solid var(--color-border)',
-  padding: '1.75rem',
-  boxShadow: '0px 18px 40px rgba(15, 23, 42, 0.12)',
-};
-
-const cardHeaderStyle: React.CSSProperties = {
-  display: 'flex',
-  alignItems: 'flex-start',
-  justifyContent: 'space-between',
-  gap: '1.5rem',
-  flexWrap: 'wrap',
-  marginBottom: '1.5rem',
-};
-
-const cardTitleStyle: React.CSSProperties = {
-  margin: 0,
-  fontSize: '1.15rem',
-  fontWeight: 600,
-  color: 'var(--color-text-primary)',
-};
-
-const cardDescriptionStyle: React.CSSProperties = {
-  margin: '0.35rem 0 0',
-  fontSize: '0.95rem',
-  color: 'var(--color-text-secondary)',
-  lineHeight: 1.4,
-};
-
-const cardBodyStyle: React.CSSProperties = {
-  display: 'grid',
-  gap: '1.5rem',
-};
-
-const buttonStyle: React.CSSProperties = {
-  padding: '0.6rem 1.1rem',
-  borderRadius: 999,
-  border: '1px solid var(--color-border)',
-  background: 'var(--color-surface)',
-  color: 'var(--color-text-primary)',
-  cursor: 'pointer',
-  fontWeight: 600,
-  fontSize: '0.95rem',
-  transition: 'transform 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease',
-  boxShadow: '0 10px 20px rgba(15, 23, 42, 0.08)',
-};
-
-const inputStyle: React.CSSProperties = {
-  padding: '0.65rem 0.9rem',
-  borderRadius: 10,
-  border: '1px solid var(--color-border)',
-  background: 'var(--color-surface)',
-  color: 'var(--color-text-primary)',
-  width: '100%',
-  fontSize: '0.95rem',
-};
-
-const labelStyle: React.CSSProperties = {
-  display: 'block',
-  fontSize: '0.9rem',
-  fontWeight: 600,
-  color: 'var(--color-text-secondary)',
-  marginBottom: 6,
-};
-
-const subtleLabelStyle: React.CSSProperties = {
-  fontSize: '0.85rem',
-  fontWeight: 600,
-  letterSpacing: '0.05em',
-  textTransform: 'uppercase',
-  color: 'var(--color-text-secondary)',
-};
-
-const toggleRowStyle: React.CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'space-between',
-  gap: '1rem',
-  padding: '0.75rem 0',
-  borderBottom: '1px solid var(--color-border)',
-};
-
-const toggleLabelStyle: React.CSSProperties = {
-  display: 'flex',
-  flexDirection: 'column',
-  gap: '0.25rem',
-};
-
-const toggleStyle: React.CSSProperties = {
-  position: 'relative',
-  width: 48,
-  height: 26,
-  borderRadius: 13,
-  background: 'var(--color-border)',
-  cursor: 'pointer',
-  transition: 'background 0.2s ease',
-  flexShrink: 0,
-};
-
-const toggleActiveStyle: React.CSSProperties = {
-  ...toggleStyle,
-  background: 'var(--color-accent)',
-};
-
-const toggleKnobStyle: React.CSSProperties = {
-  position: 'absolute',
-  top: 3,
-  left: 3,
-  width: 20,
-  height: 20,
-  borderRadius: '50%',
-  background: '#fff',
-  transition: 'transform 0.2s ease',
-  boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
-};
-
-const toggleKnobActiveStyle: React.CSSProperties = {
-  ...toggleKnobStyle,
-  transform: 'translateX(22px)',
-};
-
-const statusBubbleStyle = (variant: 'info' | 'accent' | 'danger' | 'warning' = 'info'): React.CSSProperties => {
-  const palette = {
-    info: {
-      border: 'var(--color-border)',
-      background: 'var(--color-surface)',
-      color: 'var(--color-text-secondary)',
-    },
-    accent: {
-      border: 'var(--color-accent)',
-      background: 'rgba(99, 102, 241, 0.08)',
-      color: 'var(--color-accent)',
-    },
-    danger: {
-      border: '#ef4444',
-      background: 'rgba(239, 68, 68, 0.08)',
-      color: '#ef4444',
-    },
-    warning: {
-      border: '#f59e0b',
-      background: 'rgba(245, 158, 11, 0.08)',
-      color: '#f59e0b',
-    },
-  }[variant];
-
-  return {
-    padding: '0.75rem 1rem',
-    borderRadius: 12,
-    border: `1px solid ${palette.border}`,
-    background: palette.background,
-    color: palette.color,
-    fontSize: '0.92rem',
-    lineHeight: 1.4,
+// Helper to get status bubble class
+const getStatusClass = (variant: 'info' | 'accent' | 'danger' | 'warning') => {
+  const classes: Record<string, string> = {
+    info: styles.statusInfo,
+    accent: styles.statusAccent,
+    danger: styles.statusDanger,
+    warning: styles.statusWarning,
   };
-};
-
-const folderRowStyle: React.CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  gap: '0.75rem',
-  padding: '0.75rem',
-  background: 'var(--color-surface)',
-  borderRadius: 10,
-  border: '1px solid var(--color-border)',
-};
-
-const folderPathStyle: React.CSSProperties = {
-  flex: 1,
-  fontSize: '0.9rem',
-  color: 'var(--color-text-primary)',
-  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
-  overflow: 'hidden',
-  textOverflow: 'ellipsis',
-  whiteSpace: 'nowrap',
+  return `${styles.statusBubble} ${classes[variant]}`;
 };
 
 export function SyncSettings() {
@@ -421,6 +255,12 @@ export function SyncSettings() {
       setSyncMessage(message);
       setSyncMessageType(result.conflicts.length > 0 || result.skipped_vaults.length > 0 ? 'warning' : 'accent');
       await loadSyncStatus();
+      
+      // Notify the rest of the app that data has changed
+      if (result.imported_vaults > 0 || result.imported_items > 0) {
+        await emit('vaults-changed');
+        await emit('items-changed', { type: 'sync-import' });
+      }
     } catch (e) {
       console.error('Import failed:', e);
       setSyncMessage(`Import failed: ${e}`);
@@ -442,11 +282,11 @@ export function SyncSettings() {
 
   if (isLoading) {
     return (
-      <section style={cardStyle}>
-        <header style={cardHeaderStyle}>
+      <section className={styles.card}>
+        <header className={styles.cardHeader}>
           <div style={{ flex: '1 1 auto' }}>
-            <h2 style={cardTitleStyle}>Sync</h2>
-            <p style={cardDescriptionStyle}>Loading sync settings...</p>
+            <h2 className={styles.cardTitle}>Sync</h2>
+            <p className={styles.cardDescription}>Loading sync settings...</p>
           </div>
         </header>
       </section>
@@ -454,24 +294,24 @@ export function SyncSettings() {
   }
 
   return (
-    <section id="sync-settings" style={cardStyle}>
-      <header style={cardHeaderStyle}>
+    <section id="sync-settings" className={styles.card}>
+      <header className={styles.cardHeader}>
         <div style={{ flex: '1 1 auto' }}>
-          <h2 style={cardTitleStyle}>Sync</h2>
-          <p style={cardDescriptionStyle}>
+          <h2 className={styles.cardTitle}>Sync</h2>
+          <p className={styles.cardDescription}>
             Synchronize your vaults across devices using any file sync service.
           </p>
         </div>
       </header>
 
-      <div style={cardBodyStyle}>
+      <div className={styles.cardBody}>
         {/* Sync Folder */}
         <div>
-          <label style={labelStyle}>Sync Folder</label>
+          <label className={styles.label}>Sync Folder</label>
           {status?.sync_folder && !folderInput ? (
-            <div style={folderRowStyle}>
-              <span style={folderPathStyle}>{status.sync_folder}</span>
-              <button type="button" style={buttonStyle} onClick={() => {
+            <div className={styles.folderRow}>
+              <span className={styles.folderPath}>{status.sync_folder}</span>
+              <button type="button" className={styles.button} onClick={() => {
                 setFolderInput(status?.sync_folder || '');
               }}>
                 Change
@@ -485,18 +325,19 @@ export function SyncSettings() {
                   value={folderInput}
                   onChange={(e) => setFolderInput(e.target.value)}
                   placeholder="Enter full path to sync folder"
-                  style={{ ...inputStyle, flex: 1 }}
+                  className={styles.input}
+                  style={{ flex: 1 }}
                 />
-                <button type="button" style={buttonStyle} onClick={handleSetFolder}>
+                <button type="button" className={styles.button} onClick={handleSetFolder}>
                   Set Folder
                 </button>
                 {status?.sync_folder && (
-                  <button type="button" style={buttonStyle} onClick={() => setFolderInput('')}>
+                  <button type="button" className={styles.button} onClick={() => setFolderInput('')}>
                     Cancel
                   </button>
                 )}
               </div>
-              <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--color-text-secondary)' }}>
+              <p className={styles.hint} style={{ margin: 0 }}>
                 Enter the full path to a folder that syncs across your devices (e.g., Dropbox, OneDrive, Google Drive, Syncthing).
               </p>
             </div>
@@ -505,68 +346,85 @@ export function SyncSettings() {
 
         {/* Device Name */}
         <div>
-          <label style={labelStyle}>Device Name</label>
+          <label className={styles.label}>Device Name</label>
           <input
             type="text"
             value={deviceName}
             onChange={(e) => handleDeviceNameChange(e.target.value)}
-            style={inputStyle}
+            className={styles.input}
             placeholder="Enter device name"
           />
-          <p style={{ margin: '0.5rem 0 0', fontSize: '0.85rem', color: 'var(--color-text-secondary)' }}>
+          <p className={styles.hint}>
             Identifies this device in sync history.
           </p>
         </div>
 
-        {/* Toggles */}
+        {/* Segmented Toggles */}
         <div>
-          <div style={toggleRowStyle}>
-            <div style={toggleLabelStyle}>
-              <span style={{ fontWeight: 600, color: 'var(--color-text-primary)' }}>Sync on close</span>
-              <span style={{ fontSize: '0.85rem', color: 'var(--color-text-secondary)' }}>
+          <div className={styles.settingRow}>
+            <div className={styles.settingLabel}>
+              <span className={styles.settingLabelTitle}>Sync on close</span>
+              <span className={styles.settingLabelHint}>
                 Automatically export when closing the app
               </span>
             </div>
-            <button
-              type="button"
-              style={syncOnClose ? toggleActiveStyle : toggleStyle}
-              onClick={() => handleSyncOnCloseChange(!syncOnClose)}
-              aria-pressed={syncOnClose}
-            >
-              <span style={syncOnClose ? toggleKnobActiveStyle : toggleKnobStyle} />
-            </button>
+            <div className={styles.segmentedToggle}>
+              <button
+                type="button"
+                className={`${styles.segmentedButton} ${!syncOnClose ? styles.segmentedButtonActive : ''}`}
+                onClick={() => handleSyncOnCloseChange(false)}
+              >
+                Off
+              </button>
+              <button
+                type="button"
+                className={`${styles.segmentedButton} ${syncOnClose ? styles.segmentedButtonActive : ''}`}
+                onClick={() => handleSyncOnCloseChange(true)}
+              >
+                On
+              </button>
+            </div>
           </div>
 
-          <div style={toggleRowStyle}>
-            <div style={toggleLabelStyle}>
-              <span style={{ fontWeight: 600, color: 'var(--color-text-primary)' }}>Check for sync on startup</span>
-              <span style={{ fontSize: '0.85rem', color: 'var(--color-text-secondary)' }}>
+          <div className={styles.settingRow}>
+            <div className={styles.settingLabel}>
+              <span className={styles.settingLabelTitle}>Check for sync on startup</span>
+              <span className={styles.settingLabelHint}>
                 Prompt to import if newer sync data is available
               </span>
             </div>
-            <button
-              type="button"
-              style={checkOnStartup ? toggleActiveStyle : toggleStyle}
-              onClick={() => handleCheckOnStartupChange(!checkOnStartup)}
-              aria-pressed={checkOnStartup}
-            >
-              <span style={checkOnStartup ? toggleKnobActiveStyle : toggleKnobStyle} />
-            </button>
+            <div className={styles.segmentedToggle}>
+              <button
+                type="button"
+                className={`${styles.segmentedButton} ${!checkOnStartup ? styles.segmentedButtonActive : ''}`}
+                onClick={() => handleCheckOnStartupChange(false)}
+              >
+                Off
+              </button>
+              <button
+                type="button"
+                className={`${styles.segmentedButton} ${checkOnStartup ? styles.segmentedButtonActive : ''}`}
+                onClick={() => handleCheckOnStartupChange(true)}
+              >
+                On
+              </button>
+            </div>
           </div>
         </div>
 
         {/* Purge Days */}
         <div>
-          <label style={labelStyle}>Purge deleted items after (days)</label>
+          <label className={styles.label}>Purge deleted items after (days)</label>
           <input
             type="number"
             value={purgeDays}
             onChange={(e) => handlePurgeDaysChange(parseInt(e.target.value, 10) || 30)}
             min={1}
             max={365}
-            style={{ ...inputStyle, width: 120 }}
+            className={styles.input}
+            style={{ width: 120 }}
           />
-          <p style={{ margin: '0.5rem 0 0', fontSize: '0.85rem', color: 'var(--color-text-secondary)' }}>
+          <p className={styles.hint}>
             Soft-deleted items are permanently removed after this many days.
           </p>
         </div>
@@ -574,20 +432,21 @@ export function SyncSettings() {
         {/* Locked Vaults - Password Entry */}
         {lockedVaults.length > 0 && (
           <div>
-            <span style={subtleLabelStyle}>Password-Protected Vaults</span>
-            <p style={{ margin: '0.5rem 0', fontSize: '0.85rem', color: 'var(--color-text-secondary)' }}>
+            <span className={styles.subtleLabel}>Password-Protected Vaults</span>
+            <p className={styles.hint} style={{ margin: '0.5rem 0' }}>
               Enter passwords for vaults to include them in sync:
             </p>
             <div style={{ display: 'grid', gap: '0.5rem' }}>
               {lockedVaults.map((vault) => (
-                <div key={vault.id} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                  <span style={{ minWidth: 120, fontWeight: 500 }}>{vault.name}</span>
+                <div key={vault.id} className={styles.vaultPasswordRow}>
+                  <span className={styles.vaultName}>{vault.name}</span>
                   <input
                     type="password"
                     placeholder="Password"
                     value={passwords[vault.id.toString()] || ''}
                     onChange={(e) => setPasswords({ ...passwords, [vault.id.toString()]: e.target.value })}
-                    style={{ ...inputStyle, flex: 1 }}
+                    className={styles.input}
+                    style={{ flex: 1 }}
                   />
                 </div>
               ))}
@@ -597,16 +456,10 @@ export function SyncSettings() {
 
         {/* Sync Status & Actions */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-          <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+          <div className={styles.actionsRow}>
             <button
               type="button"
-              style={{
-                ...buttonStyle,
-                background: 'var(--color-accent)',
-                border: '1px solid var(--color-accent)',
-                color: '#fff',
-                opacity: !status?.sync_enabled || isSyncing ? 0.6 : 1,
-              }}
+              className={`${styles.button} ${styles.buttonPrimary}`}
               disabled={!status?.sync_enabled || isSyncing}
               onClick={handleExport}
             >
@@ -616,10 +469,7 @@ export function SyncSettings() {
             {status?.remote_file_exists && (
               <button
                 type="button"
-                style={{
-                  ...buttonStyle,
-                  opacity: isSyncing ? 0.6 : 1,
-                }}
+                className={styles.button}
                 disabled={isSyncing}
                 onClick={handleImport}
               >
@@ -630,7 +480,7 @@ export function SyncSettings() {
 
           {/* Last sync info */}
           {status?.last_sync_at && (
-            <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--color-text-secondary)' }}>
+            <p className={styles.hint} style={{ margin: 0 }}>
               Last synced: {formatDate(status.last_sync_at)}
               {status.last_sync_device && ` from ${status.last_sync_device}`}
             </p>
@@ -638,7 +488,7 @@ export function SyncSettings() {
 
           {/* Remote sync info */}
           {preview && (
-            <div style={statusBubbleStyle(status?.has_changes ? 'warning' : 'info')}>
+            <div className={getStatusClass(status?.has_changes ? 'warning' : 'info')}>
               <strong>Sync available from {preview.device_name}</strong>
               <br />
               {preview.vault_count} vaults, {preview.item_count} items
@@ -652,14 +502,14 @@ export function SyncSettings() {
 
           {/* Sync message */}
           {syncMessage && (
-            <div style={statusBubbleStyle(syncMessageType)}>
+            <div className={getStatusClass(syncMessageType)}>
               {syncMessage}
             </div>
           )}
         </div>
 
         {/* Security Warning */}
-        <div style={statusBubbleStyle('warning')}>
+        <div className={getStatusClass('warning')}>
           <strong>Security Note:</strong> Your sync file contains decrypted vault data. 
           Ensure your sync folder is secured (encrypted drive, trusted sync service, or local network only).
         </div>
