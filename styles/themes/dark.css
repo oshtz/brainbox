@@ -7,6 +7,7 @@
   --color-background-subtle: #121314; /* slightly lighter */
   --color-surface: #151617; /* neutral dark surface */
   --color-surface-elevated: #1a1b1c; /* elevated surface */
+  --color-elevated: var(--color-surface-elevated);
   --color-surface-hover: #1f2022; /* slightly lighter */
   --color-border: #2a2b2e; /* neutral-700 */
   --color-border-subtle: #222325; /* subtle border */

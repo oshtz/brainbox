@@ -30,6 +30,7 @@
   --color-background-subtle: #f8fafc; /* slate-50 */
   --color-surface: #f8fafc; /* slate-50 */
   --color-surface-elevated: #ffffff;
+  --color-elevated: var(--color-surface-elevated);
   --color-surface-hover: #f1f5f9; /* slate-100 */
   --color-border: #e2e8f0; /* slate-200 */
   --color-border-subtle: #f1f5f9; /* slate-100 */
