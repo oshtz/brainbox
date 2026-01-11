@@ -209,8 +209,9 @@ pub fn sync_export(
                 continue;
             }
         } else {
-            // No password protection - use empty key
-            Some([0u8; 32])
+            // No password protection - derive key from empty password and vault ID
+            // This matches how the frontend derives keys for passwordless vaults
+            Some(derive_key_from_password("", &vault.id.to_string(), 100_000))
         };
 
         let key = key.unwrap();
@@ -566,7 +567,9 @@ pub fn sync_import(
                         continue;
                     }
                 } else {
-                    [0u8; 32] // No password protection
+                    // No password protection - derive key from empty password and vault ID
+                    // This matches how the frontend derives keys for passwordless vaults
+                    derive_key_from_password("", &existing_vault.id.to_string(), 100_000)
                 };
 
                 // Process items
@@ -599,7 +602,8 @@ pub fn sync_import(
                 }
 
                 // Get password for new vault
-                let (key, has_password, encrypted_password) = if sync_vault.has_password {
+                // For passwordless vaults, we'll derive the key after we have the vault ID
+                let (temp_key, has_password, encrypted_password) = if sync_vault.has_password {
                     if let Some(pwd) = password_opt {
                         // Create new vault with the provided password
                         let now = chrono::Utc::now();
@@ -613,6 +617,7 @@ pub fn sync_import(
                         continue;
                     }
                 } else {
+                    // Temporary key - will be replaced after vault creation with proper derivation
                     ([0u8; 32], false, Vec::new())
                 };
 
@@ -633,7 +638,7 @@ pub fn sync_import(
 
                 let vault_id = conn.last_insert_rowid();
 
-                // Re-derive key with actual vault ID for password-protected vaults
+                // Re-derive key with actual vault ID
                 let final_key = if has_password {
                     if let Some(pwd) = password_opt {
                         let key = derive_key_from_password(pwd, &vault_id.to_string(), 100_000);
@@ -645,10 +650,12 @@ pub fn sync_import(
                         ).map_err(|e| e.to_string())?;
                         key
                     } else {
-                        key
+                        temp_key
                     }
                 } else {
-                    key
+                    // No password protection - derive key from empty password and vault ID
+                    // This matches how the frontend derives keys for passwordless vaults
+                    derive_key_from_password("", &vault_id.to_string(), 100_000)
                 };
 
                 imported_vaults += 1;
