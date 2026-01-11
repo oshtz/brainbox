@@ -646,7 +646,7 @@ function App() {
           showVaultButton={currentView === 'vaults' && !selectedVaultId}
         />
         
-        <div className={styles.content}>
+<div className={`${styles.content}${currentView === 'settings' ? ` ${styles.contentNoTopPadding}` : ''}`}>
           {currentView === 'settings' ? (
             <Settings scrollToSection={settingsScrollTarget} onScrollComplete={() => setSettingsScrollTarget(null)} />
           ) : currentView === 'search' ? (
