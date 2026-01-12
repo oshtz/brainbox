@@ -160,15 +160,49 @@ const ItemPanel: React.FC<Props> = ({ item, vaults, currentVaultId, onClose, onR
     }
   }
 
+  const isConflict = title?.includes('[Conflict]');
+
   return (
     <aside className={styles.panel}>
       <div className={styles.header}>
         <div className={styles.titleRow}>
           <input className={styles.titleInput} value={title} onChange={(e) => setTitle(e.target.value)} onBlur={() => { if (title && title !== item?.title) { onRename(String(item?.id), title); } }} />
+          {isConflict && (
+            <span style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              marginLeft: 8,
+              padding: '2px 8px',
+              borderRadius: 4,
+              background: 'rgba(245, 158, 11, 0.15)',
+              color: '#f59e0b',
+              fontSize: '0.75rem',
+              fontWeight: 600,
+              whiteSpace: 'nowrap',
+            }}>
+              Sync Conflict
+            </span>
+          )}
         </div>
         <button className={styles.iconButton} aria-label="Close" onClick={onClose}><XMarkIcon className={styles.iconButtonSvg} /></button>
       </div>
       <div className={styles.body}>
+        {isConflict && (
+          <div style={{
+            padding: '12px 16px',
+            marginBottom: 16,
+            borderRadius: 8,
+            background: 'rgba(245, 158, 11, 0.08)',
+            border: '1px solid rgba(245, 158, 11, 0.3)',
+            color: 'var(--color-text-secondary)',
+            fontSize: '0.9rem',
+            lineHeight: 1.5,
+          }}>
+            <strong style={{ color: '#f59e0b' }}>This item was created during a sync conflict.</strong>
+            <br />
+            Compare this with the original, then keep the one you want and delete the other. You can rename this item to remove the "[Conflict]" suffix.
+          </div>
+        )}
         {isUrl ? (
           (() => {
             const yt = getYouTubeId(item?.content);

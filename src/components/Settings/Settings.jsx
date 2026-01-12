@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useTheme } from '../../contexts/ThemeContext';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
@@ -6,6 +6,96 @@ import { useHotkey } from '../../contexts/HotkeyContext';
 import { KeyManagement } from '../KeyManagement';
 import { ExportImport } from '../ExportImport';
 import { AISettings } from '../AISettings';
+import { SyncSettings } from '../SyncSettings';
+import {
+  LinkIcon,
+  SwatchIcon,
+  LockClosedIcon,
+  CloudArrowDownIcon,
+  ArrowPathIcon,
+  SparklesIcon,
+  ArrowUpCircleIcon,
+} from '@heroicons/react/24/outline';
+
+// Tab configuration
+const TABS = [
+  { id: 'capture', label: 'Capture', Icon: LinkIcon },
+  { id: 'appearance', label: 'Appearance', Icon: SwatchIcon },
+  { id: 'security', label: 'Security', Icon: LockClosedIcon },
+  { id: 'backup', label: 'Backup', Icon: CloudArrowDownIcon },
+  { id: 'sync', label: 'Sync', Icon: ArrowPathIcon },
+  { id: 'ai', label: 'AI', Icon: SparklesIcon },
+  { id: 'updates', label: 'Updates', Icon: ArrowUpCircleIcon },
+];
+
+// Tab icon style (defined early for TabButton)
+const tabIconStyle = {
+  width: 18,
+  height: 18,
+  flexShrink: 0,
+};
+
+// Tab label style (defined early for TabButton)
+const tabLabelStyle = {
+  flex: 1,
+};
+
+// TabButton component with hover state
+function TabButton({ tab, isActive, onClick }) {
+  const [isHovered, setIsHovered] = useState(false);
+
+  const getStyle = () => {
+    if (isActive) {
+      return {
+        display: 'flex',
+        alignItems: 'center',
+        gap: '0.5rem',
+        padding: '0.6rem 1rem',
+        borderRadius: 8,
+        border: 'none',
+        background: 'var(--color-accent)',
+        color: '#fff',
+        cursor: 'pointer',
+        fontWeight: 600,
+        fontSize: '0.9rem',
+        transition: 'all 0.2s ease',
+        boxShadow: '0 2px 8px rgba(99, 102, 241, 0.25)',
+      };
+    }
+    return {
+      display: 'flex',
+      alignItems: 'center',
+      gap: '0.5rem',
+      padding: '0.6rem 1rem',
+      borderRadius: 8,
+      border: 'none',
+      background: isHovered ? 'var(--color-surface)' : 'transparent',
+      color: isHovered ? 'var(--color-text-primary)' : 'var(--color-text-secondary)',
+      cursor: 'pointer',
+      fontWeight: 500,
+      fontSize: '0.9rem',
+      transition: 'all 0.2s ease',
+    };
+  };
+
+  const Icon = tab.Icon;
+  
+  return (
+    <button
+      role="tab"
+      aria-selected={isActive}
+      aria-controls={`panel-${tab.id}`}
+      id={`tab-${tab.id}`}
+      onClick={onClick}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+      style={getStyle()}
+    >
+      <Icon style={tabIconStyle} />
+      <span style={tabLabelStyle}>{tab.label}</span>
+    </button>
+  );
+}
 
 const BOOKMARKLET_PROTOCOL = `javascript:(function(){try{var u=encodeURIComponent(location.href),t=encodeURIComponent(document.title),p='brainbox://capture?url='+u+'&title='+t;location.href=p;setTimeout(function(){try{window.stop();}catch(e){}},350);}catch(e){console.log('Bookmarklet error:',e&&e.message?e.message:e);}})();`;
 
@@ -222,23 +312,125 @@ function CaptureSettings() {
   );
 }
 
-const Settings = ({ scrollToSection, onScrollComplete }) => {
+// Appearance Settings Panel
+function AppearanceSettings() {
   const { accent, setAccent, theme, toggleTheme } = useTheme();
+  const presets = ['#6366f1', '#ef4444', '#10b981', '#f59e0b', '#06b6d4', '#e879f9', '#3b82f6', '#14b8a6'];
+  const accentLabel = String(accent || '').toUpperCase() || '--';
+  const toggleLabel = `Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`;
+
+  return (
+    <SettingCard
+      title="Appearance"
+      description="Tune colors and theme to match your workspace."
+      action={
+        <button
+          type="button"
+          onClick={toggleTheme}
+          style={{ ...buttonStyle, minWidth: 180 }}
+        >
+          {toggleLabel}
+        </button>
+      }
+    >
+      <div style={appearanceLayoutStyle}>
+        <div style={{ display: 'grid', gap: '0.75rem' }}>
+          <div>
+            <label style={labelStyle}>Accent color</label>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <input
+                type="color"
+                value={accent}
+                onChange={(e) => setAccent(e.target.value)}
+                aria-label="Pick accent color"
+                style={colorPickerStyle}
+              />
+              <span style={accentBadgeStyle}>{accentLabel}</span>
+            </div>
+          </div>
+        </div>
+        <div style={{ display: 'grid', gap: '0.75rem' }}>
+          <span style={subtleLabelStyle}>Quick presets</span>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            {presets.map((c) => {
+              const isActive = accent === c;
+              return (
+                <button
+                  key={c}
+                  type="button"
+                  onClick={() => setAccent(c)}
+                  aria-label={`Set accent ${c}`}
+                  style={presetButtonStyle(c, isActive)}
+                />
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </SettingCard>
+  );
+}
+
+// Security Settings Panel
+function SecuritySettings() {
+  return (
+    <SettingCard
+      title="Security"
+      description="Manage vault encryption keys and session security."
+    >
+      <KeyManagement />
+    </SettingCard>
+  );
+}
+
+// Backup Settings Panel
+function BackupSettings() {
+  return (
+    <SettingCard
+      title="Backup & Transfer"
+      description="Export and import your vaults for backup or transfer to another device."
+    >
+      <ExportImport />
+    </SettingCard>
+  );
+}
+
+// AI Settings Panel
+function AISettingsPanel() {
+  return (
+    <SettingCard
+      id="ai-settings"
+      title="AI"
+      description="Configure AI providers for note summarization and chat."
+    >
+      <AISettings />
+    </SettingCard>
+  );
+}
+
+const Settings = ({ scrollToSection, onScrollComplete }) => {
+  const [activeTab, setActiveTab] = useState('capture');
+
+  // Map scrollToSection values to tab IDs
+  const sectionToTab = {
+    'ai-settings': 'ai',
+    'sync-settings': 'sync',
+    'capture-settings': 'capture',
+    'appearance-settings': 'appearance',
+    'security-settings': 'security',
+    'backup-settings': 'backup',
+    'update-settings': 'updates',
+  };
 
   // Handle scroll to section when navigating from another page
   useEffect(() => {
     if (scrollToSection) {
-      // Small delay to ensure the DOM is ready
       const timer = setTimeout(() => {
-        const element = document.getElementById(scrollToSection);
-        if (element) {
-          element.scrollIntoView({ behavior: 'smooth', block: 'start' });
-          // Highlight the section briefly
-          element.style.transition = 'box-shadow 0.3s ease';
-          element.style.boxShadow = '0 0 0 3px var(--color-accent)';
-          setTimeout(() => {
-            element.style.boxShadow = '';
-          }, 2000);
+        // Map the scroll section to a tab
+        const tabId = sectionToTab[scrollToSection] || scrollToSection;
+        const validTab = TABS.find(t => t.id === tabId);
+        if (validTab) {
+          setActiveTab(tabId);
         }
         if (onScrollComplete) {
           onScrollComplete();
@@ -248,91 +440,130 @@ const Settings = ({ scrollToSection, onScrollComplete }) => {
     }
   }, [scrollToSection, onScrollComplete]);
 
-  const presets = ['#6366f1', '#ef4444', '#10b981', '#f59e0b', '#06b6d4', '#e879f9', '#3b82f6', '#14b8a6'];
-  const accentLabel = String(accent || '').toUpperCase() || '--';
-  const toggleLabel = `Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`;
+  const handleTabChange = useCallback((tabId) => {
+    setActiveTab(tabId);
+  }, []);
+
+  // Render the active tab's content
+  const renderTabContent = () => {
+    switch (activeTab) {
+      case 'capture':
+        return <CaptureSettings />;
+      case 'appearance':
+        return <AppearanceSettings />;
+      case 'security':
+        return <SecuritySettings />;
+      case 'backup':
+        return <BackupSettings />;
+      case 'sync':
+        return <SyncSettings />;
+      case 'ai':
+        return <AISettingsPanel />;
+      case 'updates':
+        return <UpdateSettings />;
+      default:
+        return <CaptureSettings />;
+    }
+  };
 
   return (
-    <div style={pageStyle} data-testid="settings-section">
-      <CaptureSettings />
-      <SettingCard
-        title="Appearance"
-        description="Tune colors and theme to match your workspace."
-        action={
-          <button
-            type="button"
-            onClick={toggleTheme}
-            style={{ ...buttonStyle, minWidth: 180 }}
-          >
-            {toggleLabel}
-          </button>
-        }
-      >
-        <div style={appearanceLayoutStyle}>
-          <div style={{ display: 'grid', gap: '0.75rem' }}>
-            <div>
-              <label style={labelStyle}>Accent color</label>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                <input
-                  type="color"
-                  value={accent}
-                  onChange={(e) => setAccent(e.target.value)}
-                  aria-label="Pick accent color"
-                  style={colorPickerStyle}
-                />
-                <span style={accentBadgeStyle}>{accentLabel}</span>
-              </div>
-            </div>
-          </div>
-          <div style={{ display: 'grid', gap: '0.75rem' }}>
-            <span style={subtleLabelStyle}>Quick presets</span>
-            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-              {presets.map((c) => {
-                const isActive = accent === c;
-                return (
-                  <button
-                    key={c}
-                    type="button"
-                    onClick={() => setAccent(c)}
-                    aria-label={`Set accent ${c}`}
-                    style={presetButtonStyle(c, isActive)}
-                  />
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      </SettingCard>
+    <div style={settingsContainerStyle} data-testid="settings-section">
+      {/* Tab Navigation Wrapper */}
+      <div style={tabNavWrapperStyle}>
+        <nav style={tabNavStyle} role="tablist" aria-label="Settings sections">
+          {TABS.map((tab) => (
+            <TabButton
+              key={tab.id}
+              tab={tab}
+              isActive={activeTab === tab.id}
+              onClick={() => handleTabChange(tab.id)}
+            />
+          ))}
+        </nav>
+      </div>
 
-      <SettingCard
-        title="Security"
-        description="Manage vault encryption keys and session security."
+      {/* Tab Content Panel */}
+      <div
+        style={tabContentStyle}
+        role="tabpanel"
+        id={`panel-${activeTab}`}
+        aria-labelledby={`tab-${activeTab}`}
       >
-        <KeyManagement />
-      </SettingCard>
-
-      <SettingCard
-        title="Backup & Transfer"
-        description="Export and import your vaults for backup or transfer to another device."
-      >
-        <ExportImport />
-      </SettingCard>
-
-      <SettingCard
-        id="ai-settings"
-        title="AI"
-        description="Configure AI providers for note summarization and chat."
-      >
-        <AISettings />
-      </SettingCard>
-      <UpdateSettings />
-
+        {renderTabContent()}
+      </div>
     </div>
   );
 };
 
 export default Settings;
 
+// Main container with top tabs layout
+const settingsContainerStyle = {
+  display: 'flex',
+  flexDirection: 'column',
+};
+
+// Wrapper to handle negative margin for nav - pulls nav flush against header
+const tabNavWrapperStyle = {
+  margin: '0 -24px 0 -24px',
+  position: 'sticky',
+  top: 0,
+  zIndex: 10,
+};
+
+// Tab navigation row
+const tabNavStyle = {
+  display: 'flex',
+  flexWrap: 'wrap',
+  justifyContent: 'center',
+  gap: '0.5rem',
+  padding: '0.75rem var(--space-lg)',
+  background: 'var(--color-surface)',
+  borderBottom: '1px solid var(--color-border)',
+};
+
+// Tab button base style
+const tabButtonStyle = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: '0.75rem',
+  padding: '0.75rem 1rem',
+  borderRadius: 10,
+  border: 'none',
+  background: 'transparent',
+  color: 'var(--color-text-secondary)',
+  cursor: 'pointer',
+  fontWeight: 500,
+  fontSize: '0.95rem',
+  textAlign: 'left',
+  transition: 'all 0.2s ease',
+  width: '100%',
+};
+
+// Tab button active style
+const tabButtonActiveStyle = {
+  ...tabButtonStyle,
+  background: 'var(--color-accent)',
+  color: '#fff',
+  fontWeight: 600,
+  boxShadow: '0 4px 12px rgba(99, 102, 241, 0.25)',
+};
+
+// Tab content area
+const tabContentStyle = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: '1.5rem',
+  minWidth: 0,
+  padding: '24px',
+  maxWidth: 960,
+  margin: '0 auto',
+  width: '100%',
+  boxSizing: 'border-box',
+  paddingBottom: '48px',
+};
+
+// Legacy pageStyle kept for compatibility but not used
 const pageStyle = {
   padding: '2.5rem 2rem',
   display: 'grid',
@@ -793,8 +1024,8 @@ function UpdateSettings() {
     setUpdateStatus('')
     try {
       const result = await invoke('check_for_updates')
-      if (result) {
-        setUpdateStatus(result)
+      if (result && result.version) {
+        setUpdateStatus(`Update available: v${result.version}`)
       } else {
         setUpdateStatus('You are running the latest version!')
       }
@@ -818,7 +1049,7 @@ function UpdateSettings() {
     }
   }
 
-  const hasUpdate = updateStatus.includes('Update available')
+  const hasUpdate = typeof updateStatus === 'string' && updateStatus.includes('Update available')
   const releaseName = formatReleaseName(currentVersion)
 
   return (

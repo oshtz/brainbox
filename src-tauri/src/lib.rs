@@ -2,6 +2,7 @@
 mod search;
 mod capture;
 mod vault;
+mod sync;
 
 use std::path::Path;
 use std::process::Command;
@@ -92,9 +93,10 @@ fn create_vault(name: String, password: String, has_password: Option<bool>) -> R
     let should_have_password = has_password.unwrap_or(false) && !password.is_empty();
 
     let now = chrono::Utc::now().to_rfc3339();
+    let new_uuid = uuid::Uuid::new_v4().to_string();
     conn.execute(
-        "INSERT INTO vaults (name, encrypted_password, created_at, cover_image, has_password) VALUES (?1, ?2, ?3, NULL, ?4)",
-        rusqlite::params![name, Vec::<u8>::new(), now, should_have_password],
+        "INSERT INTO vaults (name, encrypted_password, created_at, cover_image, has_password, uuid, updated_at) VALUES (?1, ?2, ?3, NULL, ?4, ?5, ?6)",
+        rusqlite::params![name, Vec::<u8>::new(), now, should_have_password, new_uuid, now],
     ).map_err(|e| e.to_string())?;
 
     let id = conn.last_insert_rowid();
@@ -115,9 +117,12 @@ fn create_vault(name: String, password: String, has_password: Option<bool>) -> R
         id,
         name,
         encrypted_password: encrypted,
-        created_at: now,
+        created_at: now.clone(),
         cover_image: None,
         has_password: should_have_password,
+        uuid: Some(new_uuid),
+        updated_at: Some(now),
+        deleted_at: None,
     })
 }
 
@@ -505,11 +510,12 @@ fn import_vaults(json_data: String, password: String) -> Result<Vec<i64>, String
     let mut imported_vault_ids = Vec::new();
 
     for vault in export_data.vaults {
-        // Create new vault
+        // Create new vault with UUID
         let now = chrono::Utc::now().to_rfc3339();
+        let new_uuid = uuid::Uuid::new_v4().to_string();
         conn.execute(
-            "INSERT INTO vaults (name, encrypted_password, created_at, cover_image) VALUES (?1, ?2, ?3, ?4)",
-            rusqlite::params![vault.name, Vec::<u8>::new(), now, vault.cover_image],
+            "INSERT INTO vaults (name, encrypted_password, created_at, cover_image, uuid, updated_at, has_password) VALUES (?1, ?2, ?3, ?4, ?5, ?6, 1)",
+            rusqlite::params![vault.name, Vec::<u8>::new(), now, vault.cover_image, new_uuid, now],
         ).map_err(|e| e.to_string())?;
 
         let vault_id = conn.last_insert_rowid();
@@ -539,8 +545,9 @@ fn import_vaults(json_data: String, password: String) -> Result<Vec<i64>, String
             let mut encrypted = nonce_bytes.to_vec();
             encrypted.extend(ciphertext);
 
+            let item_uuid = uuid::Uuid::new_v4().to_string();
             conn.execute(
-                "INSERT INTO vault_items (vault_id, title, content, created_at, updated_at, image, summary) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                "INSERT INTO vault_items (vault_id, title, content, created_at, updated_at, image, summary, uuid) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
                 rusqlite::params![
                     vault_id,
                     item.title,
@@ -548,7 +555,8 @@ fn import_vaults(json_data: String, password: String) -> Result<Vec<i64>, String
                     item.created_at,
                     item.updated_at,
                     item.image,
-                    item.summary
+                    item.summary,
+                    item_uuid
                 ],
             ).map_err(|e| e.to_string())?;
         }
@@ -633,6 +641,156 @@ fn change_vault_password(vault_id: i64, old_key: Vec<u8>, new_password: String, 
     conn.execute("COMMIT", []).map_err(|e| e.to_string())?;
 
     Ok(())
+}
+
+// --- Sync Commands ---
+
+use std::collections::HashMap;
+
+/// Export all vaults to sync folder
+#[tauri::command]
+fn sync_export_vaults(passwords: HashMap<i64, Vec<u8>>) -> Result<sync::SyncExportResult, String> {
+    let db_path = dirs::data_local_dir().ok_or("Failed to get app data dir")?.join("brainbox.sqlite");
+    let conn = rusqlite::Connection::open(db_path).map_err(|e| e.to_string())?;
+    sync::sync_export(&conn, passwords)
+}
+
+/// Get sync status information
+#[tauri::command]
+fn get_sync_status() -> Result<sync::SyncStatus, String> {
+    let db_path = dirs::data_local_dir().ok_or("Failed to get app data dir")?.join("brainbox.sqlite");
+    let conn = rusqlite::Connection::open(db_path).map_err(|e| e.to_string())?;
+    sync::check_sync_status(&conn)
+}
+
+/// Get list of vaults that need passwords for export
+#[tauri::command]
+fn get_locked_vaults_for_sync() -> Result<Vec<(i64, String)>, String> {
+    let db_path = dirs::data_local_dir().ok_or("Failed to get app data dir")?.join("brainbox.sqlite");
+    let conn = rusqlite::Connection::open(db_path).map_err(|e| e.to_string())?;
+    sync::get_locked_vaults(&conn)
+}
+
+/// Get all sync settings
+#[tauri::command]
+fn get_sync_settings() -> Result<HashMap<String, String>, String> {
+    let db_path = dirs::data_local_dir().ok_or("Failed to get app data dir")?.join("brainbox.sqlite");
+    let conn = rusqlite::Connection::open(db_path).map_err(|e| e.to_string())?;
+    sync::get_sync_settings(&conn)
+}
+
+/// Set a sync setting
+#[tauri::command]
+fn set_sync_setting(key: String, value: String) -> Result<(), String> {
+    let db_path = dirs::data_local_dir().ok_or("Failed to get app data dir")?.join("brainbox.sqlite");
+    let conn = rusqlite::Connection::open(db_path).map_err(|e| e.to_string())?;
+    sync::set_sync_setting(&conn, &key, &value)
+}
+
+/// Set sync folder path
+#[tauri::command]
+fn set_sync_folder(path: String) -> Result<(), String> {
+    let db_path = dirs::data_local_dir().ok_or("Failed to get app data dir")?.join("brainbox.sqlite");
+    let conn = rusqlite::Connection::open(db_path).map_err(|e| e.to_string())?;
+    
+    // Validate the path exists
+    if !std::path::Path::new(&path).exists() {
+        return Err(format!("Path does not exist: {}", path));
+    }
+    
+    sync::set_sync_folder(&conn, &path)
+}
+
+/// Import vaults from sync folder
+/// passwords: Map of vault_uuid -> password
+#[tauri::command]
+fn sync_import_vaults(passwords: HashMap<String, String>) -> Result<sync::SyncImportResult, String> {
+    let db_path = dirs::data_local_dir().ok_or("Failed to get app data dir")?.join("brainbox.sqlite");
+    let conn = rusqlite::Connection::open(db_path).map_err(|e| e.to_string())?;
+    sync::sync_import(&conn, passwords)
+}
+
+/// Get preview of sync file before importing
+#[tauri::command]
+fn get_sync_preview() -> Result<Option<sync::SyncPreview>, String> {
+    let db_path = dirs::data_local_dir().ok_or("Failed to get app data dir")?.join("brainbox.sqlite");
+    let conn = rusqlite::Connection::open(db_path).map_err(|e| e.to_string())?;
+    sync::get_sync_preview(&conn)
+}
+
+/// Purge soft-deleted items older than X days
+#[tauri::command]
+fn purge_deleted_items(days: Option<i32>) -> Result<sync::PurgeResult, String> {
+    let db_path = dirs::data_local_dir().ok_or("Failed to get app data dir")?.join("brainbox.sqlite");
+    let conn = rusqlite::Connection::open(db_path).map_err(|e| e.to_string())?;
+    
+    // Use provided days or get from settings (default 30)
+    let purge_days = match days {
+        Some(d) => d,
+        None => sync::get_purge_days(&conn)?,
+    };
+    
+    sync::purge_deleted_items(&conn, purge_days)
+}
+
+/// Run auto-purge if sync is enabled (called on app startup)
+#[tauri::command]
+fn auto_purge_if_enabled() -> Result<Option<sync::PurgeResult>, String> {
+    let db_path = dirs::data_local_dir().ok_or("Failed to get app data dir")?.join("brainbox.sqlite");
+    let conn = rusqlite::Connection::open(db_path).map_err(|e| e.to_string())?;
+    
+    if sync::should_auto_purge(&conn)? {
+        let days = sync::get_purge_days(&conn)?;
+        Ok(Some(sync::purge_deleted_items(&conn, days)?))
+    } else {
+        Ok(None)
+    }
+}
+
+/// Check if "sync on close" is enabled
+#[tauri::command]
+fn is_sync_on_close_enabled() -> Result<bool, String> {
+    let db_path = dirs::data_local_dir().ok_or("Failed to get app data dir")?.join("brainbox.sqlite");
+    let conn = rusqlite::Connection::open(db_path).map_err(|e| e.to_string())?;
+    sync::is_sync_on_close_enabled(&conn)
+}
+
+/// Set "sync on close" setting
+#[tauri::command]
+fn set_sync_on_close(enabled: bool) -> Result<(), String> {
+    let db_path = dirs::data_local_dir().ok_or("Failed to get app data dir")?.join("brainbox.sqlite");
+    let conn = rusqlite::Connection::open(db_path).map_err(|e| e.to_string())?;
+    sync::set_sync_on_close(&conn, enabled)
+}
+
+/// Check if "check for sync on startup" is enabled
+#[tauri::command]
+fn is_check_sync_on_startup_enabled() -> Result<bool, String> {
+    let db_path = dirs::data_local_dir().ok_or("Failed to get app data dir")?.join("brainbox.sqlite");
+    let conn = rusqlite::Connection::open(db_path).map_err(|e| e.to_string())?;
+    sync::is_check_sync_on_startup_enabled(&conn)
+}
+
+/// Set "check for sync on startup" setting
+#[tauri::command]
+fn set_check_sync_on_startup(enabled: bool) -> Result<(), String> {
+    let db_path = dirs::data_local_dir().ok_or("Failed to get app data dir")?.join("brainbox.sqlite");
+    let conn = rusqlite::Connection::open(db_path).map_err(|e| e.to_string())?;
+    sync::set_check_sync_on_startup(&conn, enabled)
+}
+
+/// Set device name for sync
+#[tauri::command]
+fn set_device_name(name: String) -> Result<(), String> {
+    let db_path = dirs::data_local_dir().ok_or("Failed to get app data dir")?.join("brainbox.sqlite");
+    let conn = rusqlite::Connection::open(db_path).map_err(|e| e.to_string())?;
+    sync::set_device_name(&conn, &name)
+}
+
+/// Get device hostname (for default device name)
+#[tauri::command]
+fn get_hostname() -> String {
+    whoami::fallible::hostname().unwrap_or_else(|_| "Unknown".to_string())
 }
 
 #[cfg(target_os = "windows")]
@@ -1046,6 +1204,23 @@ pub fn run() {
             export_vaults,
             import_vaults,
             get_vault_item,
+            // Sync commands
+            sync_export_vaults,
+            sync_import_vaults,
+            get_sync_status,
+            get_sync_preview,
+            get_locked_vaults_for_sync,
+            get_sync_settings,
+            set_sync_setting,
+            set_sync_folder,
+            purge_deleted_items,
+            auto_purge_if_enabled,
+            is_sync_on_close_enabled,
+            set_sync_on_close,
+            is_check_sync_on_startup_enabled,
+            set_check_sync_on_startup,
+            set_device_name,
+            get_hostname,
             fetch_url_metadata,
             // Scraping helpers
             fetch_url_text,
