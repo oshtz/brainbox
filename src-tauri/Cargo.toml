@@ -1,6 +1,6 @@
 [package]
 name = "brainbox"
-version = "1.1.1"
+version = "1.1.2"
 description = "A knowledge management and capture tool for organizing thoughts and ideas"
 authors = ["oshtz"]
 license = "MIT"
