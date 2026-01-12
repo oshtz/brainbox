@@ -1024,8 +1024,8 @@ function UpdateSettings() {
     setUpdateStatus('')
     try {
       const result = await invoke('check_for_updates')
-      if (result) {
-        setUpdateStatus(result)
+      if (result && result.version) {
+        setUpdateStatus(`Update available: v${result.version}`)
       } else {
         setUpdateStatus('You are running the latest version!')
       }
@@ -1049,7 +1049,7 @@ function UpdateSettings() {
     }
   }
 
-  const hasUpdate = updateStatus.includes('Update available')
+  const hasUpdate = typeof updateStatus === 'string' && updateStatus.includes('Update available')
   const releaseName = formatReleaseName(currentVersion)
 
   return (
