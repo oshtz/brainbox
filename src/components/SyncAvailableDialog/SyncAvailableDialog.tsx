@@ -3,13 +3,18 @@ import { XMarkIcon, ArrowPathIcon } from '@heroicons/react/24/outline';
 import Button from '../Button/Button';
 import styles from '../CaptureModal/CaptureModal.module.css';
 
+interface VaultPasswordInfo {
+  uuid: string;
+  name: string;
+}
+
 interface SyncPreview {
   device_name: string;
   exported_at: string;
   vault_count: number;
   item_count: number;
   capture_count: number;
-  vaults_needing_password: string[];
+  vaults_needing_password: VaultPasswordInfo[];
 }
 
 interface SyncAvailableDialogProps {
@@ -115,8 +120,8 @@ const SyncAvailableDialog: React.FC<SyncAvailableDialogProps> = ({
                 Enter passwords for protected vaults:
               </p>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                {preview.vaults_needing_password.map((vaultName) => (
-                  <div key={vaultName} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                {preview.vaults_needing_password.map((vaultInfo) => (
+                  <div key={vaultInfo.uuid} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                     <span style={{
                       flex: '0 0 auto',
                       minWidth: 100,
@@ -126,13 +131,13 @@ const SyncAvailableDialog: React.FC<SyncAvailableDialogProps> = ({
                       textOverflow: 'ellipsis',
                       whiteSpace: 'nowrap'
                     }}>
-                      {vaultName}
+                      {vaultInfo.name}
                     </span>
                     <input
                       type="password"
                       placeholder="Password"
-                      value={passwords[vaultName] || ''}
-                      onChange={(e) => setPasswords({ ...passwords, [vaultName]: e.target.value })}
+                      value={passwords[vaultInfo.uuid] || ''}
+                      onChange={(e) => setPasswords({ ...passwords, [vaultInfo.uuid]: e.target.value })}
                       className={styles.input}
                       style={{ flex: 1 }}
                       disabled={isImporting}
