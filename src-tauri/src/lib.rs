@@ -1551,17 +1551,33 @@ fn is_newer_version(current: &str, new_version: &str) -> bool {
 
 /// Get the appropriate asset name for the current platform
 fn get_platform_asset_pattern() -> &'static str {
-    #[cfg(target_os = "windows")]
-    {
-        "x64-setup.exe"
-    }
     #[cfg(target_os = "macos")]
     {
         ".app.tar.gz"
     }
-    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+    #[cfg(not(target_os = "macos"))]
     {
         ""
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn is_portable_install() -> Result<bool, String> {
+    let exe_path = std::env::current_exe().map_err(|e| e.to_string())?;
+    let exe_name = exe_path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .ok_or("Invalid executable name")?;
+    Ok(exe_name.to_ascii_lowercase().contains("portable"))
+}
+
+#[cfg(target_os = "windows")]
+fn matches_windows_asset(name: &str, portable: bool) -> bool {
+    let lower = name.to_ascii_lowercase();
+    if portable {
+        lower.contains("portable") && lower.ends_with(".exe")
+    } else {
+        lower.ends_with("x64-setup.exe")
     }
 }
 
@@ -1602,16 +1618,39 @@ async fn check_for_updates() -> Result<Option<UpdateInfo>, String> {
     }
     
     // Find the appropriate asset for this platform
-    let pattern = get_platform_asset_pattern();
-    if pattern.is_empty() {
+    #[cfg(target_os = "windows")]
+    let asset = {
+        let is_portable = is_portable_install()?;
+        release
+            .assets
+            .iter()
+            .find(|a| matches_windows_asset(&a.name, is_portable))
+            .ok_or_else(|| {
+                if is_portable {
+                    "No suitable portable update asset found for this release".to_string()
+                } else {
+                    "No suitable installer update asset found for this release".to_string()
+                }
+            })?
+    };
+
+    #[cfg(target_os = "macos")]
+    let asset = {
+        let pattern = get_platform_asset_pattern();
+        if pattern.is_empty() {
+            return Err("Auto-update not supported on this platform".to_string());
+        }
+        release
+            .assets
+            .iter()
+            .find(|a| a.name.ends_with(pattern))
+            .ok_or_else(|| "No suitable update asset found for this platform".to_string())?
+    };
+
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+    {
         return Err("Auto-update not supported on this platform".to_string());
     }
-    
-    let asset = release
-        .assets
-        .iter()
-        .find(|a| a.name.ends_with(pattern))
-        .ok_or_else(|| format!("No suitable update asset found for this platform"))?;
     
     Ok(Some(UpdateInfo {
         version: new_version.to_string(),
@@ -1693,10 +1732,35 @@ fn apply_update(app: tauri::AppHandle, update_path: String) -> Result<(), String
 
     #[cfg(target_os = "windows")]
     {
-        // For Windows NSIS installer, just run it and exit
-        Command::new(&update_path)
-            .spawn()
-            .map_err(|e| e.to_string())?;
+        let is_portable = is_portable_install()?;
+        if is_portable {
+            let current_exe = std::env::current_exe().map_err(|e| e.to_string())?;
+            let pid = std::process::id();
+            let script = format!(
+                r#"
+                $pid = {}
+                $src = '{}'
+                $dst = '{}'
+                try {{ Wait-Process -Id $pid -ErrorAction SilentlyContinue }} catch {{}}
+                Start-Sleep -Milliseconds 200
+                Move-Item -Force $src $dst
+                Start-Process -FilePath $dst
+                "#,
+                pid,
+                escape_powershell_literal(&update_path),
+                escape_powershell_literal(&current_exe.to_string_lossy()),
+            );
+
+            Command::new("powershell")
+                .args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", &script])
+                .spawn()
+                .map_err(|e| e.to_string())?;
+        } else {
+            // For Windows NSIS installer, just run it and exit
+            Command::new(&update_path)
+                .spawn()
+                .map_err(|e| e.to_string())?;
+        }
     }
 
     #[cfg(target_os = "macos")]
