@@ -32,13 +32,18 @@ interface SyncImportResult {
   skipped_vaults: string[];
 }
 
+interface VaultPasswordInfo {
+  uuid: string;
+  name: string;
+}
+
 interface SyncPreview {
   device_name: string;
   exported_at: string;
   vault_count: number;
   item_count: number;
   capture_count: number;
-  vaults_needing_password: string[];
+  vaults_needing_password: VaultPasswordInfo[];
 }
 
 interface LockedVault {
@@ -70,6 +75,8 @@ export function SyncSettings() {
   const [preview, setPreview] = useState<SyncPreview | null>(null);
   const [lockedVaults, setLockedVaults] = useState<LockedVault[]>([]);
   const [passwords, setPasswords] = useState<Record<string, string>>({});
+  // Passwords for remote vaults (keyed by UUID)
+  const [remotePasswords, setRemotePasswords] = useState<Record<string, string>>({});
 
   // Load sync status on mount
   useEffect(() => {
@@ -214,15 +221,18 @@ export function SyncSettings() {
     try {
       // Build passwords map: vault_uuid -> password
       const passwordMap: Record<string, string> = {};
-      // For import, we need to map by vault UUID from the preview
-      // For now, we'll ask for passwords for vaults that need them
+      // Map by vault UUID from the preview
       if (preview?.vaults_needing_password) {
-        for (const vaultName of preview.vaults_needing_password) {
-          // Find matching local vault or use provided password
-          const localVault = lockedVaults.find(v => v.name === vaultName);
-          if (localVault && passwords[localVault.id.toString()]) {
-            // We'd need the UUID here - for now use vault name as approximation
-            passwordMap[vaultName] = passwords[localVault.id.toString()];
+        for (const vaultInfo of preview.vaults_needing_password) {
+          // First check if password was entered directly for this remote vault
+          if (remotePasswords[vaultInfo.uuid]) {
+            passwordMap[vaultInfo.uuid] = remotePasswords[vaultInfo.uuid];
+          } else {
+            // Fall back to matching local vault by name
+            const localVault = lockedVaults.find(v => v.name === vaultInfo.name);
+            if (localVault && passwords[localVault.id.toString()]) {
+              passwordMap[vaultInfo.uuid] = passwords[localVault.id.toString()];
+            }
           }
         }
       }
@@ -429,12 +439,12 @@ export function SyncSettings() {
           </p>
         </div>
 
-        {/* Locked Vaults - Password Entry */}
+        {/* Locked Vaults - Password Entry for Export */}
         {lockedVaults.length > 0 && (
           <div>
-            <span className={styles.subtleLabel}>Password-Protected Vaults</span>
+            <span className={styles.subtleLabel}>Password-Protected Vaults (for Export)</span>
             <p className={styles.hint} style={{ margin: '0.5rem 0' }}>
-              Enter passwords for vaults to include them in sync:
+              Enter passwords for your local vaults to include them in sync:
             </p>
             <div style={{ display: 'grid', gap: '0.5rem' }}>
               {lockedVaults.map((vault) => (
@@ -450,6 +460,35 @@ export function SyncSettings() {
                   />
                 </div>
               ))}
+            </div>
+          </div>
+        )}
+
+        {/* Remote Vaults Needing Password - for Import */}
+        {preview?.vaults_needing_password && preview.vaults_needing_password.filter(
+          vaultInfo => !lockedVaults.some(lv => lv.name === vaultInfo.name)
+        ).length > 0 && (
+          <div>
+            <span className={styles.subtleLabel}>Remote Vaults Needing Password (for Import)</span>
+            <p className={styles.hint} style={{ margin: '0.5rem 0' }}>
+              Enter passwords for remote vaults to import them:
+            </p>
+            <div style={{ display: 'grid', gap: '0.5rem' }}>
+              {preview.vaults_needing_password
+                .filter(vaultInfo => !lockedVaults.some(lv => lv.name === vaultInfo.name))
+                .map((vaultInfo) => (
+                  <div key={vaultInfo.uuid} className={styles.vaultPasswordRow}>
+                    <span className={styles.vaultName}>{vaultInfo.name}</span>
+                    <input
+                      type="password"
+                      placeholder="Password"
+                      value={remotePasswords[vaultInfo.uuid] || ''}
+                      onChange={(e) => setRemotePasswords({ ...remotePasswords, [vaultInfo.uuid]: e.target.value })}
+                      className={styles.input}
+                      style={{ flex: 1 }}
+                    />
+                  </div>
+                ))}
             </div>
           </div>
         )}
