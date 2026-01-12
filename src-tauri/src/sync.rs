@@ -865,6 +865,13 @@ fn import_item(
     }
 }
 
+/// Vault info for password entry during import
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VaultPasswordInfo {
+    pub uuid: String,
+    pub name: String,
+}
+
 /// Get information about the remote sync file (preview before import)
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SyncPreview {
@@ -873,7 +880,7 @@ pub struct SyncPreview {
     pub vault_count: usize,
     pub item_count: usize,
     pub capture_count: usize,
-    pub vaults_needing_password: Vec<String>, // Names of vaults that need passwords
+    pub vaults_needing_password: Vec<VaultPasswordInfo>, // Vaults that need passwords (with UUID and name)
 }
 
 // --- Purge Functions ---
@@ -1014,8 +1021,13 @@ pub fn get_sync_preview(conn: &Connection) -> Result<Option<SyncPreview>, String
     let sync_file: SyncFile = serde_json::from_str(&contents)
         .map_err(|e| format!("Failed to parse sync file: {}", e))?;
 
-    let item_count: usize = sync_file.vaults.iter().map(|v| v.items.len()).sum();
-    
+    // Count only non-deleted items from non-deleted vaults
+    let item_count: usize = sync_file.vaults
+        .iter()
+        .filter(|v| v.deleted_at.is_none())
+        .map(|v| v.items.iter().filter(|i| i.deleted_at.is_none()).count())
+        .sum();
+
     // Find vaults that need passwords (either new vaults with password or existing with password)
     let local_vaults = Vault::list(conn).map_err(|e| e.to_string())?;
     let local_vault_uuids: std::collections::HashSet<String> = local_vaults
@@ -1023,7 +1035,7 @@ pub fn get_sync_preview(conn: &Connection) -> Result<Option<SyncPreview>, String
         .filter_map(|v| v.uuid.clone())
         .collect();
 
-    let vaults_needing_password: Vec<String> = sync_file.vaults
+    let vaults_needing_password: Vec<VaultPasswordInfo> = sync_file.vaults
         .iter()
         .filter(|v| {
             v.has_password && v.deleted_at.is_none() && (
@@ -1033,7 +1045,10 @@ pub fn get_sync_preview(conn: &Connection) -> Result<Option<SyncPreview>, String
                 local_vaults.iter().any(|lv| lv.uuid.as_ref() == Some(&v.uuid) && lv.has_password)
             )
         })
-        .map(|v| v.name.clone())
+        .map(|v| VaultPasswordInfo {
+            uuid: v.uuid.clone(),
+            name: v.name.clone(),
+        })
         .collect();
 
     Ok(Some(SyncPreview {

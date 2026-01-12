@@ -22,13 +22,18 @@ interface SyncStatus {
   has_changes: boolean;
 }
 
+interface VaultPasswordInfo {
+  uuid: string;
+  name: string;
+}
+
 interface SyncPreview {
   device_name: string;
   exported_at: string;
   vault_count: number;
   item_count: number;
   capture_count: number;
-  vaults_needing_password: string[];
+  vaults_needing_password: VaultPasswordInfo[];
 }
 
 interface UseSyncManagerOptions {
