@@ -29,4 +29,35 @@ export default defineConfig(async () => ({
       ignored: ["**/src-tauri/**"],
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes("node_modules")) return undefined;
+          if (
+            id.includes("node_modules/react/") ||
+            id.includes("node_modules/react-dom/") ||
+            id.includes("node_modules/scheduler/") ||
+            id.includes("node_modules/react-is/")
+          ) {
+            return "react";
+          }
+          if (id.includes("@heroicons")) return "icons";
+          if (id.includes("@tauri-apps")) return "tauri";
+          if (
+            id.includes("react-markdown") ||
+            id.includes("remark-") ||
+            id.includes("rehype-") ||
+            id.includes("micromark") ||
+            id.includes("mdast") ||
+            id.includes("hast") ||
+            id.includes("unified")
+          ) {
+            return "markdown";
+          }
+          return "vendor";
+        },
+      },
+    },
+  },
 }));

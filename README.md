@@ -38,7 +38,7 @@ Local‑first capture, organize, and search for links and notes. brainbox is a d
 
 ### Prerequisites
 
-- Node.js 18+ and a package manager (`pnpm` or `npm`).
+- Node.js 18+ with Corepack/pnpm.
 - Rust (stable) and Tauri system prerequisites for your OS:
   - Windows: Visual Studio Build Tools, WebView2.
   - macOS: Xcode Command Line Tools.
@@ -49,11 +49,8 @@ Local‑first capture, organize, and search for links and notes. brainbox is a d
 #### For Development
 
 ```bash
-# using pnpm (recommended)
+corepack enable
 pnpm install
-
-# or npm
-npm install
 ```
 
 #### For End Users
@@ -108,20 +105,15 @@ sudo spctl --enable /Applications/brainbox.app
 ### Run (desktop)
 
 ```bash
-# launches Vite on port 51234 and the Tauri shell
 pnpm tauri dev
-# or
-npm run tauri dev
 ```
 
-Vite is configured for Tauri at `http://localhost:51234` with strict port matching.
+Vite is configured for Tauri at `http://127.0.0.1:1420` with strict port matching.
 
 ### Run (web only)
 
 ```bash
 pnpm dev
-# or
-npm run dev
 ```
 
 This runs the frontend in a browser without Tauri backend features.
@@ -130,11 +122,27 @@ This runs the frontend in a browser without Tauri backend features.
 
 ```bash
 pnpm tauri build
-# or
-npm run tauri build
 ```
 
 Build artifacts (installers/bundles) are created via Tauri for your platform.
+
+### Verify
+
+```bash
+pnpm run verify
+```
+
+This runs the frontend production build, unit tests, and Playwright smoke tests.
+
+### Desktop Smoke
+
+```bash
+pnpm run smoke:tauri
+```
+
+This builds the real Tauri debug binary without bundling, starts the Vite dev server it expects, launches the desktop app with an isolated temporary `BRAINBOX_DATA_DIR`, verifies that the app initializes its SQLite DB and search index, then closes both processes.
+
+Release gates and manual desktop QA are tracked in [docs/release-readiness.md](docs/release-readiness.md).
 
 ### Auto-Updates
 
@@ -213,6 +221,8 @@ brainy is an intelligent assistant built into brainbox with full tool calling ca
   - **✅ Security Update (v0.0.1)**: Encryption keys are now properly derived from user passwords using PBKDF2 with 100,000 iterations and vault-specific salts.
   - Keys are derived on-demand and cached in memory during the session for performance.
   - Keys are automatically cleared when vaults are closed or the app exits.
+  - New sync exports require a sync file passphrase and wrap vault names, item titles, content, summaries, covers, and device name in an encrypted envelope. Legacy plaintext sync files can still be imported for migration.
+  - Standalone capture files are not exported by encrypted sync because they sit outside the sync JSON envelope.
   - **⚠️ Educational Purpose**: This implementation demonstrates proper cryptographic practices but is intended for learning. For production use with sensitive data, additional security measures would be required:
     - Hardware-backed key storage (TPM, Secure Enclave)
     - Biometric authentication
@@ -225,7 +235,7 @@ brainy is an intelligent assistant built into brainbox with full tool calling ca
 
 | Platform | Status | Notes |
 |----------|--------|-------|
-| **Windows** | Full Support | Global hotkey, protocol handler, screenshot capture |
+| **Windows** | Full Support | Global hotkey, protocol handler |
 | **macOS** | Core Features | App runs, hotkey/protocol pending |
 
 ## Project Layout
@@ -242,10 +252,11 @@ brainbox/
 │     ├─ agentLoop.ts      # Hybrid native/prompt-based agent loop
 │     └─ providers/        # Provider implementations (Ollama, OpenAI, etc.)
 ├─ src-tauri/              # Tauri (Rust) backend, commands, tray, protocol
-│  ├─ src/lib.rs           # Main Tauri builder and commands
+│  ├─ src/lib.rs           # Main Tauri builder and command registration
+│  ├─ src/sync_commands.rs # Sync command wrappers
+│  ├─ src/paths.rs         # App data path helpers
 │  ├─ src/vault.rs         # SQLite models for vaults and items
-│  ├─ src/search.rs        # Tantivy index and search service
-│  └─ src/capture.rs       # Windows capture helpers
+│  └─ src/search.rs        # Tantivy index and search service
 ├─ styles/                 # Design tokens, globals, themes
 ├─ public/                 # Static assets
 ├─ examples/
@@ -281,7 +292,6 @@ GitHub Actions can be configured to build and release for all platforms automati
 **Platform Support**:
 - Global hotkey: Windows only (macOS)
 - Protocol handler: Windows only (macOS)
-- Screenshot capture: Windows only (macOS)
 
 ## Roadmap / Ideas
 

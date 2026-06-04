@@ -1,11 +1,14 @@
 // vault.rs - Vault management for brainbox
 // Handles creation, encryption, and storage of vaults in SQLite
 
+use chacha20poly1305::{
+    aead::{Aead, KeyInit},
+    Key, XChaCha20Poly1305, XNonce,
+};
+use chrono;
+use rand::{rngs::OsRng, RngCore};
 use rusqlite::{params, Connection, Result};
 use serde::{Deserialize, Serialize};
-use chacha20poly1305::{aead::{Aead, KeyInit}, XChaCha20Poly1305, Key, XNonce};
-use rand::{rngs::OsRng, RngCore};
-use chrono;
 use uuid::Uuid;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -51,31 +54,50 @@ impl Vault {
         let mut rows = stmt.query([])?;
         while let Some(row) = rows.next()? {
             let col_name: String = row.get(1)?;
-            if col_name == "cover_image" { has_cover = true; }
-            if col_name == "has_password" { has_password_col = true; }
-            if col_name == "uuid" { has_uuid = true; }
-            if col_name == "updated_at" { has_updated_at = true; }
-            if col_name == "deleted_at" { has_deleted_at = true; }
+            if col_name == "cover_image" {
+                has_cover = true;
+            }
+            if col_name == "has_password" {
+                has_password_col = true;
+            }
+            if col_name == "uuid" {
+                has_uuid = true;
+            }
+            if col_name == "updated_at" {
+                has_updated_at = true;
+            }
+            if col_name == "deleted_at" {
+                has_deleted_at = true;
+            }
         }
         if !has_cover {
             let _ = conn.execute("ALTER TABLE vaults ADD COLUMN cover_image TEXT", []);
         }
         if !has_password_col {
             // Default to true for existing vaults (they were created with password encryption)
-            let _ = conn.execute("ALTER TABLE vaults ADD COLUMN has_password INTEGER NOT NULL DEFAULT 1", []);
+            let _ = conn.execute(
+                "ALTER TABLE vaults ADD COLUMN has_password INTEGER NOT NULL DEFAULT 1",
+                [],
+            );
         }
         // Sync-related columns
         if !has_uuid {
             conn.execute("ALTER TABLE vaults ADD COLUMN uuid TEXT", [])?;
             // Create unique index separately (SQLite doesn't support UNIQUE in ALTER TABLE ADD COLUMN)
-            conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_vaults_uuid ON vaults(uuid)", [])?;
+            conn.execute(
+                "CREATE UNIQUE INDEX IF NOT EXISTS idx_vaults_uuid ON vaults(uuid)",
+                [],
+            )?;
             // Generate UUIDs for existing vaults
             Self::migrate_generate_uuids(conn)?;
         }
         if !has_updated_at {
             conn.execute("ALTER TABLE vaults ADD COLUMN updated_at TEXT", [])?;
             // Set updated_at to created_at for existing vaults
-            conn.execute("UPDATE vaults SET updated_at = created_at WHERE updated_at IS NULL", [])?;
+            conn.execute(
+                "UPDATE vaults SET updated_at = created_at WHERE updated_at IS NULL",
+                [],
+            )?;
         }
         if !has_deleted_at {
             conn.execute("ALTER TABLE vaults ADD COLUMN deleted_at TEXT", [])?;
@@ -86,17 +108,28 @@ impl Vault {
     /// Generate UUIDs for existing vaults that don't have one
     fn migrate_generate_uuids(conn: &Connection) -> Result<()> {
         let mut stmt = conn.prepare("SELECT id FROM vaults WHERE uuid IS NULL")?;
-        let ids: Vec<i64> = stmt.query_map([], |row| row.get(0))?
+        let ids: Vec<i64> = stmt
+            .query_map([], |row| row.get(0))?
             .filter_map(|r| r.ok())
             .collect();
         for id in ids {
             let new_uuid = Uuid::new_v4().to_string();
-            conn.execute("UPDATE vaults SET uuid = ?1 WHERE id = ?2", params![new_uuid, id])?;
+            conn.execute(
+                "UPDATE vaults SET uuid = ?1 WHERE id = ?2",
+                params![new_uuid, id],
+            )?;
         }
         Ok(())
     }
 
-    pub fn insert(conn: &Connection, name: &str, password: &str, key: &[u8; 32], has_password: bool) -> Result<Vault> {
+    #[allow(dead_code)]
+    pub fn insert(
+        conn: &Connection,
+        name: &str,
+        password: &str,
+        key: &[u8; 32],
+        has_password: bool,
+    ) -> Result<Vault> {
         let (encrypted, has_pw) = if has_password && !password.is_empty() {
             // Encrypt the password using XChaCha20-Poly1305
             let cipher = XChaCha20Poly1305::new(Key::from_slice(key));
@@ -104,7 +137,8 @@ impl Vault {
             let mut rng = OsRng;
             rng.fill_bytes(&mut nonce_bytes);
             let nonce = XNonce::from_slice(&nonce_bytes);
-            let ciphertext = cipher.encrypt(nonce, password.as_bytes())
+            let ciphertext = cipher
+                .encrypt(nonce, password.as_bytes())
                 .map_err(|_| rusqlite::Error::ExecuteReturnedResults)?;
             let mut enc = nonce_bytes.to_vec();
             enc.extend(ciphertext);
@@ -188,14 +222,21 @@ impl Vault {
         // Start a transaction to keep things consistent
         conn.execute("BEGIN IMMEDIATE", [])?;
         // Soft delete items first
-        conn.execute("UPDATE vault_items SET deleted_at = ?1 WHERE vault_id = ?2 AND deleted_at IS NULL", params![now, vault_id])?;
+        conn.execute(
+            "UPDATE vault_items SET deleted_at = ?1 WHERE vault_id = ?2 AND deleted_at IS NULL",
+            params![now, vault_id],
+        )?;
         // Then soft delete the vault
-        conn.execute("UPDATE vaults SET deleted_at = ?1, updated_at = ?2 WHERE id = ?3", params![now, now, vault_id])?;
+        conn.execute(
+            "UPDATE vaults SET deleted_at = ?1, updated_at = ?2 WHERE id = ?3",
+            params![now, now, vault_id],
+        )?;
         conn.execute("COMMIT", [])?;
         Ok(())
     }
 
     /// Hard delete a vault and all its items (permanent removal, used for purging)
+    #[allow(dead_code)]
     pub fn hard_delete(conn: &Connection, vault_id: i64) -> Result<()> {
         Self::create_table(conn)?;
         VaultItem::create_table(conn)?;
@@ -216,7 +257,11 @@ impl Vault {
         Ok(())
     }
 
-    pub fn update_cover_image(conn: &Connection, vault_id: i64, cover_image: Option<&str>) -> Result<()> {
+    pub fn update_cover_image(
+        conn: &Connection,
+        vault_id: i64,
+        cover_image: Option<&str>,
+    ) -> Result<()> {
         Self::create_table(conn)?;
         let now = chrono::Utc::now().to_rfc3339();
         match cover_image {
@@ -254,6 +299,7 @@ impl Vault {
     }
 
     /// Get a vault by its ID
+    #[allow(dead_code)]
     pub fn get_by_id(conn: &Connection, vault_id: i64) -> Result<Option<Vault>> {
         let mut stmt = conn.prepare("SELECT id, name, encrypted_password, created_at, cover_image, has_password, uuid, updated_at, deleted_at FROM vaults WHERE id = ?1")?;
         let mut rows = stmt.query([vault_id])?;
@@ -326,11 +372,21 @@ impl VaultItem {
         let mut rows = stmt.query([])?;
         while let Some(row) = rows.next()? {
             let col_name: String = row.get(1)?;
-            if col_name == "sort_order" { has_sort_order = true; }
-            if col_name == "image" { has_image = true; }
-            if col_name == "summary" { has_summary = true; }
-            if col_name == "uuid" { has_uuid = true; }
-            if col_name == "deleted_at" { has_deleted_at = true; }
+            if col_name == "sort_order" {
+                has_sort_order = true;
+            }
+            if col_name == "image" {
+                has_image = true;
+            }
+            if col_name == "summary" {
+                has_summary = true;
+            }
+            if col_name == "uuid" {
+                has_uuid = true;
+            }
+            if col_name == "deleted_at" {
+                has_deleted_at = true;
+            }
         }
         if !has_sort_order {
             let _ = conn.execute("ALTER TABLE vault_items ADD COLUMN sort_order INTEGER", []);
@@ -345,7 +401,10 @@ impl VaultItem {
         if !has_uuid {
             conn.execute("ALTER TABLE vault_items ADD COLUMN uuid TEXT", [])?;
             // Create unique index separately (SQLite doesn't support UNIQUE in ALTER TABLE ADD COLUMN)
-            conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_vault_items_uuid ON vault_items(uuid)", [])?;
+            conn.execute(
+                "CREATE UNIQUE INDEX IF NOT EXISTS idx_vault_items_uuid ON vault_items(uuid)",
+                [],
+            )?;
             // Generate UUIDs for existing items
             Self::migrate_generate_uuids(conn)?;
         }
@@ -358,12 +417,16 @@ impl VaultItem {
     /// Generate UUIDs for existing items that don't have one
     fn migrate_generate_uuids(conn: &Connection) -> Result<()> {
         let mut stmt = conn.prepare("SELECT id FROM vault_items WHERE uuid IS NULL")?;
-        let ids: Vec<i64> = stmt.query_map([], |row| row.get(0))?
+        let ids: Vec<i64> = stmt
+            .query_map([], |row| row.get(0))?
             .filter_map(|r| r.ok())
             .collect();
         for id in ids {
             let new_uuid = Uuid::new_v4().to_string();
-            conn.execute("UPDATE vault_items SET uuid = ?1 WHERE id = ?2", params![new_uuid, id])?;
+            conn.execute(
+                "UPDATE vault_items SET uuid = ?1 WHERE id = ?2",
+                params![new_uuid, id],
+            )?;
         }
         Ok(())
     }
@@ -375,7 +438,7 @@ impl VaultItem {
         content: &str,
         key: &[u8; 32],
     ) -> Result<VaultItem> {
-        use chacha20poly1305::{aead::Aead, XChaCha20Poly1305, Key, XNonce};
+        use chacha20poly1305::{aead::Aead, Key, XChaCha20Poly1305, XNonce};
         use rand::{rngs::OsRng, RngCore};
         let cipher = XChaCha20Poly1305::new(Key::from_slice(key));
         let mut nonce_bytes = [0u8; 24];
@@ -477,7 +540,11 @@ impl VaultItem {
         let now = chrono::Utc::now().to_rfc3339();
         // Get vault_id first so we can update the vault's updated_at
         let vault_id: Option<i64> = conn
-            .query_row("SELECT vault_id FROM vault_items WHERE id = ?1", [item_id], |row| row.get(0))
+            .query_row(
+                "SELECT vault_id FROM vault_items WHERE id = ?1",
+                [item_id],
+                |row| row.get(0),
+            )
             .ok();
         let affected = conn.execute(
             "UPDATE vault_items SET deleted_at = ?1, updated_at = ?2 WHERE id = ?3 AND deleted_at IS NULL",
@@ -485,12 +552,16 @@ impl VaultItem {
         )?;
         // Update vault's updated_at timestamp
         if let Some(vid) = vault_id {
-            conn.execute("UPDATE vaults SET updated_at = ?1 WHERE id = ?2", params![now, vid])?;
+            conn.execute(
+                "UPDATE vaults SET updated_at = ?1 WHERE id = ?2",
+                params![now, vid],
+            )?;
         }
         Ok(affected)
     }
 
     /// Hard delete an item (permanent removal, used for purging)
+    #[allow(dead_code)]
     pub fn hard_delete(conn: &Connection, item_id: i64) -> Result<usize> {
         let affected = conn.execute("DELETE FROM vault_items WHERE id = ?1", [item_id])?;
         Ok(affected)
@@ -501,14 +572,21 @@ impl VaultItem {
         let now = chrono::Utc::now().to_rfc3339();
         // Get vault_id to update its updated_at
         let vault_id: Option<i64> = conn
-            .query_row("SELECT vault_id FROM vault_items WHERE id = ?1", [item_id], |row| row.get(0))
+            .query_row(
+                "SELECT vault_id FROM vault_items WHERE id = ?1",
+                [item_id],
+                |row| row.get(0),
+            )
             .ok();
         conn.execute(
             "UPDATE vault_items SET summary = ?1, updated_at = ?2 WHERE id = ?3",
             params![summary, now, item_id],
         )?;
         if let Some(vid) = vault_id {
-            conn.execute("UPDATE vaults SET updated_at = ?1 WHERE id = ?2", params![now, vid])?;
+            conn.execute(
+                "UPDATE vaults SET updated_at = ?1 WHERE id = ?2",
+                params![now, vid],
+            )?;
         }
         Ok(())
     }
@@ -530,7 +608,10 @@ impl VaultItem {
             }
         }
         // Update vault's updated_at
-        conn.execute("UPDATE vaults SET updated_at = ?1 WHERE id = ?2", params![now, vault_id])?;
+        conn.execute(
+            "UPDATE vaults SET updated_at = ?1 WHERE id = ?2",
+            params![now, vault_id],
+        )?;
         conn.execute("COMMIT", [])?;
         Ok(())
     }
@@ -539,20 +620,32 @@ impl VaultItem {
         let now = chrono::Utc::now().to_rfc3339();
         // Get vault_id to update its updated_at
         let vault_id: Option<i64> = conn
-            .query_row("SELECT vault_id FROM vault_items WHERE id = ?1", [item_id], |row| row.get(0))
+            .query_row(
+                "SELECT vault_id FROM vault_items WHERE id = ?1",
+                [item_id],
+                |row| row.get(0),
+            )
             .ok();
         conn.execute(
             "UPDATE vault_items SET title = ?1, updated_at = ?2 WHERE id = ?3",
             rusqlite::params![title, now, item_id],
         )?;
         if let Some(vid) = vault_id {
-            conn.execute("UPDATE vaults SET updated_at = ?1 WHERE id = ?2", params![now, vid])?;
+            conn.execute(
+                "UPDATE vaults SET updated_at = ?1 WHERE id = ?2",
+                params![now, vid],
+            )?;
         }
         Ok(())
     }
 
-    pub fn update_content(conn: &Connection, item_id: i64, content: &str, key: &[u8; 32]) -> Result<()> {
-        use chacha20poly1305::{aead::Aead, XChaCha20Poly1305, Key, XNonce};
+    pub fn update_content(
+        conn: &Connection,
+        item_id: i64,
+        content: &str,
+        key: &[u8; 32],
+    ) -> Result<()> {
+        use chacha20poly1305::{aead::Aead, Key, XChaCha20Poly1305, XNonce};
         use rand::{rngs::OsRng, RngCore};
         let cipher = XChaCha20Poly1305::new(Key::from_slice(key));
         let mut nonce_bytes = [0u8; 24];
@@ -567,14 +660,21 @@ impl VaultItem {
         let now = chrono::Utc::now().to_rfc3339();
         // Get vault_id to update its updated_at
         let vault_id: Option<i64> = conn
-            .query_row("SELECT vault_id FROM vault_items WHERE id = ?1", [item_id], |row| row.get(0))
+            .query_row(
+                "SELECT vault_id FROM vault_items WHERE id = ?1",
+                [item_id],
+                |row| row.get(0),
+            )
             .ok();
         conn.execute(
             "UPDATE vault_items SET content = ?1, updated_at = ?2 WHERE id = ?3",
             rusqlite::params![encrypted, now, item_id],
         )?;
         if let Some(vid) = vault_id {
-            conn.execute("UPDATE vaults SET updated_at = ?1 WHERE id = ?2", params![now, vid])?;
+            conn.execute(
+                "UPDATE vaults SET updated_at = ?1 WHERE id = ?2",
+                params![now, vid],
+            )?;
         }
         Ok(())
     }
@@ -583,7 +683,11 @@ impl VaultItem {
         let now = chrono::Utc::now().to_rfc3339();
         // Get original vault_id to update its updated_at
         let source_vault_id: Option<i64> = conn
-            .query_row("SELECT vault_id FROM vault_items WHERE id = ?1", [item_id], |row| row.get(0))
+            .query_row(
+                "SELECT vault_id FROM vault_items WHERE id = ?1",
+                [item_id],
+                |row| row.get(0),
+            )
             .ok();
         conn.execute(
             "UPDATE vault_items SET vault_id = ?1, sort_order = NULL, updated_at = ?2 WHERE id = ?3",
@@ -591,9 +695,15 @@ impl VaultItem {
         )?;
         // Update both source and target vault's updated_at
         if let Some(vid) = source_vault_id {
-            conn.execute("UPDATE vaults SET updated_at = ?1 WHERE id = ?2", params![now, vid])?;
+            conn.execute(
+                "UPDATE vaults SET updated_at = ?1 WHERE id = ?2",
+                params![now, vid],
+            )?;
         }
-        conn.execute("UPDATE vaults SET updated_at = ?1 WHERE id = ?2", params![now, target_vault_id])?;
+        conn.execute(
+            "UPDATE vaults SET updated_at = ?1 WHERE id = ?2",
+            params![now, target_vault_id],
+        )?;
         Ok(())
     }
 
@@ -601,7 +711,11 @@ impl VaultItem {
         let now = chrono::Utc::now().to_rfc3339();
         // Get vault_id to update its updated_at
         let vault_id: Option<i64> = conn
-            .query_row("SELECT vault_id FROM vault_items WHERE id = ?1", [item_id], |row| row.get(0))
+            .query_row(
+                "SELECT vault_id FROM vault_items WHERE id = ?1",
+                [item_id],
+                |row| row.get(0),
+            )
             .ok();
         match image {
             Some(img) => conn.execute(
@@ -614,7 +728,10 @@ impl VaultItem {
             )?,
         };
         if let Some(vid) = vault_id {
-            conn.execute("UPDATE vaults SET updated_at = ?1 WHERE id = ?2", params![now, vid])?;
+            conn.execute(
+                "UPDATE vaults SET updated_at = ?1 WHERE id = ?2",
+                params![now, vid],
+            )?;
         }
         Ok(())
     }
@@ -704,6 +821,7 @@ impl SyncSettings {
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub fn delete(conn: &Connection, key: &str) -> Result<()> {
         Self::create_table(conn)?;
         conn.execute("DELETE FROM sync_settings WHERE key = ?1", [key])?;
@@ -714,13 +832,105 @@ impl SyncSettings {
     pub fn get_all(conn: &Connection) -> Result<Vec<(String, String)>> {
         Self::create_table(conn)?;
         let mut stmt = conn.prepare("SELECT key, value FROM sync_settings")?;
-        let rows = stmt.query_map([], |row| {
-            Ok((row.get(0)?, row.get(1)?))
-        })?;
+        let rows = stmt.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?;
         let mut settings = Vec::new();
         for row in rows {
             settings.push(row?);
         }
         Ok(settings)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn vault_migration_preserves_legacy_rows_and_backfills_sync_columns() {
+        let conn = Connection::open_in_memory().expect("in-memory db should open");
+        conn.execute(
+            "CREATE TABLE vaults (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                encrypted_password BLOB NOT NULL,
+                created_at TEXT NOT NULL
+            )",
+            [],
+        )
+        .expect("legacy vault table should be created");
+        conn.execute(
+            "INSERT INTO vaults (name, encrypted_password, created_at) VALUES (?1, ?2, ?3)",
+            params!["Legacy Vault", Vec::<u8>::new(), "2024-01-01T00:00:00Z"],
+        )
+        .expect("legacy vault should insert");
+
+        Vault::create_table(&conn).expect("vault migration should run");
+
+        let vaults = Vault::list(&conn).expect("vaults should list after migration");
+        assert_eq!(vaults.len(), 1);
+        assert_eq!(vaults[0].name, "Legacy Vault");
+        assert!(vaults[0].has_password);
+        assert!(vaults[0].uuid.as_ref().is_some_and(|uuid| !uuid.is_empty()));
+        assert_eq!(
+            vaults[0].updated_at.as_deref(),
+            Some("2024-01-01T00:00:00Z")
+        );
+        assert!(vaults[0].deleted_at.is_none());
+    }
+
+    #[test]
+    fn item_migration_preserves_legacy_rows_and_backfills_sync_columns() {
+        let conn = Connection::open_in_memory().expect("in-memory db should open");
+        Vault::create_table(&conn).expect("vault table should be created");
+        conn.execute(
+            "INSERT INTO vaults (name, encrypted_password, created_at, has_password, uuid, updated_at)
+             VALUES (?1, ?2, ?3, 0, ?4, ?5)",
+            params![
+                "Legacy Vault",
+                Vec::<u8>::new(),
+                "2024-01-01T00:00:00Z",
+                Uuid::new_v4().to_string(),
+                "2024-01-01T00:00:00Z"
+            ],
+        )
+        .expect("vault should insert");
+        let vault_id = conn.last_insert_rowid();
+        conn.execute(
+            "CREATE TABLE vault_items (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                vault_id INTEGER NOT NULL,
+                title TEXT NOT NULL,
+                content BLOB NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY(vault_id) REFERENCES vaults(id)
+            )",
+            [],
+        )
+        .expect("legacy item table should be created");
+        conn.execute(
+            "INSERT INTO vault_items (vault_id, title, content, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![
+                vault_id,
+                "Legacy Item",
+                vec![1_u8, 2, 3],
+                "2024-01-01T00:00:00Z",
+                "2024-01-02T00:00:00Z"
+            ],
+        )
+        .expect("legacy item should insert");
+
+        VaultItem::create_table(&conn).expect("item migration should run");
+
+        let items = VaultItem::list_all_by_vault_for_sync(&conn, vault_id)
+            .expect("items should list after migration");
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].title, "Legacy Item");
+        assert!(items[0].uuid.as_ref().is_some_and(|uuid| !uuid.is_empty()));
+        assert!(items[0].deleted_at.is_none());
+        assert!(items[0].image.is_none());
+        assert!(items[0].summary.is_none());
+        assert!(items[0].sort_order.is_none());
     }
 }

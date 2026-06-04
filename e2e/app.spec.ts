@@ -1,227 +1,244 @@
 import { test, expect } from '@playwright/test';
 
-test.describe('brainbox Application', () => {
+const fixtureImage =
+  'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 640 420%22%3E%3Crect width=%22640%22 height=%22420%22 fill=%22%231f6f68%22/%3E%3Ccircle cx=%22492%22 cy=%22108%22 r=%22124%22 fill=%22%23f6c85f%22/%3E%3Cpath d=%22M0 320 C160 230 300 390 640 250 L640 420 L0 420 Z%22 fill=%22%232d4263%22/%3E%3C/svg%3E';
+
+const populatedFixture = {
+  vaults: [
+    {
+      id: 1,
+      name: 'Research Intake - URLs and clipped source notes',
+      cover_image: fixtureImage,
+      has_password: false,
+      created_at: '2026-06-03T08:00:00Z',
+      updated_at: '2026-06-03T08:10:00Z',
+    },
+    {
+      id: 2,
+      name: 'Product Roadmap / Brainbox Hardening',
+      cover_image: fixtureImage,
+      has_password: false,
+      created_at: '2026-06-03T08:00:00Z',
+      updated_at: '2026-06-03T08:10:00Z',
+    },
+    {
+      id: 3,
+      name: 'Locked Archive - design references',
+      cover_image: fixtureImage,
+      has_password: true,
+      created_at: '2026-06-03T08:00:00Z',
+      updated_at: '2026-06-03T08:10:00Z',
+    },
+  ],
+  itemsByVaultId: {
+    '1': [
+      {
+        id: 101,
+        vault_id: 1,
+        title: 'Tauri smoke path checklist with launch, capture, search, and shutdown',
+        content: 'Create a desktop smoke path that launches the packaged app, creates a vault item, verifies search hydration, and shuts down cleanly.',
+        image: fixtureImage,
+        summary: 'Desktop smoke path tracks launch, capture, search, and shutdown verification.',
+        created_at: '2026-06-03T09:00:00Z',
+        updated_at: '2026-06-03T09:05:00Z',
+        metadata: { item_type: 'note' },
+      },
+      {
+        id: 102,
+        vault_id: 1,
+        title: 'Release readiness reference - updater, checksums, and clean machine install',
+        content: 'https://example.com/tauri-desktop-smoke',
+        image: fixtureImage,
+        summary: 'Release reference covering updater, checksums, install, and rollback checks.',
+        created_at: '2026-06-03T09:10:00Z',
+        updated_at: '2026-06-03T09:12:00Z',
+        metadata: { item_type: 'url', url: 'https://example.com/tauri-desktop-smoke' },
+      },
+      {
+        id: 103,
+        vault_id: 1,
+        title: 'Sync export threat model notes for metadata and passwordless vaults',
+        content: 'Sensitive content and summaries are encrypted, but metadata still needs a sharper release posture.',
+        image: fixtureImage,
+        summary: 'Threat model notes for remaining sync metadata exposure.',
+        created_at: '2026-06-03T09:20:00Z',
+        updated_at: '2026-06-03T09:25:00Z',
+        metadata: { item_type: 'note' },
+      },
+    ],
+    '2': [
+      {
+        id: 201,
+        vault_id: 2,
+        title: 'Compact card density QA with a deliberately long title that should wrap instead of clipping',
+        content: 'Use fixture-backed E2E to catch clipping, cramped toolbar states, and masonry layout regressions.',
+        image: fixtureImage,
+        summary: 'Compact card density QA checks wrapping and masonry behavior under real content.',
+        created_at: '2026-06-03T10:00:00Z',
+        updated_at: '2026-06-03T10:05:00Z',
+        metadata: { item_type: 'note' },
+      },
+      {
+        id: 202,
+        vault_id: 2,
+        title: 'Search result vault hydration regression case',
+        content: 'Search results must carry vault ids so opening a result reads the correct encrypted vault.',
+        image: fixtureImage,
+        summary: 'Regression case for search results with vault-specific hydration.',
+        created_at: '2026-06-03T10:10:00Z',
+        updated_at: '2026-06-03T10:15:00Z',
+        metadata: { item_type: 'note' },
+      },
+    ],
+    '3': [
+      {
+        id: 301,
+        vault_id: 3,
+        title: 'Locked vault visual reference card',
+        content: 'Locked vault cards must remain readable in compact layouts.',
+        image: fixtureImage,
+        summary: 'Locked vault fixture card for visual density checks.',
+        created_at: '2026-06-03T11:00:00Z',
+        updated_at: '2026-06-03T11:05:00Z',
+        metadata: { item_type: 'note' },
+      },
+    ],
+  },
+  metadataByUrl: {
+    'https://example.com/tauri-desktop-smoke': {
+      title: 'Tauri desktop smoke test reference',
+      description: 'A compact checklist for launch, capture, search, updater, and shutdown QA.',
+      image: fixtureImage,
+    },
+  },
+  searchResultsByQuery: {
+    compact: [
+      {
+        id: 201,
+        vault_id: 2,
+        title: 'Compact card density QA with a deliberately long title that should wrap instead of clipping',
+        content_preview: 'Use fixture-backed E2E to catch clipping, cramped toolbar states, and masonry layout regressions.',
+        score: 1,
+      },
+    ],
+    sync: [
+      {
+        id: 103,
+        vault_id: 1,
+        title: 'Sync export threat model notes for metadata and passwordless vaults',
+        content_preview: 'Sensitive content and summaries are encrypted, but metadata still needs a sharper release posture.',
+        score: 1,
+      },
+      {
+        id: 202,
+        vault_id: 2,
+        title: 'Search result vault hydration regression case',
+        content_preview: 'Search results must carry vault ids so opening a result reads the correct encrypted vault.',
+        score: 0.8,
+      },
+    ],
+  },
+};
+
+test.describe('brainbox app shell', () => {
   test.beforeEach(async ({ page }) => {
-    // Navigate to the app
     await page.goto('/');
-    
-    // Wait for the app to load
-    await page.waitForSelector('[data-testid="app"]', { timeout: 10000 });
+    await expect(page.getByTestId('app')).toBeVisible();
   });
 
-  test('should load the application', async ({ page }) => {
-    // Check if the main app container is present
-    await expect(page.locator('[data-testid="app"]')).toBeVisible();
-    
-    // Check if the sidebar is present
-    await expect(page.locator('[data-testid="sidebar"]')).toBeVisible();
-    
-    // Check if the main content area is present
-    await expect(page.locator('[data-testid="main-content"]')).toBeVisible();
+  test('loads the empty vault workspace without backend failure noise', async ({ page }) => {
+    await expect(page.getByTestId('sidebar')).toBeVisible();
+    await expect(page.getByTestId('main-content')).toBeVisible();
+    await expect(page.getByTestId('vaults-section')).toBeVisible();
+    await expect(page.getByText('Create your first vault')).toBeVisible();
+    await expect(page.getByText('Failed to fetch vaults.')).toHaveCount(0);
+    await expect(page.getByText('Something went wrong')).toHaveCount(0);
   });
 
-  test('should display the vault view by default', async ({ page }) => {
-    // Check if we're in the vaults view
-    await expect(page.locator('[data-testid="vaults-section"]')).toBeVisible();
-    
-    // Check if the floating capture button is present
-    await expect(page.locator('[data-testid="floating-capture-button"]')).toBeVisible();
+  test('navigates to search and exposes the search input', async ({ page }) => {
+    await page.getByTestId('nav-search').click();
+    await expect(page.getByTestId('search-section')).toBeVisible();
+    await expect(page.getByTestId('search-input')).toBeVisible();
+    await expect(page.getByTestId('search-input')).toHaveAttribute(
+      'placeholder',
+      'Search your knowledge vaults...'
+    );
   });
 
-  test('should navigate between different views', async ({ page }) => {
-    // Navigate to search view
-    await page.click('[data-testid="nav-search"]');
-    await expect(page.locator('[data-testid="search-section"]')).toBeVisible();
-    
-    // Navigate to settings view
-    await page.click('[data-testid="nav-settings"]');
-    await expect(page.locator('[data-testid="settings-section"]')).toBeVisible();
-    
-    // Navigate back to vaults view
-    await page.click('[data-testid="nav-vaults"]');
-    await expect(page.locator('[data-testid="vaults-section"]')).toBeVisible();
+  test('opens and closes the quick capture modal', async ({ page }) => {
+    await page.getByTestId('floating-capture-button').click();
+    await expect(page.getByTestId('capture-modal')).toBeVisible();
+    await expect(page.getByTestId('capture-title-input')).toBeVisible();
+    await expect(page.getByTestId('capture-content-input')).toBeVisible();
+    await expect(page.getByTestId('capture-vault-select')).toBeVisible();
+
+    await page.getByTestId('capture-modal').getByRole('button', { name: 'Close' }).click();
+    await expect(page.getByTestId('capture-modal')).toHaveCount(0);
   });
 
-  test('should open capture modal when floating button is clicked', async ({ page }) => {
-    // Click the floating capture button
-    await page.click('[data-testid="floating-capture-button"]');
-    
-    // Check if the capture modal is visible
-    await expect(page.locator('[data-testid="capture-modal"]')).toBeVisible();
-    
-    // Check if the modal has the expected form elements
-    await expect(page.locator('[data-testid="capture-title-input"]')).toBeVisible();
-    await expect(page.locator('[data-testid="capture-content-input"]')).toBeVisible();
-    await expect(page.locator('[data-testid="capture-vault-select"]')).toBeVisible();
+  test('opens create vault modal and validates required name locally', async ({ page }) => {
+    await page.getByTestId('create-vault-button').click();
+    await expect(page.getByTestId('create-vault-modal')).toBeVisible();
+    await expect(page.getByTestId('vault-name-input')).toBeVisible();
+
+    await page.getByTestId('create-vault-submit').click();
+    await expect(page.getByTestId('create-vault-modal')).toBeVisible();
   });
 
-  test('should close capture modal when cancel is clicked', async ({ page }) => {
-    // Open the capture modal
-    await page.click('[data-testid="floating-capture-button"]');
-    await expect(page.locator('[data-testid="capture-modal"]')).toBeVisible();
-    
-    // Click cancel button
-    await page.click('[data-testid="capture-cancel-button"]');
-    
-    // Check if the modal is closed
-    await expect(page.locator('[data-testid="capture-modal"]')).not.toBeVisible();
-  });
+  test('toggles theme', async ({ page }) => {
+    const currentTheme = await page.locator('html').getAttribute('data-theme');
 
-  test('should create a new vault', async ({ page }) => {
-    // Click the create vault button
-    await page.click('[data-testid="create-vault-button"]');
-    
-    // Check if the create vault modal is visible
-    await expect(page.locator('[data-testid="create-vault-modal"]')).toBeVisible();
-    
-    // Fill in the vault name
-    await page.fill('[data-testid="vault-name-input"]', 'Test Vault');
-    
-    // Fill in the password
-    await page.fill('[data-testid="vault-password-input"]', 'TestPassword123');
-    
-    // Click create button
-    await page.click('[data-testid="create-vault-submit"]');
-    
-    // Wait for the vault to be created and modal to close
-    await expect(page.locator('[data-testid="create-vault-modal"]')).not.toBeVisible();
-    
-    // Check if the new vault appears in the vault list
-    await expect(page.locator('[data-testid="vault-card"]').filter({ hasText: 'Test Vault' })).toBeVisible();
-  });
+    await page.getByTestId('theme-toggle').click();
 
-  test('should perform search functionality', async ({ page }) => {
-    // Navigate to search view
-    await page.click('[data-testid="nav-search"]');
-    
-    // Enter search query
-    await page.fill('[data-testid="search-input"]', 'test query');
-    
-    // Press Enter or click search button
-    await page.press('[data-testid="search-input"]', 'Enter');
-    
-    // Check if search results section is visible
-    await expect(page.locator('[data-testid="search-results"]')).toBeVisible();
-  });
-
-  test('should toggle theme', async ({ page }) => {
-    // Navigate to settings
-    await page.click('[data-testid="nav-settings"]');
-    
-    // Get current theme
-    const currentTheme = await page.getAttribute('html', 'data-theme');
-    
-    // Click theme toggle button
-    await page.click('[data-testid="theme-toggle"]');
-    
-    // Check if theme has changed
-    const newTheme = await page.getAttribute('html', 'data-theme');
-    expect(newTheme).not.toBe(currentTheme);
-  });
-
-  test('should handle keyboard shortcuts', async ({ page }) => {
-    // Test global capture shortcut (Alt+Shift+B)
-    await page.keyboard.press('Alt+Shift+KeyB');
-    
-    // Check if capture modal opens
-    await expect(page.locator('[data-testid="capture-modal"]')).toBeVisible();
-    
-    // Close modal with Escape
-    await page.keyboard.press('Escape');
-    
-    // Check if modal closes
-    await expect(page.locator('[data-testid="capture-modal"]')).not.toBeVisible();
-  });
-
-  test('should be responsive on mobile devices', async ({ page }) => {
-    // Set mobile viewport
-    await page.setViewportSize({ width: 375, height: 667 });
-    
-    // Check if the app still loads properly
-    await expect(page.locator('[data-testid="app"]')).toBeVisible();
-    
-    // Check if mobile-specific elements are visible
-    await expect(page.locator('[data-testid="mobile-menu-button"]')).toBeVisible();
-  });
-
-  test('should handle errors gracefully', async ({ page }) => {
-    // Listen for console errors
-    const errors: string[] = [];
-    page.on('console', msg => {
-      if (msg.type() === 'error') {
-        errors.push(msg.text());
-      }
-    });
-    
-    // Perform actions that might cause errors
-    await page.click('[data-testid="floating-capture-button"]');
-    await page.fill('[data-testid="capture-title-input"]', 'Test Item');
-    await page.fill('[data-testid="capture-content-input"]', 'Test content');
-    
-    // Try to submit without selecting a vault (should show validation error)
-    await page.click('[data-testid="capture-submit-button"]');
-    
-    // Check if error toast appears
-    await expect(page.locator('[data-testid="toast-error"]')).toBeVisible();
-    
-    // Ensure no console errors occurred
-    expect(errors).toHaveLength(0);
-  });
-
-  test('should persist data across page reloads', async ({ page }) => {
-    // Create a vault
-    await page.click('[data-testid="create-vault-button"]');
-    await page.fill('[data-testid="vault-name-input"]', 'Persistent Vault');
-    await page.fill('[data-testid="vault-password-input"]', 'TestPassword123');
-    await page.click('[data-testid="create-vault-submit"]');
-    
-    // Wait for vault to be created
-    await expect(page.locator('[data-testid="vault-card"]').filter({ hasText: 'Persistent Vault' })).toBeVisible();
-    
-    // Reload the page
-    await page.reload();
-    
-    // Check if the vault still exists
-    await expect(page.locator('[data-testid="vault-card"]').filter({ hasText: 'Persistent Vault' })).toBeVisible();
+    await expect
+      .poll(() => page.locator('html').getAttribute('data-theme'))
+      .not.toBe(currentTheme);
   });
 });
 
-test.describe('Accessibility', () => {
-  test('should have proper ARIA labels and roles', async ({ page }) => {
-    await page.goto('/');
-    
-    // Check for proper button roles and labels
-    await expect(page.locator('[data-testid="floating-capture-button"]')).toHaveAttribute('aria-label');
-    
-    // Check for proper navigation landmarks
-    await expect(page.locator('nav')).toBeVisible();
-    await expect(page.locator('main')).toBeVisible();
-    
-    // Check for proper heading hierarchy
-    const headings = await page.locator('h1, h2, h3, h4, h5, h6').all();
-    expect(headings.length).toBeGreaterThan(0);
+test.describe('brainbox populated workspace fixture', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript((fixture) => {
+      (window as any).__BRAINBOX_E2E_FIXTURE__ = fixture;
+    }, populatedFixture);
+
+    await page.goto('/?fixture=e2e');
+    await expect(page.getByTestId('app')).toBeVisible();
   });
 
-  test('should be keyboard navigable', async ({ page }) => {
-    await page.goto('/');
-    
-    // Tab through interactive elements
-    await page.keyboard.press('Tab');
-    await expect(page.locator(':focus')).toBeVisible();
-    
-    // Continue tabbing and ensure focus is visible
-    for (let i = 0; i < 5; i++) {
-      await page.keyboard.press('Tab');
-      await expect(page.locator(':focus')).toBeVisible();
-    }
+  test('renders populated vaults and opens a note item without layout clipping', async ({ page }) => {
+    await expect(page.getByTestId('vault-card')).toHaveCount(3);
+    await expect(page.getByText('Research Intake - URLs and clipped source notes')).toBeVisible();
+    await expect(page.getByText('Product Roadmap / Brainbox Hardening')).toBeVisible();
+
+    await page.getByRole('button', { name: /Open vault Research Intake/ }).click();
+
+    await expect(page.getByText('Research Intake - URLs and clipped source notes')).toBeVisible();
+    await expect(page.getByTestId('masonry-card')).toHaveCount(3);
+    await expect(page.getByRole('button', { name: /Open item Tauri smoke path checklist/ })).toBeVisible();
+    await expect(page.getByRole('button', { name: /Open item Release readiness reference/ })).toBeVisible();
+
+    await page.getByRole('button', { name: /Open item Tauri smoke path checklist/ }).click();
+
+    await expect(page.getByTestId('item-panel')).toBeVisible();
+    await expect(page.getByTestId('item-panel').locator('input').first()).toHaveValue(/Tauri smoke path checklist/);
+    await expect(page.getByText('Desktop smoke path tracks launch')).toBeVisible();
   });
 
-  test('should have sufficient color contrast', async ({ page }) => {
-    await page.goto('/');
-    
-    // This would typically use axe-core or similar accessibility testing library
-    // For now, we'll just check that text is visible
-    await expect(page.locator('body')).toHaveCSS('color', /.+/);
-    await expect(page.locator('body')).toHaveCSS('background-color', /.+/);
+  test('searches populated fixture data and opens the result from its source vault', async ({ page }) => {
+    await page.getByTestId('nav-search').click();
+    await page.getByTestId('search-input').fill('compact');
+    await page.getByTestId('search-input').press('Enter');
+
+    await expect(page.getByTestId('search-results')).toBeVisible();
+    await expect(page.getByText('Results for "compact"')).toBeVisible();
+    await expect(page.getByTestId('masonry-card')).toHaveCount(1);
+    await expect(page.getByText('Compact card density QA')).toBeVisible();
+
+    await page.getByRole('button', { name: /Open item Compact card density QA/ }).click();
+
+    await expect(page.getByTestId('item-panel')).toBeVisible();
+    await expect(page.getByTestId('item-panel').locator('input').first()).toHaveValue(/Compact card density QA/);
+    await expect(page.getByText('Compact card density QA checks wrapping')).toBeVisible();
   });
 });

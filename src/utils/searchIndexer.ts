@@ -7,6 +7,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { v4 as uuidv4 } from 'uuid';
 import { BackendVault, BackendVaultItem } from '../types';
+import { deriveKeyFromPassword, keyToArray } from './crypto';
 
 export interface IndexableContent {
   id?: string;
@@ -172,11 +173,20 @@ export async function rebuildIndex(): Promise<void> {
 
     let totalIndexed = 0;
     
-    // For each vault, get all items and index them
+    // For each accessible vault, get all items and index them.
+    // Password-protected vaults need an explicit session key, so this helper
+    // skips them rather than failing a full rebuild.
     for (const vault of vaults) {
       try {
+        if (vault.has_password) {
+          console.warn(`Skipping locked vault ${vault.id} during search index rebuild.`);
+          continue;
+        }
+
+        const key = keyToArray(await deriveKeyFromPassword('', String(vault.id)));
         const items = await invoke<BackendVaultItem[]>('list_vault_items', {
-          vaultId: vault.id
+          vaultId: vault.id,
+          key,
         });
         
         if (!items || items.length === 0) {

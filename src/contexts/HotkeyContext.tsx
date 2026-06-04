@@ -1,5 +1,6 @@
 import React, { createContext, useState, useEffect, useContext } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { isTauriRuntime } from '../utils/tauriRuntime';
 
 // Context for managing capture hotkey setting
 interface HotkeyContextType {
@@ -16,7 +17,10 @@ export const HotkeyProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   // Sync hotkey with backend when changed
   useEffect(() => {
-    invoke('register_capture_hotkey', { hotkey });
+    if (!isTauriRuntime()) return;
+    invoke('register_capture_hotkey', { hotkey }).catch((error) => {
+      console.error('Failed to register capture hotkey:', error);
+    });
   }, [hotkey]);
 
   const setHotkey = (newKey: string) => {

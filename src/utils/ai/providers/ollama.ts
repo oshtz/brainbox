@@ -5,6 +5,7 @@
  */
 
 import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import {
   AIProvider,
   ProviderConfig,
@@ -70,7 +71,6 @@ export class OllamaProvider implements AIProvider {
     if (!model) throw new Error('No model selected');
 
     const streamId = Math.random().toString(36).slice(2) + Date.now().toString(36);
-    const { listen } = await import('@tauri-apps/api/event');
 
     const unlisten = await listen('ollama-stream', (evt: unknown) => {
       const event = evt as { payload: { streamId: string; delta?: string; done?: boolean } };

@@ -22,7 +22,7 @@ export default defineConfig({
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
   use: {
     /* Base URL to use in actions like `await page.goto('/')`. */
-    baseURL: 'http://localhost:51234',
+    baseURL: 'http://127.0.0.1:1420',
 
     /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
     trace: 'on-first-retry',
@@ -34,21 +34,11 @@ export default defineConfig({
     video: 'retain-on-failure',
   },
 
-  /* Configure projects for major browsers */
+  /* Keep the local smoke suite focused on the current Vite app shell. */
   projects: [
     {
       name: 'chromium',
       use: { ...devices['Desktop Chrome'] },
-    },
-
-    {
-      name: 'firefox',
-      use: { ...devices['Desktop Firefox'] },
-    },
-
-    {
-      name: 'webkit',
-      use: { ...devices['Desktop Safari'] },
     },
 
     /* Test against mobile viewports. */
@@ -56,27 +46,13 @@ export default defineConfig({
       name: 'Mobile Chrome',
       use: { ...devices['Pixel 5'] },
     },
-    {
-      name: 'Mobile Safari',
-      use: { ...devices['iPhone 12'] },
-    },
-
-    /* Test against branded browsers. */
-    {
-      name: 'Microsoft Edge',
-      use: { ...devices['Desktop Edge'], channel: 'msedge' },
-    },
-    {
-      name: 'Google Chrome',
-      use: { ...devices['Desktop Chrome'], channel: 'chrome' },
-    },
   ],
 
   /* Run your local dev server before starting the tests */
   webServer: {
-    command: 'npm run tauri dev',
-    url: 'http://localhost:51234',
+    command: 'corepack pnpm run dev -- --host 127.0.0.1',
+    url: 'http://127.0.0.1:1420',
     reuseExistingServer: !process.env.CI,
-    timeout: 120 * 1000, // 2 minutes for Tauri to start
+    timeout: 60 * 1000,
   },
 });

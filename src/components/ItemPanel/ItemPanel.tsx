@@ -163,7 +163,7 @@ const ItemPanel: React.FC<Props> = ({ item, vaults, currentVaultId, onClose, onR
   const isConflict = title?.includes('[Conflict]');
 
   return (
-    <aside className={styles.panel}>
+    <aside className={styles.panel} data-testid="item-panel">
       <div className={styles.header}>
         <div className={styles.titleRow}>
           <input className={styles.titleInput} value={title} onChange={(e) => setTitle(e.target.value)} onBlur={() => { if (title && title !== item?.title) { onRename(String(item?.id), title); } }} />

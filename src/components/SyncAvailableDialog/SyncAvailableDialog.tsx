@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { XMarkIcon, ArrowPathIcon } from '@heroicons/react/24/outline';
 import Button from '../Button/Button';
+import { setSessionSyncPassphrase } from '../../utils/syncSession';
 import styles from '../CaptureModal/CaptureModal.module.css';
 
 interface VaultPasswordInfo {
@@ -14,6 +15,8 @@ interface SyncPreview {
   vault_count: number;
   item_count: number;
   capture_count: number;
+  encrypted: boolean;
+  needs_sync_passphrase: boolean;
   vaults_needing_password: VaultPasswordInfo[];
 }
 
@@ -21,7 +24,7 @@ interface SyncAvailableDialogProps {
   isOpen: boolean;
   preview: SyncPreview;
   isImporting: boolean;
-  onImport: (passwords: Record<string, string>) => void;
+  onImport: (passwords: Record<string, string>, syncPassphrase?: string) => void;
   onDismiss: () => void;
   onClose: () => void;
 }
@@ -36,11 +39,13 @@ const SyncAvailableDialog: React.FC<SyncAvailableDialogProps> = ({
 }) => {
   const modalRef = useRef<HTMLDivElement | null>(null);
   const [passwords, setPasswords] = useState<Record<string, string>>({});
+  const [syncPassphrase, setSyncPassphrase] = useState('');
 
   // Reset passwords when dialog opens
   useEffect(() => {
     if (isOpen) {
       setPasswords({});
+      setSyncPassphrase('');
     }
   }, [isOpen]);
 
@@ -69,10 +74,11 @@ const SyncAvailableDialog: React.FC<SyncAvailableDialogProps> = ({
   };
 
   const handleImport = () => {
-    onImport(passwords);
+    onImport(passwords, syncPassphrase);
   };
 
   const needsPasswords = preview.vaults_needing_password.length > 0;
+  const needsSyncPassphrase = preview.encrypted || preview.needs_sync_passphrase;
 
   return (
     <div className={styles.overlay} onClick={isImporting ? undefined : onClose}>
@@ -100,19 +106,47 @@ const SyncAvailableDialog: React.FC<SyncAvailableDialogProps> = ({
         <div className={styles.form}>
           <div style={{ color: 'var(--color-text-secondary)', marginBottom: '1rem' }}>
             <p style={{ margin: '0 0 0.5rem 0' }}>
-              <strong>{preview.device_name}</strong> has sync data available:
+              <strong>
+                {preview.needs_sync_passphrase ? 'Encrypted sync file' : preview.device_name}
+              </strong> has sync data available:
             </p>
-            <ul style={{ margin: '0.5rem 0', paddingLeft: '1.25rem' }}>
-              <li>{preview.vault_count} vault{preview.vault_count !== 1 ? 's' : ''}</li>
-              <li>{preview.item_count} item{preview.item_count !== 1 ? 's' : ''}</li>
-              {preview.capture_count > 0 && (
-                <li>{preview.capture_count} capture{preview.capture_count !== 1 ? 's' : ''}</li>
-              )}
-            </ul>
+            {preview.needs_sync_passphrase ? (
+              <p style={{ margin: '0.5rem 0', fontSize: '0.875rem' }}>
+                Enter the sync file passphrase to import it.
+              </p>
+            ) : (
+              <ul style={{ margin: '0.5rem 0', paddingLeft: '1.25rem' }}>
+                <li>{preview.vault_count} vault{preview.vault_count !== 1 ? 's' : ''}</li>
+                <li>{preview.item_count} item{preview.item_count !== 1 ? 's' : ''}</li>
+                {preview.capture_count > 0 && (
+                  <li>{preview.capture_count} capture{preview.capture_count !== 1 ? 's' : ''}</li>
+                )}
+              </ul>
+            )}
             <p style={{ margin: '0.5rem 0 0 0', fontSize: '0.875rem', opacity: 0.8 }}>
               Exported: {formatDate(preview.exported_at)}
             </p>
           </div>
+
+          {needsSyncPassphrase && (
+            <div style={{ marginBottom: '1rem' }}>
+              <p style={{ color: 'var(--color-text-secondary)', margin: '0 0 0.5rem 0', fontSize: '0.875rem' }}>
+                Sync file passphrase:
+              </p>
+              <input
+                type="password"
+                placeholder="Sync file passphrase"
+                value={syncPassphrase}
+                onChange={(e) => {
+                  setSyncPassphrase(e.target.value);
+                  setSessionSyncPassphrase(e.target.value);
+                }}
+                className={styles.input}
+                disabled={isImporting}
+                autoComplete="new-password"
+              />
+            </div>
+          )}
 
           {needsPasswords && (
             <div style={{ marginBottom: '1rem' }}>
@@ -168,7 +202,7 @@ const SyncAvailableDialog: React.FC<SyncAvailableDialogProps> = ({
               type="button"
               onClick={handleImport}
               data-primary="true"
-              disabled={isImporting}
+              disabled={isImporting || (needsSyncPassphrase && !syncPassphrase.trim())}
             >
               {isImporting ? 'Importing...' : 'Import Now'}
             </Button>

@@ -40,8 +40,13 @@ describe('ToastContext', () => {
     vi.useFakeTimers();
   });
 
-  afterEach(() => {
-    vi.runOnlyPendingTimers();
+  afterEach(async () => {
+    await act(async () => {
+      vi.runOnlyPendingTimers();
+      await Promise.resolve();
+      vi.runOnlyPendingTimers();
+      await Promise.resolve();
+    });
     vi.useRealTimers();
   });
 
@@ -273,7 +278,7 @@ describe('ToastContext', () => {
 
     const showButton = screen.getByText('Show Toast');
     
-    act(() => {
+    await act(async () => {
       showButton.click();
       showButton.click();
     });

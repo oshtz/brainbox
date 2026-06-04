@@ -147,6 +147,8 @@ const Masonry: React.FC<MasonryProps> = ({ data, onCardClick, onDeleteItem, onMo
           key={item.id}
           style={style}
           className={`masonry-card${isSelected ? ' is-selected' : ''}`}
+          data-testid="masonry-card"
+          data-item-id={String(item.id)}
         >
           <div
             className="masonry-card-bg"

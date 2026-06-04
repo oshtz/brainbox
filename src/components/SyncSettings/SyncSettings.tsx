@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { emit } from '@tauri-apps/api/event';
+import { setSessionSyncPassphrase } from '../../utils/syncSession';
 import styles from './SyncSettings.module.css';
 
 interface SyncStatus {
@@ -43,6 +44,8 @@ interface SyncPreview {
   vault_count: number;
   item_count: number;
   capture_count: number;
+  encrypted: boolean;
+  needs_sync_passphrase: boolean;
   vaults_needing_password: VaultPasswordInfo[];
 }
 
@@ -75,6 +78,7 @@ export function SyncSettings() {
   const [preview, setPreview] = useState<SyncPreview | null>(null);
   const [lockedVaults, setLockedVaults] = useState<LockedVault[]>([]);
   const [passwords, setPasswords] = useState<Record<string, string>>({});
+  const [syncPassphrase, setSyncPassphrase] = useState('');
   // Passwords for remote vaults (keyed by UUID)
   const [remotePasswords, setRemotePasswords] = useState<Record<string, string>>({});
 
@@ -98,9 +102,12 @@ export function SyncSettings() {
       setSyncOnClose(settings.sync_on_close === 'true');
       setCheckOnStartup(settings.check_sync_on_startup !== 'false'); // Default true
 
-      // Check for remote sync file
+      // Check for remote sync file. Encrypted previews remain locked until the
+      // user provides the sync file passphrase.
       if (statusResult.sync_enabled && statusResult.remote_file_exists) {
-        const previewResult = await invoke<SyncPreview | null>('get_sync_preview');
+        const previewResult = await invoke<SyncPreview | null>('get_sync_preview', {
+          syncPassphrase: syncPassphrase.trim() || null,
+        });
         setPreview(previewResult);
       }
 
@@ -146,6 +153,30 @@ export function SyncSettings() {
     }
   };
 
+  const handleSyncPassphraseChange = (value: string) => {
+    setSyncPassphrase(value);
+    setSessionSyncPassphrase(value);
+  };
+
+  const loadRemotePreview = async (passphrase = syncPassphrase) => {
+    try {
+      const previewResult = await invoke<SyncPreview | null>('get_sync_preview', {
+        syncPassphrase: passphrase.trim() || null,
+      });
+      setPreview(previewResult);
+      if (previewResult?.encrypted && !previewResult.needs_sync_passphrase) {
+        setSyncMessage('Encrypted sync preview unlocked.');
+        setSyncMessageType('accent');
+      }
+      return previewResult;
+    } catch (e) {
+      console.error('Failed to unlock sync preview:', e);
+      setSyncMessage(`Failed to unlock sync preview: ${e}`);
+      setSyncMessageType('danger');
+      return null;
+    }
+  };
+
   const handleSyncOnCloseChange = async (enabled: boolean) => {
     setSyncOnClose(enabled);
     try {
@@ -174,24 +205,32 @@ export function SyncSettings() {
   };
 
   const handleExport = async () => {
+    const trimmedSyncPassphrase = syncPassphrase.trim();
+    if (!trimmedSyncPassphrase) {
+      setSyncMessage('Enter a sync file passphrase before exporting.');
+      setSyncMessageType('warning');
+      return;
+    }
+
     setIsSyncing(true);
     setSyncMessage('Exporting vaults...');
     setSyncMessageType('info');
 
     try {
-      // Build passwords map: vault_id -> key bytes
-      const passwordMap: Record<number, number[]> = {};
+      // Build passwords map: vault_id -> raw vault password. The backend derives
+      // both local and portable sync keys so the sync file can be encrypted.
+      const passwordMap: Record<number, string> = {};
       for (const vault of lockedVaults) {
         const pwd = passwords[vault.id.toString()];
         if (pwd) {
-          // Derive key from password
-          const { deriveKeyFromPassword, keyToArray } = await import('../../utils/crypto');
-          const key = await deriveKeyFromPassword(pwd, vault.id.toString());
-          passwordMap[vault.id] = Array.from(keyToArray(key));
+          passwordMap[vault.id] = pwd;
         }
       }
 
-      const result = await invoke<SyncExportResult>('sync_export_vaults', { passwords: passwordMap });
+      const result = await invoke<SyncExportResult>('sync_export_vaults', {
+        passwords: passwordMap,
+        syncPassphrase: trimmedSyncPassphrase,
+      });
       
       let message = `Exported ${result.exported_vaults} vaults, ${result.exported_items} items`;
       if (result.exported_captures > 0) {
@@ -214,11 +253,32 @@ export function SyncSettings() {
   };
 
   const handleImport = async () => {
+    const trimmedSyncPassphrase = syncPassphrase.trim();
+    if (preview?.encrypted && !trimmedSyncPassphrase) {
+      setSyncMessage('Enter the sync file passphrase before importing.');
+      setSyncMessageType('warning');
+      return;
+    }
+
     setIsSyncing(true);
     setSyncMessage('Importing vaults...');
     setSyncMessageType('info');
 
     try {
+      if (preview?.needs_sync_passphrase) {
+        const unlockedPreview = await loadRemotePreview(trimmedSyncPassphrase);
+        if (!unlockedPreview || unlockedPreview.needs_sync_passphrase) {
+          setIsSyncing(false);
+          return;
+        }
+        if (unlockedPreview.vaults_needing_password.length > 0) {
+          setSyncMessage('Preview unlocked. Enter protected vault passwords, then import again.');
+          setSyncMessageType('info');
+          setIsSyncing(false);
+          return;
+        }
+      }
+
       // Build passwords map: vault_uuid -> password
       const passwordMap: Record<string, string> = {};
       // Map by vault UUID from the preview
@@ -237,19 +297,10 @@ export function SyncSettings() {
         }
       }
 
-      const result = await invoke<SyncImportResult>('sync_import_vaults', { passwords: passwordMap });
-      
-      // Rebuild search index after import
-      if (result.imported_items > 0) {
-        setSyncMessage('Rebuilding search index...');
-        try {
-          const { rebuildIndex } = await import('../../utils/searchIndexer');
-          await rebuildIndex();
-        } catch (indexError) {
-          console.error('Failed to rebuild search index:', indexError);
-          // Don't fail the import just because indexing failed
-        }
-      }
+      const result = await invoke<SyncImportResult>('sync_import_vaults', {
+        passwords: passwordMap,
+        syncPassphrase: trimmedSyncPassphrase || null,
+      });
       
       let message = `Imported ${result.imported_vaults} vaults, ${result.imported_items} items`;
       if (result.imported_captures > 0) {
@@ -366,6 +417,34 @@ export function SyncSettings() {
           />
           <p className={styles.hint}>
             Identifies this device in sync history.
+          </p>
+        </div>
+
+        {/* Sync File Passphrase */}
+        <div>
+          <label className={styles.label}>Sync File Passphrase</label>
+          <div className={styles.inlineControlRow}>
+            <input
+              type="password"
+              value={syncPassphrase}
+              onChange={(e) => handleSyncPassphraseChange(e.target.value)}
+              className={styles.input}
+              placeholder="Required for encrypted sync export/import"
+              autoComplete="new-password"
+            />
+            {status?.remote_file_exists && (
+              <button
+                type="button"
+                className={styles.button}
+                disabled={isSyncing || !syncPassphrase.trim()}
+                onClick={() => loadRemotePreview()}
+              >
+                Unlock Preview
+              </button>
+            )}
+          </div>
+          <p className={styles.hint}>
+            Stored only in this app session. Losing it means encrypted sync files cannot be imported.
           </p>
         </div>
 
@@ -528,10 +607,15 @@ export function SyncSettings() {
           {/* Remote sync info */}
           {preview && (
             <div className={getStatusClass(status?.has_changes ? 'warning' : 'info')}>
-              <strong>Sync available from {preview.device_name}</strong>
+              <strong>
+                {preview.needs_sync_passphrase
+                  ? 'Encrypted sync file available'
+                  : `Sync available from ${preview.device_name}`}
+              </strong>
               <br />
-              {preview.vault_count} vaults, {preview.item_count} items
-              {preview.capture_count > 0 && `, ${preview.capture_count} captures`}
+              {preview.needs_sync_passphrase
+                ? 'Enter the sync file passphrase to view vault details.'
+                : `${preview.vault_count} vaults, ${preview.item_count} items${preview.capture_count > 0 ? `, ${preview.capture_count} captures` : ''}`}
               <br />
               <span style={{ fontSize: '0.85rem' }}>
                 Exported: {formatDate(preview.exported_at)}
@@ -549,8 +633,8 @@ export function SyncSettings() {
 
         {/* Security Warning */}
         <div className={getStatusClass('warning')}>
-          <strong>Security Note:</strong> Your sync file contains decrypted vault data. 
-          Ensure your sync folder is secured (encrypted drive, trusted sync service, or local network only).
+          <strong>Security Note:</strong> New sync exports are wrapped in an encrypted sync-file envelope.
+          Legacy plaintext sync files can still be imported, and standalone capture files are not exported by encrypted sync.
         </div>
       </div>
     </section>
