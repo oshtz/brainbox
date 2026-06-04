@@ -73,6 +73,13 @@
   font-size: 0.95rem;
 }
 
+.inlineControlRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.5rem;
+  align-items: center;
+}
+
 .label {
   display: block;
   font-size: 0.9rem;
@@ -224,4 +231,10 @@
 .vaultName {
   min-width: 120px;
   font-weight: 500;
+}
+
+@media (max-width: 640px) {
+  .inlineControlRow {
+    grid-template-columns: 1fr;
+  }
 }

@@ -9,6 +9,7 @@
  */
 
 import { invoke } from '@tauri-apps/api/core'
+import { listen } from '@tauri-apps/api/event'
 
 /**
  * Ollama server settings
@@ -184,7 +185,6 @@ export async function streamGenerate(prompt: string, opts: { model?: string, bas
   const system = opts.system ?? getBrainySystemPrompt()
   if (!usedModel) throw new Error('No Ollama model selected')
   const id = randomId()
-  const { listen } = await import('@tauri-apps/api/event')
   interface OllamaStreamPayload { streamId: string; delta?: string; done?: boolean }
   const unlisten = await listen<OllamaStreamPayload>('ollama-stream', (evt) => {
     const payload = evt.payload

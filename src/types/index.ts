@@ -149,10 +149,11 @@ export interface BackendUrlMetadata {
 }
 
 export interface BackendSearchResult {
-  id: number;
-  vault_id: number;
+  id: number | string;
+  vault_id?: number | null;
   title: string;
-  content: string;
+  content?: string;
+  content_preview?: string;
   score?: number;
 }
 

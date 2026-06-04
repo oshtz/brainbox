@@ -9,6 +9,8 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import { isTauriRuntime } from './tauriRuntime';
+import { getSessionSyncPassphrase, hasSessionSyncPassphrase } from './syncSession';
 
 interface SyncStatus {
   sync_enabled: boolean;
@@ -33,6 +35,8 @@ interface SyncPreview {
   vault_count: number;
   item_count: number;
   capture_count: number;
+  encrypted: boolean;
+  needs_sync_passphrase: boolean;
   vaults_needing_password: VaultPasswordInfo[];
 }
 
@@ -44,7 +48,7 @@ interface UseSyncManagerOptions {
 
 interface UseSyncManagerReturn {
   checkForRemoteSync: () => Promise<SyncPreview | null>;
-  triggerExport: (passwords?: Record<number, number[]>) => Promise<boolean>;
+  triggerExport: (passwords?: Record<number, string>, syncPassphrase?: string) => Promise<boolean>;
   syncStatus: SyncStatus | null;
   isChecking: boolean;
   isSyncing: boolean;
@@ -65,6 +69,10 @@ export function useSyncManager(options: UseSyncManagerOptions = {}): UseSyncMana
 
   // Check for remote sync availability
   const checkForRemoteSync = useCallback(async (): Promise<SyncPreview | null> => {
+    if (!isTauriRuntime()) {
+      return null;
+    }
+
     setIsChecking(true);
     try {
       // Check if startup sync check is enabled
@@ -78,7 +86,12 @@ export function useSyncManager(options: UseSyncManagerOptions = {}): UseSyncMana
 
       // If sync is enabled and remote file exists with changes
       if (status.sync_enabled && status.remote_file_exists && status.has_changes) {
-        const preview = await invoke<SyncPreview | null>('get_sync_preview');
+        const sessionPassphrase = hasSessionSyncPassphrase()
+          ? getSessionSyncPassphrase()
+          : null;
+        const preview = await invoke<SyncPreview | null>('get_sync_preview', {
+          syncPassphrase: sessionPassphrase,
+        });
         if (preview) {
           setPendingSync(preview);
           onSyncAvailable?.(preview);
@@ -97,10 +110,26 @@ export function useSyncManager(options: UseSyncManagerOptions = {}): UseSyncMana
   }, [onSyncAvailable, onSyncError]);
 
   // Trigger sync export
-  const triggerExport = useCallback(async (passwords?: Record<number, number[]>): Promise<boolean> => {
+  const triggerExport = useCallback(async (
+    passwords?: Record<number, string>,
+    syncPassphrase?: string
+  ): Promise<boolean> => {
+    if (!isTauriRuntime()) {
+      return false;
+    }
+
+    const passphrase = (syncPassphrase ?? getSessionSyncPassphrase()).trim();
+    if (!passphrase) {
+      showToast?.('warning', 'Enter a sync file passphrase before exporting.');
+      return false;
+    }
+
     setIsSyncing(true);
     try {
-      await invoke('sync_export_vaults', { passwords: passwords || {} });
+      await invoke('sync_export_vaults', {
+        passwords: passwords || {},
+        syncPassphrase: passphrase,
+      });
       showToast?.('success', 'Sync export completed');
       return true;
     } catch (error) {
@@ -120,6 +149,7 @@ export function useSyncManager(options: UseSyncManagerOptions = {}): UseSyncMana
 
   // Check for sync on startup
   useEffect(() => {
+    if (!isTauriRuntime()) return;
     if (hasCheckedStartup.current) return;
     hasCheckedStartup.current = true;
 
@@ -133,6 +163,7 @@ export function useSyncManager(options: UseSyncManagerOptions = {}): UseSyncMana
 
   // Setup window close listener for sync on close
   useEffect(() => {
+    if (!isTauriRuntime()) return;
     if (closeListenerSetup.current) return;
     closeListenerSetup.current = true;
 
@@ -155,9 +186,15 @@ export function useSyncManager(options: UseSyncManagerOptions = {}): UseSyncMana
             event.preventDefault();
             
             try {
-              // Try to export (without passwords for password-protected vaults)
-              // Users should have unlocked vaults during their session if they want them synced
-              await invoke('sync_export_vaults', { passwords: {} });
+              const passphrase = getSessionSyncPassphrase().trim();
+              if (passphrase) {
+                await invoke('sync_export_vaults', {
+                  passwords: {},
+                  syncPassphrase: passphrase,
+                });
+              } else {
+                console.warn('Sync on close skipped: sync file passphrase is not available in this session.');
+              }
             } catch (error) {
               console.error('Sync on close failed:', error);
               // Don't block the close even if sync fails

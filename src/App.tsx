@@ -18,6 +18,14 @@ import ItemPanel from './components/ItemPanel/ItemPanel';
 import { getYouTubeId, youtubeThumbnailUrl } from './utils/urlPreview';
 import { deriveKeyFromPassword, keyToArray } from './utils/crypto';
 import { aiService } from './utils/ai/service';
+import { isTauriRuntime } from './utils/tauriRuntime';
+import {
+  getE2EItem,
+  getE2EMetadata,
+  listE2EItems,
+  listE2EVaults,
+  searchE2EItems,
+} from './utils/e2eFixtures';
 import {
   Vault,
   VaultItem,
@@ -84,6 +92,33 @@ const transformBackendItem = (item: BackendVaultItem): VaultItem => {
     summary: item.summary ?? undefined,
     height: 260,
     metadata: meta,
+  };
+};
+
+const transformBackendVault = (vault: BackendVault): Vault => {
+  const idStr = vault.id?.toString() || '';
+  return {
+    id: idStr,
+    title: vault.name || '',
+    backgroundImage: vault.cover_image || meshGradientForId(idStr, 640, 420),
+    has_password: vault.has_password,
+  };
+};
+
+const transformFixtureItem = (item: BackendVaultItem): VaultItem => {
+  const transformed = transformBackendItem(item);
+  const metadata = getE2EMetadata(transformed.content);
+
+  if (!metadata) return transformed;
+
+  return {
+    ...transformed,
+    metadata: {
+      ...transformed.metadata,
+      preview_title: metadata.title,
+      preview_description: metadata.description,
+      preview_image: metadata.image,
+    },
   };
 };
 
@@ -202,20 +237,16 @@ function App() {
   // Fetch vaults from backend
   const fetchVaults = async () => {
     setIsLoadingVaults(true);
+    if (!isTauriRuntime()) {
+      setVaults(listE2EVaults().map(transformBackendVault));
+      setIsLoadingVaults(false);
+      return;
+    }
+
     try {
       const result = await invoke<BackendVault[]>('list_vaults');
       // Map backend vaults to UI vault objects
-      setVaults(
-        result.map((v) => {
-          const idStr = v.id?.toString() || '';
-          return {
-            id: idStr,
-            title: v.name || '',
-            backgroundImage: v.cover_image || meshGradientForId(idStr, 640, 420),
-            has_password: v.has_password,
-          };
-        })
-      );
+      setVaults(result.map(transformBackendVault));
     } catch (err) {
       console.error('Failed to fetch vaults:', err);
       showError('Failed to fetch vaults.');
@@ -239,6 +270,22 @@ function App() {
     let cancelled = false;
 
     setIsLoadingVaultItems(true);
+
+    if (!isTauriRuntime()) {
+      const fixtureItems = listE2EItems(selectedVaultId);
+      setVaultItems(fixtureItems.map(transformFixtureItem));
+
+      if (pendingOpenItemId) {
+        const found = fixtureItems.find((item) => String(item.id) === String(pendingOpenItemId));
+        if (found) {
+          setSelectedItem(transformFixtureItem(found));
+          setPendingOpenItemId(null);
+        }
+      }
+
+      setIsLoadingVaultItems(false);
+      return;
+    }
 
     // Get vault info for password handling
     const vault = vaults.find(v => v.id === selectedVaultId);
@@ -348,7 +395,7 @@ function App() {
           itemType: isUrl ? 'url' : 'note',
           createdAt: new Date(result.created_at),
           updatedAt: new Date(result.updated_at),
-          path: undefined,
+          path: `vault/${captureData.vaultId}/item/${result.id}`,
           tags: [],
         });
       });
@@ -401,17 +448,54 @@ function App() {
   const handleSearch = (query: string) => {
     setSearchQuery(query);
     setIsSearching(true);
+
+    if (!isTauriRuntime()) {
+      setSearchSelectedItem(null);
+      const cards = searchE2EItems(query, 50)
+        .map((result) => {
+          const item = getE2EItem(
+            result.id,
+            result.vault_id ? [String(result.vault_id)] : undefined
+          );
+
+          if (!item) return null;
+
+          return {
+            ...transformFixtureItem(item),
+            vault_id: String(item.vault_id),
+            height: 260,
+          };
+        })
+        .filter((card): card is SearchResult => card !== null);
+
+      setSearchCards(cards);
+      setIsSearching(false);
+      return;
+    }
+
     invoke<BackendSearchResult[]>('search', { query, limit: 50 })
       .then((results) => {
         setSearchSelectedItem(null);
         setSearchCards([]);
         // Build cards for results by fetching full items
-        Promise.all((results || []).map(async (r) => {
+        return Promise.all((results || []).map(async (r) => {
           try {
-            // Get vault key (items from different vaults may appear in search)
-            const vault = vaults.find(v => v.id === String(r.vault_id));
-            const key = await getVaultKey(String(r.vault_id || r.id), vault?.title, vault?.has_password);
-            const it = await invoke<BackendVaultItem>('get_vault_item', { itemId: Number(r.id), key });
+            const candidateVaults = r.vault_id
+              ? vaults.filter(v => v.id === String(r.vault_id))
+              : vaults;
+
+            let it: BackendVaultItem | null = null;
+            for (const vault of candidateVaults) {
+              try {
+                const key = await getVaultKey(vault.id, vault.title, vault.has_password);
+                it = await invoke<BackendVaultItem>('get_vault_item', { itemId: Number(r.id), key });
+                break;
+              } catch {
+                // Old index entries may not know their vault; try the next vault.
+              }
+            }
+
+            if (!it) return null;
             const transformed = transformBackendItem(it);
             const card: SearchResult = {
               ...transformed,
@@ -455,6 +539,8 @@ function App() {
   };
 
   useEffect(() => {
+    if (!isTauriRuntime()) return;
+
     // Listen for the global shortcut event from backend
     let unlisten: (() => void) | undefined;
     listen('capture-hotkey-pressed', () => {
@@ -469,6 +555,7 @@ function App() {
 
   useEffect(() => {
     fetchVaults();
+    if (!isTauriRuntime()) return;
     
     // Check for updates on app startup (silent check)
     const checkForUpdatesOnStartup = async () => {
@@ -503,6 +590,8 @@ function App() {
 
   // Refresh vault list when other parts of the app change vaults
   useEffect(() => {
+    if (!isTauriRuntime()) return;
+
     let unlisten: (() => void) | undefined;
     listen('vaults-changed', () => {
       fetchVaults();
@@ -514,6 +603,8 @@ function App() {
 
   // Listen for protocol events from Tauri (now using capture-from-protocol event)
   useEffect(() => {
+    if (!isTauriRuntime()) return;
+
     let unlistenCapture: (() => void) | undefined;
     let unlistenProtocol: (() => void) | undefined;
 
@@ -558,6 +649,11 @@ function App() {
       setVaultItems([]);
       return;
     }
+    if (!isTauriRuntime()) {
+      setVaultItems(listE2EItems(selectedVaultId).map(transformFixtureItem));
+      return;
+    }
+
     setIsLoadingVaultItems(true);
 
     try {
@@ -603,6 +699,8 @@ function App() {
 
   // Listen for global item changes (e.g., brainy actions) and refresh current vault items
   useEffect(() => {
+    if (!isTauriRuntime()) return;
+
     let unlisten: (() => void) | undefined;
     listen('items-changed', () => {
       fetchItemsForSelectedVault();
@@ -613,7 +711,7 @@ function App() {
   }, [selectedVaultId]);
 
   // Handle sync import from the dialog
-  const handleSyncImport = async (passwords: Record<string, string>) => {
+  const handleSyncImport = async (passwords: Record<string, string>, syncPassphrase?: string) => {
     setIsSyncImporting(true);
     try {
       const result = await invoke<{
@@ -623,17 +721,10 @@ function App() {
         conflicts: string[];
         warnings: string[];
         skipped_vaults: string[];
-      }>('sync_import_vaults', { passwords });
-
-      // Rebuild search index after import
-      if (result.imported_items > 0) {
-        try {
-          const { rebuildIndex } = await import('./utils/searchIndexer');
-          await rebuildIndex();
-        } catch (indexError) {
-          console.error('Failed to rebuild search index:', indexError);
-        }
-      }
+      }>('sync_import_vaults', {
+        passwords,
+        syncPassphrase: syncPassphrase?.trim() || null,
+      });
 
       // Build success message
       let message = `Imported ${result.imported_vaults} vaults, ${result.imported_items} items`;

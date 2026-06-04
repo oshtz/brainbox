@@ -1,11 +1,11 @@
 .sidebar {
   display: flex;
   flex-direction: column;
-  width: 68px;
+  width: 56px;
   height: 100%;
   background: var(--color-surface);
   border: 1px solid var(--color-border);
-  padding: var(--space-sm);
+  padding: var(--space-xs);
   border-radius: var(--border-radius-lg);
   box-shadow: var(--shadow-md);
   transition: width 0.3s ease, box-shadow 0.2s ease, transform 0.2s ease;
@@ -17,8 +17,8 @@
   display: flex;
   justify-content: center;
   align-items: center;
-  padding: var(--space-md) 0;
-  margin-bottom: var(--space-md);
+  padding: var(--space-sm) 0 var(--space-md);
+  margin-bottom: var(--space-sm);
 }
 /* Logos: preserve aspect ratio */
 .logoImg { /* expanded lockup */
@@ -26,7 +26,7 @@
   width: auto;
 }
 .logoImgSmall { /* collapsed mark */
-  height: 50px; /* slightly larger than nav icons */
+  height: 38px; /* slightly larger than nav icons */
   width: auto;
 }
 
@@ -40,7 +40,7 @@
   margin: 0;
   display: flex;
   flex-direction: column;
-  gap: var(--space-sm);
+  gap: var(--space-xs);
 }
 
 .navButton {
@@ -48,7 +48,7 @@
   align-items: center;
   gap: var(--space-sm);
   width: 100%;
-  padding: var(--space-sm);
+  padding: 7px;
   border: none;
   background: transparent;
   border-radius: var(--border-radius-md);
@@ -78,8 +78,8 @@
 }
 /* Navigation icons */
 .navIcon {
-  width: 20px;
-  height: 20px;
+  width: 18px;
+  height: 18px;
   flex-shrink: 0;
 }
 
@@ -104,7 +104,7 @@
 }
 
 .themeToggle {
-  padding: var(--space-md) 0;
+  padding: var(--space-sm) 0;
   display: flex;
   justify-content: center;
 }
@@ -113,8 +113,8 @@
   background: transparent;
   border: none;
   border-radius: 50%;
-  width: 32px;
-  height: 32px;
+  width: 30px;
+  height: 30px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -165,7 +165,7 @@
 
 /* When sidebar is expanded via toggle */
 .expanded {
-  width: 180px;
+  width: 164px;
 }
 
 .expanded .label {

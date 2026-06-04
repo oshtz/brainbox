@@ -6,7 +6,13 @@ import styles from './Titlebar.module.css';
 import wordmark from '../../assets/images/wordmark.png';
 
 export default function Titlebar() {
-  const appWindow = getCurrentWindow();
+  const appWindow = useMemo(() => {
+    try {
+      return getCurrentWindow();
+    } catch {
+      return null;
+    }
+  }, []);
   const [maximized, setMaximized] = useState(false);
   const isMac = useMemo(() => {
     try {
@@ -17,6 +23,10 @@ export default function Titlebar() {
   }, []);
 
   useEffect(() => {
+    if (!appWindow) {
+      return;
+    }
+
     // Platform-specific window chrome setup
     if (isMac) {
       // macOS: keep native decorations and use overlay style for stable input/drag
@@ -41,37 +51,49 @@ export default function Titlebar() {
         try { document.documentElement.classList.remove('overlay-titlebar'); } catch {}
       }
     };
-  }, [isMac]);
+  }, [appWindow, isMac]);
 
   const handleMinimize = useCallback(async (e?: React.SyntheticEvent) => {
     e?.stopPropagation();
+    if (!appWindow) {
+      return;
+    }
+
     try {
       // Minimize to tray: hide window instead of standard minimize
       await appWindow.hide();
     } catch (err) {
       console.error('Minimize failed', err);
     }
-  }, []);
+  }, [appWindow]);
 
   const handleMaximize = useCallback(async (e?: React.SyntheticEvent) => {
     e?.stopPropagation();
+    if (!appWindow) {
+      return;
+    }
+
     try {
       await appWindow.toggleMaximize();
       setMaximized(await appWindow.isMaximized());
     } catch (err) {
       console.error('Toggle maximize failed', err);
     }
-  }, []);
+  }, [appWindow]);
 
   const handleClose = useCallback(async (e?: React.SyntheticEvent) => {
     e?.stopPropagation();
+    if (!appWindow) {
+      return;
+    }
+
     try {
       // Close to tray: hide instead of exiting
       await appWindow.hide();
     } catch (err) {
       console.error('Close failed', err);
     }
-  }, []);
+  }, [appWindow]);
 
   const handleDoubleClick = useCallback(() => {
     handleMaximize();
