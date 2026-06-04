@@ -308,6 +308,8 @@ jobs:
         if: matrix.platform == 'windows-latest'
         shell: pwsh
         run: |
+          $ErrorActionPreference = "Stop"
+
           # Check if we should skip portable exe creation
           $skipMarker = Join-Path $env:RUNNER_TEMP "skip_portable.txt"
           if (Test-Path $skipMarker) {
@@ -315,6 +317,7 @@ jobs:
             exit 0
           }
 
+          try {
           $inputExe = Resolve-Path "src-tauri\target\release\brainbox.exe"
           $outputExe = Join-Path $PWD "src-tauri\target\release\brainbox-portable.exe"
           $webviewDll = Get-ChildItem -Path "src-tauri\target" -Filter "WebView2Loader.dll" -Recurse | Select-Object -First 1
@@ -347,6 +350,11 @@ jobs:
             Write-Host "Portable exe created: $size MB"
           } else {
             throw "Failed to create portable exe"
+          }
+          } catch {
+            Write-Host "::warning::Portable exe creation failed: $_"
+            "SKIP_PORTABLE" | Out-File -FilePath $skipMarker
+            exit 0
           }
 
       - name: Upload portable exe artifact (Windows only)

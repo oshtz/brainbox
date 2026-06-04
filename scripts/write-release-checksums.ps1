@@ -26,12 +26,15 @@ if ($files.Count -eq 0) {
 }
 
 $rootPath = (Resolve-Path $Root).Path
-$rootUri = [System.Uri]($rootPath.TrimEnd([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar) + [System.IO.Path]::DirectorySeparatorChar)
-$lines = foreach ($file in $files) {
-  $hash = Get-FileHash -Path $file.FullName -Algorithm SHA256
-  $fileUri = [System.Uri]$file.FullName
-  $relative = [System.Uri]::UnescapeDataString($rootUri.MakeRelativeUri($fileUri).ToString())
-  "$($hash.Hash.ToLowerInvariant())  $relative"
+$lines = try {
+  Push-Location $rootPath
+  foreach ($file in $files) {
+    $hash = Get-FileHash -Path $file.FullName -Algorithm SHA256
+    $relative = (Resolve-Path -Path $file.FullName -Relative) -replace "^\.[\\/]", "" -replace "\\", "/"
+    "$($hash.Hash.ToLowerInvariant())  $relative"
+  }
+} finally {
+  Pop-Location
 }
 
 $resolvedOutput = if ([System.IO.Path]::IsPathRooted($OutputPath)) {
