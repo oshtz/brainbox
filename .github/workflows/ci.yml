@@ -30,11 +30,13 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Install Playwright browser
-        run: pnpm exec playwright install --with-deps chromium
+      - name: Verify Chrome browser
+        run: google-chrome --version
 
       - name: Run E2E smoke tests
         timeout-minutes: 10
+        env:
+          PLAYWRIGHT_BROWSER_CHANNEL: chrome
         run: pnpm run test:e2e
 
   verify:
