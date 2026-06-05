@@ -24,7 +24,7 @@ Local‑first capture, organize, and search for links and notes. brainbox is a d
 - Hotkey: global capture hotkey (Windows) to pop open the capture modal.
 - Protocol: `brainbox://capture?url=...&title=...` handler (Windows) for one‑click sends.
 - Tray: system tray icon with show/hide/quit actions.
-- Auto-Updates: seamless updates via GitHub releases with cryptographic verification.
+- Auto-Updates: seamless updates via GitHub releases.
 - Local‑first: data stored in a local SQLite database; no cloud required.
 
 ## Tech Stack
@@ -58,8 +58,8 @@ pnpm install
 **Download from Releases**
 
 1. Go to [GitHub Releases](https://github.com/oshtz/brainbox/releases)
-2. Download the appropriate installer for your platform:
-   - **Windows**: `.msi` installer
+2. Download the appropriate artifact for your platform:
+   - **Windows**: `brainbox-portable.exe`
    - **macOS**: `.dmg` file (Apple Silicon M1/M2/M3+ only)
 
 **macOS Installation Instructions**
@@ -150,7 +150,7 @@ brainbox includes an automatic update system that keeps your app current without
 
 - **Automatic Checks**: App silently checks for updates on startup
 - **Manual Control**: Check for updates anytime in Settings → App Updates
-- **Secure**: All updates are cryptographically signed and verified
+- **Simple Artifacts**: macOS updates use the release DMG, and Windows updates use the portable EXE
 - **Cross-Platform**: Works on Windows and macOS
 - **Non-Intrusive**: You choose when to install updates
 

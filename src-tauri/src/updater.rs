@@ -1,4 +1,4 @@
-﻿use std::path::Path;
+use std::path::Path;
 use std::process::Command;
 
 use tauri::Emitter;
@@ -48,30 +48,15 @@ fn is_newer_version(current: &str, new_version: &str) -> bool {
     }
 }
 
-/// Get the appropriate asset name for the current platform
-#[cfg(target_os = "macos")]
-fn get_platform_asset_pattern() -> &'static str {
-    ".app.tar.gz"
+#[cfg(any(target_os = "macos", test))]
+fn matches_macos_asset(name: &str) -> bool {
+    name.to_ascii_lowercase().ends_with(".dmg")
 }
 
-#[cfg(target_os = "windows")]
-fn is_portable_install() -> Result<bool, String> {
-    let exe_path = std::env::current_exe().map_err(|e| e.to_string())?;
-    let exe_name = exe_path
-        .file_name()
-        .and_then(|name| name.to_str())
-        .ok_or("Invalid executable name")?;
-    Ok(exe_name.to_ascii_lowercase().contains("portable"))
-}
-
-#[cfg(target_os = "windows")]
-fn matches_windows_asset(name: &str, portable: bool) -> bool {
+#[cfg(any(target_os = "windows", test))]
+fn matches_windows_asset(name: &str) -> bool {
     let lower = name.to_ascii_lowercase();
-    if portable {
-        lower.contains("portable") && lower.ends_with(".exe")
-    } else {
-        lower.ends_with("x64-setup.exe")
-    }
+    lower.contains("portable") && lower.ends_with(".exe")
 }
 
 #[tauri::command]
@@ -116,31 +101,22 @@ pub async fn check_for_updates() -> Result<Option<UpdateInfo>, String> {
     // Find the appropriate asset for this platform
     #[cfg(target_os = "windows")]
     let asset = {
-        let is_portable = is_portable_install()?;
         release
             .assets
             .iter()
-            .find(|a| matches_windows_asset(&a.name, is_portable))
-            .ok_or_else(|| {
-                if is_portable {
-                    "No suitable portable update asset found for this release".to_string()
-                } else {
-                    "No suitable installer update asset found for this release".to_string()
-                }
-            })?
+            .find(|a| matches_windows_asset(&a.name))
+            .ok_or_else(|| "No suitable portable update asset found for this release".to_string())?
     };
 
     #[cfg(target_os = "macos")]
     let asset = {
-        let pattern = get_platform_asset_pattern();
-        if pattern.is_empty() {
-            return Err("Auto-update not supported on this platform".to_string());
-        }
         release
             .assets
             .iter()
-            .find(|a| a.name.ends_with(pattern))
-            .ok_or_else(|| "No suitable update asset found for this platform".to_string())?
+            .find(|a| matches_macos_asset(&a.name))
+            .ok_or_else(|| {
+                "No suitable macOS DMG update asset found for this release".to_string()
+            })?
     };
 
     #[cfg(not(any(target_os = "windows", target_os = "macos")))]
@@ -234,12 +210,10 @@ pub fn apply_update(app: tauri::AppHandle, update_path: String) -> Result<(), St
 
     #[cfg(target_os = "windows")]
     {
-        let is_portable = is_portable_install()?;
-        if is_portable {
-            let current_exe = std::env::current_exe().map_err(|e| e.to_string())?;
-            let pid = std::process::id();
-            let script = format!(
-                r#"
+        let current_exe = std::env::current_exe().map_err(|e| e.to_string())?;
+        let pid = std::process::id();
+        let script = format!(
+            r#"
                 $pid = {}
                 $src = '{}'
                 $dst = '{}'
@@ -248,27 +222,21 @@ pub fn apply_update(app: tauri::AppHandle, update_path: String) -> Result<(), St
                 Move-Item -Force $src $dst
                 Start-Process -FilePath $dst
                 "#,
-                pid,
-                escape_powershell_literal(&update_path),
-                escape_powershell_literal(&current_exe.to_string_lossy()),
-            );
+            pid,
+            escape_powershell_literal(&update_path),
+            escape_powershell_literal(&current_exe.to_string_lossy()),
+        );
 
-            Command::new("powershell")
-                .args([
-                    "-NoProfile",
-                    "-ExecutionPolicy",
-                    "Bypass",
-                    "-Command",
-                    &script,
-                ])
-                .spawn()
-                .map_err(|e| e.to_string())?;
-        } else {
-            // For Windows NSIS installer, just run it and exit
-            Command::new(&update_path)
-                .spawn()
-                .map_err(|e| e.to_string())?;
-        }
+        Command::new("powershell")
+            .args([
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-Command",
+                &script,
+            ])
+            .spawn()
+            .map_err(|e| e.to_string())?;
     }
 
     #[cfg(target_os = "macos")]
@@ -283,44 +251,45 @@ pub fn apply_update(app: tauri::AppHandle, update_path: String) -> Result<(), St
             .and_then(|p| p.parent()) // .app bundle
             .ok_or("Could not determine app bundle path")?;
 
-        // Extract the tar.gz and replace the app
-        let temp_dir = std::env::temp_dir();
-        let extract_dir = temp_dir.join("brainbox-update");
-
-        // Clean up any previous extract
-        let _ = std::fs::remove_dir_all(&extract_dir);
-        std::fs::create_dir_all(&extract_dir).map_err(|e| e.to_string())?;
-
         let script = format!(
             r#"
             pid={}
-            archive='{}'
-            extract_dir='{}'
+            dmg='{}'
             target='{}'
+            mount_point=''
 
             # Wait for app to exit
             while kill -0 $pid 2>/dev/null; do sleep 0.2; done
 
-            # Extract update
-            tar -xzf "$archive" -C "$extract_dir"
+            # Mount the DMG without opening Finder.
+            attach_output=$(hdiutil attach "$dmg" -nobrowse -readonly)
+            mount_point=$(printf '%s\n' "$attach_output" | awk '/\/Volumes\// {{ print substr($0, index($0, "/Volumes/")); exit }}')
 
-            # Find the .app bundle in extracted files
-            app_path=$(find "$extract_dir" -name "*.app" -maxdepth 1 | head -1)
+            if [ -z "$mount_point" ]; then
+                echo "Could not find mounted DMG volume" >&2
+                exit 1
+            fi
+
+            # Find the .app bundle in the mounted image.
+            app_path=$(find "$mount_point" -maxdepth 2 -name "*.app" -type d | head -1)
 
             if [ -n "$app_path" ]; then
                 rm -rf "$target"
-                mv -f "$app_path" "$target"
+                ditto "$app_path" "$target"
                 xattr -cr "$target" 2>/dev/null || true
+                hdiutil detach "$mount_point" -quiet || true
                 open "$target"
+            else
+                hdiutil detach "$mount_point" -quiet || true
+                echo "No app bundle found in DMG" >&2
+                exit 1
             fi
 
             # Cleanup
-            rm -rf "$extract_dir"
-            rm -f "$archive"
+            rm -f "$dmg"
             "#,
             pid,
             escape_bash_literal(&update_path),
-            escape_bash_literal(&extract_dir.to_string_lossy()),
             escape_bash_literal(&app_bundle.to_string_lossy()),
         );
 
@@ -349,4 +318,24 @@ pub async fn install_update(app: tauri::AppHandle) -> Result<(), String> {
 
     // Apply update
     apply_update(app, update_path)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{matches_macos_asset, matches_windows_asset};
+
+    #[test]
+    fn macos_updates_use_dmg_assets() {
+        assert!(matches_macos_asset("brainbox_1.1.4_aarch64.dmg"));
+        assert!(!matches_macos_asset("brainbox_aarch64.app.tar.gz"));
+        assert!(!matches_macos_asset("brainbox-portable.exe"));
+    }
+
+    #[test]
+    fn windows_updates_use_portable_exe_assets() {
+        assert!(matches_windows_asset("brainbox-portable.exe"));
+        assert!(!matches_windows_asset("brainbox_1.1.4_x64-setup.exe"));
+        assert!(!matches_windows_asset("brainbox_1.1.4_x64_en-US.msi"));
+        assert!(!matches_windows_asset("brainbox_1.1.4_aarch64.dmg"));
+    }
 }

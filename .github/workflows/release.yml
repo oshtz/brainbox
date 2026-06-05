@@ -82,7 +82,7 @@ jobs:
         with:
           tagName: v__VERSION__
           releaseName: 'brainbox v__VERSION__'
-          releaseBody: 'See the assets to download and install this version.'
+          releaseBody: 'Download the macOS DMG or Windows portable EXE.'
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
@@ -95,7 +95,7 @@ jobs:
         with:
           tagName: v__VERSION__
           releaseName: 'brainbox v__VERSION__'
-          releaseBody: 'See the assets to download and install this version.'
+          releaseBody: 'Download the macOS DMG or Windows portable EXE.'
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
@@ -189,6 +189,25 @@ jobs:
             echo "Available files in target:"
             find "$TARGET_DIR" -name "*.app" -o -name "*.dmg" | head -10
           fi
+
+      - name: Remove extra macOS release assets (macOS only)
+        if: matrix.platform == 'macos-14' && github.ref == 'refs/heads/main'
+        run: |
+          version=$(node -p "require('./package.json').version")
+          tag="v$version"
+          assets=$(gh release view "$tag" --json assets --jq '.assets[].name | select(endswith(".app.tar.gz") or test("^release-checksums-macos-.*\\.txt$"))')
+
+          if [ -z "$assets" ]; then
+            echo "No extra macOS release assets found to remove."
+          else
+            while IFS= read -r asset; do
+              [ -z "$asset" ] && continue
+              echo "Removing extra release asset: $asset"
+              gh release delete-asset "$tag" "$asset" --yes
+            done <<< "$assets"
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Cache EVB installer (Windows only)
         if: matrix.platform == 'windows-latest'
@@ -414,52 +433,19 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Generate release checksums
+      - name: Remove extra Windows release assets (Windows only)
+        if: matrix.platform == 'windows-latest' && github.ref == 'refs/heads/main'
         shell: pwsh
         run: |
-          ./scripts/write-release-checksums.ps1 -OutputPath "release-checksums-${{ matrix.platform }}.txt"
-
-      - name: Upload checksum artifact
-        uses: actions/upload-artifact@v7
-        with:
-          name: release-checksums-${{ matrix.platform }}
-          path: release-checksums-${{ matrix.platform }}.txt
-          if-no-files-found: error
-
-      - name: Upload checksums to release
-        if: github.ref == 'refs/heads/main'
-        shell: pwsh
-        run: |
-          $checksumFile = "release-checksums-${{ matrix.platform }}.txt"
           $version = (Get-Content package.json | ConvertFrom-Json).version
           $tag = "v$version"
 
-          $maxAttempts = 30
-          $attempt = 0
-          $releaseFound = $false
-
-          while ($attempt -lt $maxAttempts -and -not $releaseFound) {
-            $attempt++
-            Write-Host "Checking for release $tag (attempt $attempt/$maxAttempts)..."
-            try {
-              $release = gh release view $tag --json id 2>$null
-              if ($release) {
-                $releaseFound = $true
-              }
-            } catch {
-              Write-Host "Release not found yet, waiting..."
-            }
-            if (-not $releaseFound) {
-              Start-Sleep -Seconds 10
+          $assets = gh release view $tag --json assets --jq '.assets[].name'
+          foreach ($asset in $assets) {
+            if ($asset -match '\.msi$' -or $asset -match 'setup\.exe$' -or $asset -match '^release-checksums-windows-.*\.txt$') {
+              Write-Host "Removing extra release asset: $asset"
+              gh release delete-asset $tag $asset --yes
             }
           }
-
-          if (-not $releaseFound) {
-            throw "Release $tag not found after $maxAttempts attempts. Checksums were generated but not uploaded."
-          }
-
-          gh release upload $tag $checksumFile --clobber
-          Write-Host "Uploaded checksum file to release $tag"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-

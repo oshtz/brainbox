@@ -20,11 +20,11 @@ pnpm audit --prod
 
 `pnpm run smoke:tauri` builds the real Tauri debug binary, starts the Vite dev server expected by the debug app, launches the desktop process with an isolated temporary `BRAINBOX_DATA_DIR`, waits for the SQLite DB and search index to initialize, and then closes both processes.
 
-Release builds also run `scripts/write-release-checksums.ps1` in GitHub Actions. The generated `release-checksums-<platform>.txt` files are uploaded as workflow artifacts and attached to the GitHub release.
+Release builds publish only the supported end-user artifacts: the macOS DMG and the Windows portable EXE. Extra Tauri-generated installer/archive assets are pruned from the GitHub release.
 
 ## Manual Desktop Smoke
 
-- Install or unpack the release artifact on a clean Windows machine.
+- Run the Windows portable EXE on a clean Windows machine.
 - Launch with no existing `brainbox.sqlite`.
 - Create one passwordless vault and one password-protected vault.
 - Capture a note and a URL.
@@ -37,8 +37,9 @@ Release builds also run `scripts/write-release-checksums.ps1` in GitHub Actions.
 
 - Windows code-signing certificate available and configured.
 - macOS signing/notarization credentials available before advertising macOS as production-ready.
-- Release artifact checksums generated and attached.
+- GitHub release contains only the macOS DMG and Windows portable EXE.
 - Portable updater behavior tested against a published release asset.
+- macOS DMG updater behavior tested against a published release asset.
 - Update failure path tested with a missing or unavailable asset.
 
 ## Security Posture
