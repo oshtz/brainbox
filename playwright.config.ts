@@ -1,5 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
 
+const ciBrowserChannel = process.env.CI ? 'msedge' : undefined;
+
 /**
  * @see https://playwright.dev/docs/test-configuration
  */
@@ -40,7 +42,7 @@ export default defineConfig({
       name: 'chromium',
       use: {
         ...devices['Desktop Chrome'],
-        channel: process.env.CI ? 'chrome' : undefined,
+        channel: ciBrowserChannel,
       },
     },
 
@@ -49,7 +51,7 @@ export default defineConfig({
       name: 'Mobile Chrome',
       use: {
         ...devices['Pixel 5'],
-        channel: process.env.CI ? 'chrome' : undefined,
+        channel: ciBrowserChannel,
       },
     },
   ],
