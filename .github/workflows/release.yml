@@ -21,7 +21,7 @@ jobs:
     runs-on: ${{ matrix.platform }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Rust setup
         uses: dtolnay/rust-toolchain@stable
@@ -34,12 +34,12 @@ jobs:
           workspaces: './src-tauri -> target'
 
       - name: Install pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
-          node-version: 'lts/*'
+          node-version: '24'
           cache: 'pnpm'
 
       - name: Install frontend dependencies
@@ -69,7 +69,7 @@ jobs:
 
       - name: Build the app (macOS)
         if: matrix.platform == 'macos-14'
-        uses: tauri-apps/tauri-action@v0.5
+        uses: tauri-apps/tauri-action@v0.6.2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Apple code signing and notarization (macOS only)
@@ -89,7 +89,7 @@ jobs:
 
       - name: Build the app (Windows)
         if: matrix.platform == 'windows-latest'
-        uses: tauri-apps/tauri-action@v0.5
+        uses: tauri-apps/tauri-action@v0.6.2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
@@ -193,7 +193,7 @@ jobs:
       - name: Cache EVB installer (Windows only)
         if: matrix.platform == 'windows-latest'
         id: cache-evb
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ${{ runner.temp }}/enigmavb_setup.exe
           key: evb-installer-v10.80
@@ -331,7 +331,7 @@ jobs:
           New-Item -ItemType Directory -Force -Path $evbStaging | Out-Null
           Copy-Item -Path $webviewDllPath -Destination $evbStaging -Force
           $evbProject = Join-Path $PWD "brainbox.evb"
-          pnpm dlx @insco/enigma-virtualbox generate $evbStaging --input $inputExe --output $outputExe --project-name $evbProject
+          pnpm --package=@insco/enigma-virtualbox dlx enigmavirtualbox generate $evbStaging --input $inputExe --output $outputExe --project-name $evbProject
           if ($LASTEXITCODE -ne 0) {
             throw "enigmavirtualbox generate failed"
           }
@@ -359,7 +359,7 @@ jobs:
 
       - name: Upload portable exe artifact (Windows only)
         if: matrix.platform == 'windows-latest'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: brainbox-portable
           path: src-tauri/target/release/brainbox-portable.exe
@@ -420,7 +420,7 @@ jobs:
           ./scripts/write-release-checksums.ps1 -OutputPath "release-checksums-${{ matrix.platform }}.txt"
 
       - name: Upload checksum artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: release-checksums-${{ matrix.platform }}
           path: release-checksums-${{ matrix.platform }}.txt
