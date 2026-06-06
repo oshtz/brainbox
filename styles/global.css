@@ -17,7 +17,7 @@ body {
   font-family: var(--font-family-body);
   color: var(--color-text-primary);
   /* Simplified background for better performance on macOS */
-  background: var(--color-background);
+  background: var(--ui-body-background);
   line-height: var(--line-height-normal);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -32,26 +32,15 @@ body {
   --scrollbar-thumb-hover: rgba(15, 23, 42, 0.55);
 }
 
-/* Add subtle gradient overlay that's more performant */
 body::before {
-  content: '';
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background:
-    radial-gradient(760px 360px at -5% -5%, rgba(99,102,241,0.06), transparent 50%),
-    radial-gradient(560px 280px at 105% 5%, rgba(20,184,166,0.05), transparent 50%);
-  pointer-events: none;
-  z-index: -1;
+  content: none;
 }
 
 /* Basic heading styles */
 h1, h2, h3, h4, h5, h6 {
   margin-top: 0;
   margin-bottom: var(--space-sm);
-  font-weight: var(--font-weight-bold);
+  font-weight: var(--font-weight-semibold);
   font-family: var(--font-family-title);
   line-height: 1.2;
 }

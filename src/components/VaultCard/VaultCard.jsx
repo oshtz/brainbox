@@ -8,15 +8,19 @@ const VaultCard = ({
   color = '#f0f0f0',
   children,
   priceTag,
+  locked = false,
+  updatedAt,
   onClick,
   onDelete,
   onRename,
   onChangeCover,
   onChangePassword
 }) => {
-  const cardStyle = backgroundImage 
+  const thumbnailStyle = backgroundImage
     ? { backgroundImage: `url(${backgroundImage})` }
     : { backgroundColor: color };
+  const initial = typeof title === 'string' && title.trim().length > 0 ? title.trim()[0].toUpperCase() : 'V';
+  const updatedLabel = updatedAt ? `Updated ${new Date(updatedAt).toLocaleDateString()}` : 'Vault';
 
   const [menuOpen, setMenuOpen] = useState(false);
   const toggleMenu = (e) => { e.stopPropagation(); setMenuOpen(o => !o); };
@@ -25,24 +29,32 @@ const VaultCard = ({
   return (
     <div
       className={styles.card}
-      style={cardStyle}
       onClick={onClick}
       tabIndex={0}
       role="button"
       aria-label={`Open vault ${title}`}
-      onKeyPress={e => { if (e.key === 'Enter' || e.key === ' ') { onClick?.(); } }}
+      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick?.(); } }}
       data-testid="vault-card"
     >
       {priceTag && (
         <span className={styles.priceTag}>{priceTag}</span>
       )}
-      {/* menu moved to footer */}
+      <div className={styles.thumbnail} style={thumbnailStyle} aria-hidden="true">
+        <span className={styles.initial}>{initial}</span>
+      </div>
       <div className={styles.content}>
-        {/* Remove top title; keep space for custom children if needed */}
+        <div className={styles.titleRow}>
+          <span className={styles.label} title={title}>{title}</span>
+        </div>
+        <div className={styles.metaRow}>
+          <span className={`${styles.statusDot} ${locked ? styles.locked : ''}`} />
+          <span>{locked ? 'Protected' : 'Open'}</span>
+          <span className={styles.metaDivider}>/</span>
+          <span>{updatedLabel}</span>
+        </div>
         {children && <div className={styles.body}>{children}</div>}
       </div>
-      <div className={styles.footer}>
-        <span className={styles.label}>{title}</span>
+      <div className={styles.actions}>
         {(onDelete || onRename || onChangeCover || onChangePassword) && (
           <div className={styles.menuWrap}>
             <button

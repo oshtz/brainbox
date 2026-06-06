@@ -16,8 +16,8 @@
   min-width: 320px;
   max-width: 480px;
   padding: var(--space-md);
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
+  background: var(--ui-panel-strong-bg);
+  border: 1px solid var(--ui-muted-border);
   border-radius: var(--border-radius-md);
   box-shadow: var(--shadow-lg);
   pointer-events: auto;
@@ -94,7 +94,7 @@
 
 .closeButton:hover {
   color: var(--color-text-secondary);
-  background: var(--color-background);
+  background: var(--ui-control-hover-bg);
 }
 
 .closeButton:focus-visible {
@@ -155,8 +155,8 @@
 
 /* Dark theme adjustments */
 [data-theme="dark"] .toast {
-  background: var(--color-surface-elevated);
-  border-color: var(--color-border-subtle);
+  background: var(--ui-panel-strong-bg);
+  border-color: var(--ui-muted-border);
 }
 
 [data-theme="dark"] .closeButton:hover {

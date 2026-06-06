@@ -1,7 +1,6 @@
 // Import brainbox components
 import Button from './components/Button/Button';
 import Sidebar from './components/Sidebar/Sidebar';
-import Header from './components/Header/Header';
 import VaultCard from './components/VaultCard/VaultCard';
 import CaptureModal from './components/CaptureModal/CaptureModal';
 import SearchBar from './components/SearchBar/SearchBar';
@@ -12,6 +11,14 @@ import { useState, useEffect } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { emit } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
+import {
+  ChevronDownIcon,
+  EllipsisHorizontalIcon,
+  MagnifyingGlassIcon,
+  PlusIcon,
+  SparklesIcon,
+  Squares2X2Icon,
+} from '@heroicons/react/24/outline';
 import Masonry from './components/Masonry/Masonry.tsx';
 import { meshGradientForId, generateMeshGradientDataURL } from './utils/meshGradient';
 import ItemPanel from './components/ItemPanel/ItemPanel';
@@ -42,7 +49,6 @@ import {
 } from './types';
 
 import styles from './App.module.css';
-import Titlebar from './components/Titlebar/Titlebar';
 import Library from './components/Library/Library';
 import Connections from './components/Connections/Connections';
 import ChangeCoverDialog from './components/ChangeCoverDialog/ChangeCoverDialog.jsx';
@@ -53,6 +59,28 @@ import { useToast } from './contexts/ToastContext';
 import { useConfirm } from './contexts/ConfirmContext';
 import { usePrompt } from './contexts/PromptContext';
 import { useSyncManager } from './utils/useSyncManager';
+
+const vaultFilterOptions = [
+  { id: 'all', label: 'All' },
+  { id: 'notes', label: 'Notes' },
+  { id: 'images', label: 'Images' },
+  { id: 'links', label: 'Links' },
+  { id: 'quotes', label: 'Quotes' },
+  { id: 'books', label: 'Books' },
+  { id: 'places', label: 'Places' },
+  { id: 'tasks', label: 'Tasks' },
+];
+
+const classifyVaultItem = (item: VaultItem): string => {
+  const text = `${item.title || ''} ${item.content || ''}`.toLowerCase();
+  if (item.metadata?.item_type === 'url') return 'links';
+  if (/\[[ x]\]|todo|task|done|checklist/.test(text)) return 'tasks';
+  if (/quote|“|”|author|said|—|--/.test(text)) return 'quotes';
+  if (/book|novel|read|reading|author|chapter/.test(text)) return 'books';
+  if (/place|visit|travel|tokyo|japan|italy|city|country|restaurant|hotel/.test(text)) return 'places';
+  if (item.image) return 'images';
+  return 'notes';
+};
 
 const getErrorMessage = (err: unknown): string => {
   if (typeof err === 'string') return err;
@@ -88,7 +116,7 @@ const transformBackendItem = (item: BackendVaultItem): VaultItem => {
     content: rawContent,
     createdAt: new Date(item.created_at),
     updatedAt: new Date(item.updated_at),
-    image: cover || meshGradientForId(item.id ?? Math.random(), 640, 420),
+    image: cover,
     summary: item.summary ?? undefined,
     height: 260,
     metadata: meta,
@@ -102,6 +130,8 @@ const transformBackendVault = (vault: BackendVault): Vault => {
     title: vault.name || '',
     backgroundImage: vault.cover_image || meshGradientForId(idStr, 640, 420),
     has_password: vault.has_password,
+    created_at: vault.created_at,
+    updated_at: vault.updated_at,
   };
 };
 
@@ -162,6 +192,10 @@ function App() {
   const [isLoadingVaults, setIsLoadingVaults] = useState<boolean>(false);
   // Add selectedVaultId state
   const [selectedVaultId, setSelectedVaultId] = useState<string | null>(null);
+  const selectedVault = vaults.find(v => v.id === selectedVaultId);
+  const isVaultWorkspace = currentView === 'vaults' && Boolean(selectedVaultId);
+  const [vaultSearchQuery, setVaultSearchQuery] = useState<string>('');
+  const [vaultFilter, setVaultFilter] = useState<string>('all');
 
   // Add state for vault items and selected item for slide-in panel
   const [vaultItems, setVaultItems] = useState<VaultItem[]>([]);
@@ -189,7 +223,33 @@ function App() {
   // Compute conflict count and filtered items
   const conflictItems = vaultItems.filter(item => item.title?.includes('[Conflict]'));
   const hasConflicts = conflictItems.length > 0;
-  const displayedVaultItems = showConflictsOnly ? conflictItems : vaultItems;
+  const vaultSearchTerm = vaultSearchQuery.trim().toLowerCase();
+  const baseVaultItems = showConflictsOnly ? conflictItems : vaultItems;
+  const displayedVaultItems = baseVaultItems.filter((item) => {
+    const matchesFilter = vaultFilter === 'all' || classifyVaultItem(item) === vaultFilter;
+    const searchable = `${item.title || ''} ${item.content || ''} ${item.summary || ''} ${item.metadata?.url || ''}`.toLowerCase();
+    const matchesSearch = !vaultSearchTerm || searchable.includes(vaultSearchTerm);
+    return matchesFilter && matchesSearch;
+  });
+  const currentTitle = isVaultWorkspace
+    ? (selectedVault?.title || 'Knowledge')
+    : currentView === 'vaults' ? 'Knowledge'
+      : currentView === 'search' ? 'Explore Knowledge'
+        : currentView === 'library' ? 'Library'
+          : currentView === 'connections' ? 'Connections'
+            : 'Settings';
+
+  useEffect(() => {
+    document.documentElement.toggleAttribute('data-vault-workspace', isVaultWorkspace);
+    return () => {
+      document.documentElement.removeAttribute('data-vault-workspace');
+    };
+  }, [isVaultWorkspace]);
+
+  useEffect(() => {
+    setVaultSearchQuery('');
+    setVaultFilter('all');
+  }, [selectedVaultId]);
 
   // Change cover handlers
   const handleCoverFromUrl = async (vaultId: string, url: string) => {
@@ -531,11 +591,31 @@ function App() {
 
   // Handle navigation between views
   const handleNavigation = (view: AppView | undefined) => {
-    setCurrentView(view ?? 'vaults');
+    const nextView = view ?? 'vaults';
+
+    setCurrentView(nextView);
+    setIsBrainyChatOpen(false);
+    setSelectedItem(null);
+    setSearchSelectedItem(null);
+    setIsItemBusy(false);
+
     // Reset search when navigating to vaults
-    if (view === 'vaults' || view === undefined) {
+    if (nextView === 'vaults') {
       setSearchQuery('');
+      setSelectedVaultId(null);
+      setShowConflictsOnly(false);
     }
+  };
+
+  const handleBrainyNavigation = () => {
+    if (brainyMode === 'full') {
+      handleNavigation('connections');
+      return;
+    }
+    setSelectedItem(null);
+    setSearchSelectedItem(null);
+    setIsItemBusy(false);
+    setIsBrainyChatOpen(v => !v);
   };
 
   useEffect(() => {
@@ -758,36 +838,76 @@ function App() {
 
   return (
     <>
-      <Titlebar />
-      <div className={`${styles.app} ${isDetailOpen ? styles.appNudged : ''}`} data-testid="app">
+      <div className={`${styles.app} ${isDetailOpen ? styles.appNudged : ''} ${isVaultWorkspace ? styles.vaultMode : ''}`} data-testid="app">
       <Sidebar
-        onCaptureClick={() => setIsCaptureModalOpen(true)}
+        title={currentTitle}
         onExploreClick={() => handleNavigation('search')}
         onKnowledgeClick={handleNavigation}
         onSettingsClick={() => handleNavigation('settings')}
-        onBrainyClick={() => setIsBrainyChatOpen(v => !v)}
+        onBrainyClick={handleBrainyNavigation}
+        onCreateNote={() => setIsCaptureModalOpen(true)}
+        onCreateVault={() => setIsCreateVaultModalOpen(true)}
+        showVaultButton={currentView === 'vaults' && !selectedVaultId}
+        showNoteButton={currentView !== 'settings' && currentView !== 'connections'}
         currentView={currentView}
         isBrainyOpen={isBrainyChatOpen}
         brainyMode={brainyMode}
       />
 
+      <div className={styles.workspaceBody}>
       <main className={styles.main} data-testid="main-content">
-        <Header
-          title={
-            currentView === 'vaults' && selectedVaultId
-              ? vaults.find(v => v.id === selectedVaultId)?.title || 'Vault'
-              : currentView === 'vaults' ? "Knowledge" :
-                currentView === 'search' ? "Explore Knowledge" :
-                currentView === 'library' ? "Library" :
-                currentView === 'connections' ? "Connections" :
-                "Settings"
-          }
-          onCreateNote={() => setIsCaptureModalOpen(true)}
-          onCreateVault={() => setIsCreateVaultModalOpen(true)}
-          showVaultButton={currentView === 'vaults' && !selectedVaultId}
-        />
+        {isVaultWorkspace && (
+          <div className={styles.vaultWorkspaceChrome}>
+            <div className={styles.vaultTopRow}>
+              <label className={styles.vaultSearchBox}>
+                <MagnifyingGlassIcon className={styles.vaultSearchIcon} aria-hidden="true" />
+                <input
+                  type="search"
+                  value={vaultSearchQuery}
+                  onChange={(event) => setVaultSearchQuery(event.target.value)}
+                  placeholder="Search notes, images, links, thoughts..."
+                  aria-label="Search this vault"
+                />
+                <span className={styles.vaultShortcut}>⌘ K</span>
+              </label>
+              <div className={styles.vaultTopActions}>
+                <button type="button" className={styles.vaultScopeButton} onClick={() => setSelectedVaultId(null)}>
+                  <span>{selectedVault?.title || 'Everything'}</span>
+                  <ChevronDownIcon className={styles.vaultControlIcon} aria-hidden="true" />
+                </button>
+                <button type="button" className={styles.vaultIconButton} title="Grid view" aria-label="Grid view">
+                  <Squares2X2Icon className={styles.vaultControlIcon} aria-hidden="true" />
+                </button>
+                <button type="button" className={styles.vaultIconButton} title="More options" aria-label="More options">
+                  <EllipsisHorizontalIcon className={styles.vaultControlIcon} aria-hidden="true" />
+                </button>
+              </div>
+            </div>
+            <div className={styles.vaultFilterRow} aria-label="Vault filters">
+              {vaultFilterOptions.map((filter) => (
+                <button
+                  key={filter.id}
+                  type="button"
+                  className={`${styles.vaultFilterChip} ${vaultFilter === filter.id ? styles.vaultFilterChipActive : ''}`}
+                  onClick={() => setVaultFilter(filter.id)}
+                >
+                  {filter.label}
+                </button>
+              ))}
+              <button
+                type="button"
+                className={styles.vaultFilterAdd}
+                onClick={() => setIsCaptureModalOpen(true)}
+                aria-label="Add new note"
+                title="Add new note"
+              >
+                <PlusIcon className={styles.vaultControlIcon} aria-hidden="true" />
+              </button>
+            </div>
+          </div>
+        )}
         
-<div className={`${styles.content}${currentView === 'settings' ? ` ${styles.contentNoTopPadding}` : ''}`}>
+<div className={`${styles.content}${isVaultWorkspace ? ` ${styles.contentNoTopPadding} ${styles.vaultWorkspaceContent}` : ''}`}>
           {currentView === 'settings' ? (
             <Settings scrollToSection={settingsScrollTarget} onScrollComplete={() => setSettingsScrollTarget(null)} />
           ) : currentView === 'search' ? (
@@ -851,6 +971,18 @@ function App() {
                       />
                     </div>
                   )}
+                </div>
+              )}
+
+              {!searchQuery && (
+                <div className={styles.searchIdleState}>
+                  <h2 className={styles.emptyStateTitle}>Start a search</h2>
+                  <p className={styles.emptyStateBody}>Find notes, links, summaries, and vault content from one place.</p>
+                  <div className={styles.searchIdleHints} aria-hidden="true">
+                    <span>notes</span>
+                    <span>links</span>
+                    <span>summaries</span>
+                  </div>
                 </div>
               )}
 
@@ -939,24 +1071,24 @@ function App() {
             }} />
           ) : currentView === 'vaults' && selectedVaultId ? (
             <section className={styles.vaults}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
-                <Button variant="ghost" onClick={() => { setSelectedVaultId(null); setShowConflictsOnly(false); }} aria-label="Back to vaults">
-                  ← Back to vaults
-                </Button>
+              {(hasConflicts || vaultSearchQuery || vaultFilter !== 'all') && (
+                <div className={styles.vaultBoardStatus}>
+                  <span>
+                    {displayedVaultItems.length} {displayedVaultItems.length === 1 ? 'item' : 'items'}
+                    {vaultFilter !== 'all' ? ` in ${vaultFilterOptions.find(f => f.id === vaultFilter)?.label || vaultFilter}` : ''}
+                    {vaultSearchQuery ? ` matching "${vaultSearchQuery}"` : ''}
+                  </span>
                 {hasConflicts && (
-                  <Button
-                    variant={showConflictsOnly ? 'secondary' : 'ghost'}
+                  <button
+                    type="button"
+                    className={`${styles.vaultConflictButton} ${showConflictsOnly ? styles.vaultConflictButtonActive : ''}`}
                     onClick={() => setShowConflictsOnly(!showConflictsOnly)}
-                    style={{
-                      background: showConflictsOnly ? 'rgba(245, 158, 11, 0.15)' : undefined,
-                      border: showConflictsOnly ? '1px solid #f59e0b' : undefined,
-                      color: showConflictsOnly ? '#f59e0b' : undefined,
-                    }}
                   >
                     {showConflictsOnly ? 'Show All Items' : `View Conflicts (${conflictItems.length})`}
-                  </Button>
+                  </button>
                 )}
               </div>
+              )}
               <div style={{padding: '0 0 2rem 0'}}>
                 {isLoadingVaultItems ? (
                   <div className={styles.skeletonGrid} aria-busy="true">
@@ -982,14 +1114,28 @@ function App() {
                   </div>
                 ) : (
                   <Masonry
-                    data={displayedVaultItems.map(item => ({
-                      ...item,
-                      image: item.image || '',
-                      height: item.height || 260
-                    }))}
+                    data={[
+                      {
+                        id: '__add_note__',
+                        title: 'Add new note',
+                        content: 'Start typing or paste anything...',
+                        image: '',
+                        height: 210,
+                        metadata: { item_type: 'add' },
+                      } as any,
+                      ...displayedVaultItems.map(item => ({
+                        ...item,
+                        image: item.image || '',
+                        height: item.height || 260
+                      }))
+                    ]}
                     actionsMode="menu"
                     selectedId={selectedItem?.id}
                     onCardClick={(item) => {
+                      if (String(item.id) === '__add_note__') {
+                        setIsCaptureModalOpen(true);
+                        return;
+                      }
                       if (isItemBusy && selectedItem) { return; }
                       const vaultItem = vaultItems.find(v => v.id === item.id);
                       if (vaultItem) setSelectedItem(vaultItem);
@@ -1138,6 +1284,8 @@ function App() {
                       backgroundImage={vault.backgroundImage}
                       color={vault.color}
                       priceTag={vault.priceTag}
+                      locked={vault.has_password}
+                      updatedAt={vault.updated_at}
                       onClick={() => setSelectedVaultId(vault.id)}
                     onRename={async () => {
                       const newName = await promptDialog({
@@ -1222,6 +1370,21 @@ function App() {
         </div>
       </main>
 
+      {isVaultWorkspace && brainyMode === 'sidebar' && !isBrainyChatOpen && (
+        <button
+          type="button"
+          className={styles.brainyOrb}
+          onClick={() => setIsBrainyChatOpen(true)}
+          aria-label="Open brainy"
+          title="Open brainy"
+        >
+          <span className={styles.brainyOrbFace}>
+            <SparklesIcon className={styles.brainyOrbIcon} aria-hidden="true" />
+          </span>
+          <span>brainy</span>
+        </button>
+      )}
+
       {/* brainy Chat Panel */}
       {isBrainyChatOpen && brainyMode === 'sidebar' && (
         <div className={styles.brainyChatPanel}>
@@ -1243,6 +1406,7 @@ function App() {
           />
         </div>
       )}
+      </div>
       {/* Create Vault Modal */}
       <CreateVaultModal
         isOpen={isCreateVaultModalOpen}

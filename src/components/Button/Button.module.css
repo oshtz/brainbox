@@ -3,10 +3,10 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  padding: 10px 14px;
+  gap: 6px;
+  padding: 7px 11px;
   font-family: var(--font-family-sans);
-  font-size: 0.95rem;
+  font-size: var(--font-size-sm);
   font-weight: var(--font-weight-medium);
   line-height: 1.25;
   border-radius: var(--border-radius-md);
@@ -16,8 +16,7 @@
   transition: background-color var(--transition-duration) var(--transition-timing),
               border-color var(--transition-duration) var(--transition-timing),
               color var(--transition-duration) var(--transition-timing),
-              box-shadow var(--transition-duration) var(--transition-timing),
-              transform var(--transition-duration) var(--transition-timing);
+              box-shadow var(--transition-duration) var(--transition-timing);
   user-select: none; /* Prevent text selection */
   white-space: nowrap; /* Prevent wrapping */
 }
@@ -25,49 +24,48 @@
 /* Primary Variant */
 .primary {
   background-color: var(--color-primary);
-  color: var(--color-background);
+  color: #fff;
   border-color: var(--color-primary);
-  box-shadow: 0 2px 8px rgba(var(--color-primary-rgb), 0.2);
+  box-shadow: none;
 }
 
 .primary:hover,
 .primary:focus-visible {
   background-color: var(--color-primary-hover);
   border-color: var(--color-primary-hover);
-  box-shadow: 0 4px 12px rgba(var(--color-primary-rgb), 0.3);
+  box-shadow: none;
 }
 
 /* Secondary Variant (Example) */
 .secondary {
-  background-color: var(--color-surface);
+  background-color: var(--ui-control-bg);
   color: var(--color-text-primary);
-  border-color: var(--color-border);
+  border-color: transparent;
 }
 
 .secondary:hover,
 .secondary:focus-visible {
-  background-color: var(--color-surface-hover);
-  border-color: var(--color-border);
+  background-color: var(--ui-control-hover-bg);
+  border-color: rgba(var(--color-primary-rgb), 0.20);
 }
 
-/* Ghost Variant: minimal, pill-shaped */
 .ghost {
   background: transparent;
   color: var(--color-text-secondary);
-  border-color: var(--color-border);
-  border-radius: 999px;
+  border-color: transparent;
+  border-radius: var(--border-radius-md);
 }
 
 .ghost:hover,
 .ghost:focus-visible {
-  background: var(--color-surface-hover);
+  background: var(--ui-control-hover-bg);
   color: var(--color-text-primary);
 }
 
 /* Danger Variant */
 .danger {
   background-color: var(--color-danger);
-  color: var(--color-background);
+  color: #fff;
   border-color: var(--color-danger);
 }
 
@@ -110,6 +108,6 @@
 }
 
 /* Sizes */
-.sm { padding: 8px 12px; font-size: 0.9rem; }
-.md { padding: 10px 14px; font-size: 0.95rem; }
-.lg { padding: 12px 16px; font-size: 1rem; }
+.sm { padding: 5px 9px; font-size: var(--font-size-xs); }
+.md { padding: 7px 11px; font-size: var(--font-size-sm); }
+.lg { padding: 9px 13px; font-size: var(--font-size-md); }

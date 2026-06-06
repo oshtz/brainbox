@@ -1,6 +1,6 @@
 :root {
   /* Typography */
-  --font-family-title: 'Averia Serif Libre', serif;
+  --font-family-title: 'Manrope', sans-serif;
   --font-family-body: 'Manrope', sans-serif;
   --font-family-sans: var(--font-family-body);
   --font-size-base: 16px;
@@ -23,27 +23,49 @@
   --line-height-relaxed: 1.75;
 
   /* Base Colors - Light */
-  --color-text-primary: #0f172a; /* slate-900 */
-  --color-text-secondary: #475569; /* slate-600 */
-  --color-text-tertiary: #94a3b8; /* slate-400 */
+  --color-text-primary: #0f172a;
+  --color-text-secondary: #475569;
+  --color-text-tertiary: #94a3b8;
   --color-background: #ffffff;
-  --color-background-subtle: #f8fafc; /* slate-50 */
-  --color-surface: #f8fafc; /* slate-50 */
+  --color-background-subtle: #f8fafc;
+  --color-surface: #f8fafc;
   --color-surface-elevated: #ffffff;
   --color-elevated: var(--color-surface-elevated);
-  --color-surface-hover: #f1f5f9; /* slate-100 */
-  --color-border: #e2e8f0; /* slate-200 */
-  --color-border-subtle: #f1f5f9; /* slate-100 */
+  --color-surface-hover: #f1f5f9;
+  --color-border: #e2e8f0;
+  --color-border-subtle: #f1f5f9;
 
   /* Accent Colors */
-  --color-primary: #6366f1; /* indigo-500 */
-  --color-primary-hover: #4f46e5; /* indigo-600 */
-  --color-primary-rgb: 99, 102, 241; /* for focus ring */
+  --color-primary: #6366f1;
+  --color-primary-hover: #4f46e5;
+  --color-primary-rgb: 99, 102, 241;
+  --color-primary-subtle: rgba(var(--color-primary-rgb), 0.16);
   --color-accent: var(--color-primary);
   --color-accent-hover: var(--color-primary-hover);
   --color-accent-bg: rgba(var(--color-primary-rgb), 0.12);
-  --color-secondary: #64748b; /* slate-500 */
+  --color-secondary: #64748b;
   --color-focus: rgba(var(--color-primary-rgb), 0.35);
+
+  /* App UI Surfaces */
+  --ui-body-background:
+    radial-gradient(1200px 600px at -10% -10%, rgba(15, 23, 42, 0.045), transparent 60%),
+    radial-gradient(800px 500px at 110% 10%, rgba(15, 23, 42, 0.035), transparent 60%),
+    var(--color-background);
+  --ui-main-background:
+    radial-gradient(760px 380px at 82% 4%, rgba(15, 23, 42, 0.04), transparent 62%),
+    radial-gradient(520px 280px at 18% 10%, rgba(15, 23, 42, 0.03), transparent 58%),
+    var(--color-background);
+  --ui-panel-bg: rgba(248, 250, 252, 0.78);
+  --ui-panel-strong-bg: rgba(255, 255, 255, 0.96);
+  --ui-control-bg: rgba(15, 23, 42, 0.045);
+  --ui-control-hover-bg: rgba(15, 23, 42, 0.075);
+  --ui-input-bg: rgba(255, 255, 255, 0.82);
+  --ui-popover-bg: rgba(255, 255, 255, 0.96);
+  --ui-soft-border: rgba(15, 23, 42, 0.08);
+  --ui-muted-border: rgba(15, 23, 42, 0.12);
+  --ui-hairline-border: rgba(15, 23, 42, 0.06);
+  --ui-dashed-border: rgba(15, 23, 42, 0.14);
+  --ui-shimmer: rgba(15, 23, 42, 0.09);
 
   /* Semantic Colors */
   --color-success: #16a34a; /* green-600 */
@@ -53,6 +75,7 @@
   --color-info: #3b82f6; /* blue-500 */
   --color-error: #dc2626; /* red-600 */
   --color-danger: #dc2626; /* red-600 */
+  --color-danger-rgb: 220, 38, 38;
   --color-danger-dark: #b91c1c; /* red-700 */
 
   /* Spacing */

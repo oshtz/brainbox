@@ -40,8 +40,8 @@
   align-items: center;
   padding: 0.35rem 0.75rem;
   border-radius: 999px;
-  border: 1px solid var(--color-border);
-  background: var(--color-surface);
+  border: 1px solid transparent;
+  background: var(--ui-control-bg);
   font-size: 0.85rem;
   font-weight: 600;
   color: var(--color-text-secondary);
@@ -58,8 +58,8 @@
   padding: 2rem 1.5rem;
   text-align: center;
   border-radius: 12px;
-  border: 1px dashed var(--color-border);
-  background: var(--color-elevated);
+  border: 1px dashed var(--ui-dashed-border);
+  background: var(--ui-panel-bg);
 }
 
 .emptyState p {
@@ -101,13 +101,14 @@
   gap: 1rem;
   padding: 1rem 1.25rem;
   border-radius: 12px;
-  border: 1px solid var(--color-border);
-  background: var(--color-surface);
+  border: 1px solid transparent;
+  background: var(--ui-control-bg);
   transition: border-color 0.2s ease;
 }
 
 .vaultItem:hover {
-  border-color: var(--color-accent);
+  border-color: rgba(var(--color-primary-rgb), 0.34);
+  background: var(--ui-control-hover-bg);
 }
 
 .vaultInfo {
@@ -143,8 +144,8 @@
 .lockButton {
   padding: 0.5rem 1rem;
   border-radius: 999px;
-  border: 1px solid var(--color-border);
-  background: var(--color-surface);
+  border: 1px solid transparent;
+  background: var(--ui-control-bg);
   color: var(--color-text-primary);
   cursor: pointer;
   font-weight: 600;
@@ -193,8 +194,8 @@
   gap: 0.5rem;
   padding: 0.5rem 0.85rem;
   border-radius: 999px;
-  border: 1px solid var(--color-border);
-  background: var(--color-surface);
+  border: 1px solid transparent;
+  background: var(--ui-control-bg);
   font-size: 0.9rem;
   color: var(--color-text-secondary);
 }
@@ -216,8 +217,8 @@
   gap: 1.5rem;
   padding: 1rem 1.25rem;
   border-radius: 12px;
-  border: 1px solid var(--color-border);
-  background: var(--color-surface);
+  border: 1px solid transparent;
+  background: var(--ui-control-bg);
 }
 
 .settingInfo {
@@ -240,8 +241,8 @@
 .select {
   padding: 0.6rem 1rem;
   border-radius: 10px;
-  border: 1px solid var(--color-border);
-  background: var(--color-elevated);
+  border: 1px solid var(--ui-muted-border);
+  background: var(--ui-input-bg);
   color: var(--color-text-primary);
   font-size: 0.95rem;
   cursor: pointer;
@@ -259,8 +260,8 @@
   gap: 0.75rem;
   padding: 1rem 1.25rem;
   border-radius: 12px;
-  border: 1px solid var(--color-border);
-  background: var(--color-elevated);
+  border: 1px solid transparent;
+  background: var(--ui-control-bg);
 }
 
 .infoIcon {

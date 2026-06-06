@@ -10,10 +10,10 @@
   flex: 1;
   display: flex;
   flex-direction: column;
-  max-width: 900px;
+  max-width: var(--page-content-max-width, 1040px);
   width: 100%;
-  margin: 0 auto;
-  padding: var(--space-md);
+  margin: 0;
+  padding: 0;
   min-height: 0;
 }
 
@@ -23,7 +23,7 @@
   align-items: center;
   justify-content: space-between;
   padding: var(--space-sm) 0;
-  border-bottom: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--ui-hairline-border);
   margin-bottom: var(--space-md);
   flex-shrink: 0;
 }
@@ -74,8 +74,8 @@
   align-items: center;
   padding: 2px 8px;
   border-radius: 100px;
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
+  background: var(--ui-control-bg);
+  border: 1px solid transparent;
   font-size: var(--font-size-2xs);
   color: var(--color-text-secondary);
   font-weight: var(--font-weight-medium);
@@ -90,8 +90,8 @@
   width: 36px;
   height: 36px;
   border-radius: var(--border-radius-md);
-  border: 1px solid var(--color-border);
-  background: var(--color-surface);
+  border: 1px solid transparent;
+  background: var(--ui-control-bg);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -103,7 +103,7 @@
 .iconButton:hover {
   background: var(--color-surface-hover);
   color: var(--color-text-primary);
-  border-color: var(--color-border);
+  border-color: transparent;
 }
 
 .iconSmall {
@@ -178,8 +178,8 @@
   gap: var(--space-xs);
   padding: var(--space-sm) var(--space-md);
   border-radius: 100px;
-  border: 1px solid var(--color-border);
-  background: var(--color-surface);
+  border: 1px solid transparent;
+  background: var(--ui-control-bg);
   font-size: var(--font-size-sm);
   color: var(--color-text-primary);
   cursor: pointer;
@@ -279,8 +279,8 @@
 }
 
 .assistantBubble {
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
+  background: var(--ui-control-bg);
+  border: 1px solid transparent;
   color: var(--color-text-primary);
   border-bottom-left-radius: var(--border-radius-sm);
 }
@@ -348,8 +348,8 @@
 .markdown pre {
   margin: var(--space-sm) 0;
   padding: var(--space-sm);
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
+  background: var(--ui-control-bg);
+  border: 1px solid var(--ui-muted-border);
   border-radius: var(--border-radius-md);
   overflow-x: auto;
   font-family: var(--font-family-mono, monospace);
@@ -363,8 +363,8 @@
 
 .inlineCode {
   padding: 2px 6px;
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
+  background: var(--ui-control-bg);
+  border: 1px solid var(--ui-muted-border);
   border-radius: var(--border-radius-sm);
   font-family: var(--font-family-mono, monospace);
   font-size: 0.85em;
@@ -404,12 +404,12 @@
 .markdown th,
 .markdown td {
   padding: var(--space-xs) var(--space-sm);
-  border: 1px solid var(--color-border);
+  border: 1px solid var(--ui-muted-border);
   text-align: left;
 }
 
 .markdown th {
-  background: var(--color-surface);
+  background: var(--ui-control-bg);
   font-weight: var(--font-weight-semibold);
 }
 
@@ -532,9 +532,9 @@
 .actionsPanel {
   margin-top: var(--space-sm);
   padding: var(--space-sm);
-  background: var(--color-surface);
+  background: var(--ui-control-bg);
   border-radius: var(--border-radius-md);
-  border: 1px solid var(--color-border);
+  border: 1px solid transparent;
 }
 
 .actionsPanelHeader {
@@ -569,7 +569,7 @@
   gap: var(--space-sm);
   margin-top: var(--space-sm);
   padding-top: var(--space-sm);
-  border-top: 1px solid var(--color-border);
+  border-top: 1px solid var(--ui-soft-border);
 }
 
 .statusApplying {
@@ -638,7 +638,7 @@
 .inputArea {
   flex-shrink: 0;
   padding-top: var(--space-md);
-  border-top: 1px solid var(--color-border);
+  border-top: 1px solid var(--ui-hairline-border);
 }
 
 .inputWrapper {
@@ -646,8 +646,8 @@
   align-items: flex-end;
   gap: var(--space-sm);
   padding: var(--space-sm);
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
+  background: var(--ui-control-bg);
+  border: 1px solid var(--ui-muted-border);
   border-radius: var(--border-radius-lg);
   transition: all var(--transition-duration) var(--transition-timing);
 }
@@ -721,8 +721,8 @@
 .inputHint kbd {
   padding: 2px 6px;
   border-radius: 4px;
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
+  background: var(--ui-control-bg);
+  border: 1px solid var(--ui-muted-border);
   font-family: var(--font-family-body);
   font-size: var(--font-size-2xs);
 }
@@ -737,8 +737,8 @@
 .threadsSidebar {
   width: 260px;
   min-width: 260px;
-  background: var(--color-surface);
-  border-right: 1px solid var(--color-border);
+  background: var(--ui-panel-bg);
+  border-right: 1px solid var(--ui-hairline-border);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -757,7 +757,7 @@
   align-items: center;
   justify-content: space-between;
   padding: var(--space-sm) var(--space-md);
-  border-bottom: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--ui-hairline-border);
   flex-shrink: 0;
 }
 
@@ -780,8 +780,8 @@
   width: 28px;
   height: 28px;
   border-radius: var(--border-radius-sm);
-  border: 1px solid var(--color-border);
-  background: var(--color-surface);
+  border: 1px solid transparent;
+  background: var(--ui-control-bg);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -819,7 +819,7 @@
 
 .threadItemActive {
   background: var(--color-primary-subtle);
-  border: 1px solid var(--color-primary);
+  border: 1px solid transparent;
 }
 
 .threadItemActive:hover {
@@ -870,7 +870,7 @@
 }
 
 .threadActionBtn:hover {
-  background: var(--color-surface);
+  background: var(--ui-control-hover-bg);
   color: var(--color-text-primary);
 }
 
@@ -884,7 +884,7 @@
   padding: var(--space-2xs) var(--space-xs);
   border: 1px solid var(--color-primary);
   border-radius: var(--border-radius-sm);
-  background: var(--color-surface);
+  background: var(--ui-control-bg);
   font-size: var(--font-size-sm);
   color: var(--color-text-primary);
   outline: none;
@@ -923,8 +923,8 @@
   width: 32px;
   height: 32px;
   border-radius: var(--border-radius-md);
-  border: 1px solid var(--color-border);
-  background: var(--color-surface);
+  border: 1px solid transparent;
+  background: var(--ui-control-bg);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -959,7 +959,7 @@
 /* Responsive */
 @media (max-width: 768px) {
   .chatWrapper {
-    padding: var(--space-sm);
+    padding: 0;
   }
 
   .header {

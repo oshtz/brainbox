@@ -9,8 +9,6 @@ import ReactMarkdown from 'react-markdown';
 import {
   XMarkIcon,
   PaperAirplaneIcon,
-  SparklesIcon,
-  WrenchScrewdriverIcon,
   CheckCircleIcon,
   ExclamationCircleIcon,
   ChatBubbleLeftRightIcon,
@@ -92,6 +90,9 @@ const COMPACT_TRIGGER_MESSAGES = 18;
 const COMPACT_MIN_UNSUMMARIZED = 6;
 
 const generateId = () => `msg_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+
+const formatMessageTime = (date: Date) =>
+  date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
 const generateThreadTitle = (messages: ChatMessage[]) => {
   const firstUserMessage = messages.find((m) => m.role === 'user');
@@ -564,19 +565,22 @@ const BrainyChat: React.FC<Props> = ({ vaults, currentVaultId, onClose, onDataCh
     const statusClass = msg.toolStatus || 'running';
     return (
       <div className={`${styles.toolCall} ${styles[statusClass]}`}>
-        {msg.toolStatus === 'running' && <div className={styles.spinner} />}
-        {msg.toolStatus === 'success' && (
-          <CheckCircleIcon className={styles.toolIcon} />
-        )}
-        {msg.toolStatus === 'error' && (
-          <ExclamationCircleIcon className={styles.toolIcon} />
-        )}
-        <WrenchScrewdriverIcon className={styles.toolIcon} />
-        <span className={styles.toolName}>{msg.toolCall?.name}</span>
-        <span className={styles.toolStatus}>
-          {msg.toolStatus === 'running' && 'Running...'}
-          {msg.toolStatus === 'success' && 'Done'}
-          {msg.toolStatus === 'error' && 'Failed'}
+        <span className={styles.toolStatusIcon}>
+          {msg.toolStatus === 'running' && <span className={styles.spinner} />}
+          {msg.toolStatus === 'success' && (
+            <CheckCircleIcon className={styles.toolIcon} />
+          )}
+          {msg.toolStatus === 'error' && (
+            <ExclamationCircleIcon className={styles.toolIcon} />
+          )}
+        </span>
+        <span className={styles.toolCopy}>
+          <span className={styles.toolName}>{msg.toolCall?.name}</span>
+          <span className={styles.toolStatus}>
+            {msg.toolStatus === 'running' && 'Running'}
+            {msg.toolStatus === 'success' && 'Done'}
+            {msg.toolStatus === 'error' && 'Failed'}
+          </span>
         </span>
       </div>
     );
@@ -611,12 +615,17 @@ const BrainyChat: React.FC<Props> = ({ vaults, currentVaultId, onClose, onDataCh
   return (
     <div className={styles.container}>
       <div className={styles.header}>
-        <div className={styles.title}>
-          <SparklesIcon style={{ width: 20, height: 20 }} />
-          brainy
-          <span className={`${styles.statusBadge} ${!isConfigured ? styles.offline : ''}`}>
-            {isConfigured ? 'Ready' : 'Not Configured'}
-          </span>
+        <div className={styles.headerMain}>
+          <span
+            className={`${styles.presenceDot} ${!isConfigured ? styles.offline : ''}`}
+            aria-hidden="true"
+          />
+          <div className={styles.headerText}>
+            <div className={styles.title}>brainy</div>
+            <div className={styles.subtitle}>
+              {isConfigured ? 'Ready in this workspace' : 'AI provider needed'}
+            </div>
+          </div>
         </div>
         <div className={styles.headerActions}>
           {onOpenSettings && (
@@ -638,6 +647,7 @@ const BrainyChat: React.FC<Props> = ({ vaults, currentVaultId, onClose, onDataCh
       <div className={styles.threadBar}>
         <div className={styles.threadSelectWrap}>
           <ChatBubbleLeftRightIcon className={styles.threadIcon} />
+          <span className={styles.threadLabel}>Chat</span>
           <select
             className={styles.threadSelect}
             value={activeThreadId || ''}
@@ -656,59 +666,64 @@ const BrainyChat: React.FC<Props> = ({ vaults, currentVaultId, onClose, onDataCh
             )}
           </select>
         </div>
-        <button
-          className={styles.threadButton}
-          onClick={createNewThread}
-          title="New chat"
-          aria-label="New chat"
-        >
-          <PlusIcon className={styles.icon} />
-        </button>
-        <button
-          className={styles.threadButton}
-          onClick={() => activeThread && compactThread(activeThread.id)}
-          title={isCompacting ? 'Compacting...' : 'Compact chat'}
-          aria-label="Compact chat"
-          disabled={!activeThread || isProcessing || isCompacting || !isConfigured}
-        >
-          <ArrowsPointingInIcon className={styles.icon} />
-        </button>
-        <button
-          className={styles.threadButton}
-          onClick={renameActiveThread}
-          title="Rename chat"
-          aria-label="Rename chat"
-          disabled={!activeThread || isProcessing}
-        >
-          <PencilSquareIcon className={styles.icon} />
-        </button>
-        <button
-          className={styles.threadButton}
-          onClick={deleteActiveThread}
-          title="Delete chat"
-          aria-label="Delete chat"
-          disabled={!activeThread || isProcessing}
-        >
-          <TrashIcon className={styles.icon} />
-        </button>
+        <div className={styles.threadActions}>
+          <button
+            className={styles.threadButton}
+            onClick={createNewThread}
+            title="New chat"
+            aria-label="New chat"
+          >
+            <PlusIcon className={styles.icon} />
+          </button>
+          <button
+            className={styles.threadButton}
+            onClick={() => activeThread && compactThread(activeThread.id)}
+            title={isCompacting ? 'Compacting...' : 'Compact chat'}
+            aria-label="Compact chat"
+            disabled={!activeThread || isProcessing || isCompacting || !isConfigured}
+          >
+            <ArrowsPointingInIcon className={styles.icon} />
+          </button>
+          <button
+            className={styles.threadButton}
+            onClick={renameActiveThread}
+            title="Rename chat"
+            aria-label="Rename chat"
+            disabled={!activeThread || isProcessing}
+          >
+            <PencilSquareIcon className={styles.icon} />
+          </button>
+          <button
+            className={styles.threadButton}
+            onClick={deleteActiveThread}
+            title="Delete chat"
+            aria-label="Delete chat"
+            disabled={!activeThread || isProcessing}
+          >
+            <TrashIcon className={styles.icon} />
+          </button>
+        </div>
       </div>
 
       <div className={styles.messages}>
         {messages.length === 0 ? (
           <div className={styles.emptyState}>
-            <SparklesIcon className={styles.emptyStateIcon} />
-            <div className={styles.emptyStateTitle}>Chat with brainy</div>
+            <div className={styles.emptyKicker}>brainy</div>
+            <div className={styles.emptyStateTitle}>What should we work on?</div>
             <div className={styles.emptyStateHint}>
-              Ask me to create notes, search your vaults, fetch web content, or help organize your items.
+              Search, summarize, create, or organize content across your vaults.
             </div>
           </div>
         ) : (
           messages.map((msg) => (
             <div key={msg.id} className={`${styles.message} ${styles[msg.role]}`}>
               {msg.role !== 'tool' && (
-                <span className={styles.messageLabel}>
-                  {msg.role === 'user' ? 'You' : 'brainy'}
-                </span>
+                <div className={styles.messageHeader}>
+                  <span className={styles.messageLabel}>
+                    {msg.role === 'user' ? 'You' : 'brainy'}
+                  </span>
+                  <span className={styles.messageTime}>{formatMessageTime(msg.timestamp)}</span>
+                </div>
               )}
               {msg.role === 'tool' ? (
                 renderToolCall(msg)
@@ -720,7 +735,9 @@ const BrainyChat: React.FC<Props> = ({ vaults, currentVaultId, onClose, onDataCh
         )}
         {isProcessing && messages[messages.length - 1]?.role !== 'tool' && (
           <div className={`${styles.message} ${styles.assistant}`}>
-            <span className={styles.messageLabel}>brainy</span>
+            <div className={styles.messageHeader}>
+              <span className={styles.messageLabel}>brainy</span>
+            </div>
             <div className={`${styles.messageBubble} ${styles.typing}`}>
               <span className={styles.typingDot} />
               <span className={styles.typingDot} />
@@ -746,24 +763,26 @@ const BrainyChat: React.FC<Props> = ({ vaults, currentVaultId, onClose, onDataCh
       )}
 
       <div className={styles.inputArea}>
-        <textarea
-          ref={inputRef}
-          className={styles.input}
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder={isConfigured ? 'Ask brainy something...' : 'Configure AI provider in Settings first'}
-          disabled={!isConfigured || isProcessing}
-          rows={1}
-        />
-        <button
-          className={styles.sendButton}
-          onClick={handleSend}
-          disabled={!input.trim() || isProcessing || !isConfigured}
-          aria-label="Send"
-        >
-          <PaperAirplaneIcon className={styles.sendIcon} />
-        </button>
+        <div className={styles.composer}>
+          <textarea
+            ref={inputRef}
+            className={styles.input}
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder={isConfigured ? 'Ask brainy...' : 'Configure AI provider in Settings first'}
+            disabled={!isConfigured || isProcessing}
+            rows={1}
+          />
+          <button
+            className={styles.sendButton}
+            onClick={handleSend}
+            disabled={!input.trim() || isProcessing || !isConfigured}
+            aria-label="Send"
+          >
+            <PaperAirplaneIcon className={styles.sendIcon} />
+          </button>
+        </div>
       </div>
     </div>
   );

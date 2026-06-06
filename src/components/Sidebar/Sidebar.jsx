@@ -1,58 +1,117 @@
-import React from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 import {
-  ChevronLeftIcon,
-  ChevronRightIcon,
   FolderIcon,
   MagnifyingGlassIcon,
   BookOpenIcon,
   Cog6ToothIcon,
   SunIcon,
   MoonIcon,
-  SparklesIcon
+  SparklesIcon,
+  PlusIcon,
+  StopIcon as StopIconOutline
 } from '@heroicons/react/24/outline';
+import { MinusIcon, StopIcon, XMarkIcon } from '@heroicons/react/24/solid';
 import styles from './Sidebar.module.css';
 import { useTheme } from '../../contexts/ThemeContext';
-import logoLockup from '../../assets/images/logomark.png';
-import logoLockupDark from '../../assets/images/logomark-dark.png';
-import logoIconB from '../../assets/images/icon-b.png';
 
 const Sidebar = ({
-  onCaptureClick,
+  title = 'Knowledge',
   onExploreClick,
   onKnowledgeClick,
   onSettingsClick,
   onBrainyClick,
+  onCreateVault,
+  onCreateNote,
+  showVaultButton = false,
+  showNoteButton = true,
   currentView = 'vaults',
   isBrainyOpen = false,
   brainyMode = 'sidebar'
 }) => {
   const { theme, toggleTheme } = useTheme();
-  const [isExpanded, setIsExpanded] = React.useState(false);
-
-  // Load persisted state on mount
-  React.useEffect(() => {
+  const appWindow = useMemo(() => {
     try {
-      const stored = localStorage.getItem('sidebarExpanded');
-      if (stored !== null) {
-        setIsExpanded(stored === 'true');
-      }
-    } catch (_) {
-      // ignore storage errors
+      return getCurrentWindow();
+    } catch {
+      return null;
     }
   }, []);
-
-  // Persist state on change
-  React.useEffect(() => {
+  const [maximized, setMaximized] = useState(false);
+  const isMac = useMemo(() => {
     try {
-      localStorage.setItem('sidebarExpanded', String(isExpanded));
-    } catch (_) {
-      // ignore storage errors
+      return typeof navigator !== 'undefined' && /Mac/i.test(navigator.platform || '');
+    } catch {
+      return false;
     }
-  }, [isExpanded]);
-
-  const toggleExpanded = () => setIsExpanded(v => !v);
+  }, []);
   const isBrainyFull = brainyMode === 'full';
   const brainyActive = isBrainyFull ? currentView === 'connections' : isBrainyOpen;
+
+  useEffect(() => {
+    if (!appWindow) {
+      return;
+    }
+
+    if (isMac) {
+      appWindow.setTitleBarStyle('overlay').catch(() => {});
+      try { document.documentElement.classList.add('overlay-titlebar'); } catch {}
+    } else {
+      appWindow.setDecorations(false).catch(() => {});
+      try { document.documentElement.classList.remove('overlay-titlebar'); } catch {}
+    }
+
+    let unlisten;
+    appWindow.isMaximized().then(setMaximized).catch(() => {});
+    appWindow.onResized(async () => {
+      setMaximized(await appWindow.isMaximized());
+    }).then((u) => (unlisten = u)).catch(() => {});
+
+    return () => {
+      if (unlisten) unlisten();
+      if (isMac) {
+        try { document.documentElement.classList.remove('overlay-titlebar'); } catch {}
+      }
+    };
+  }, [appWindow, isMac]);
+
+  const handleMinimize = useCallback(async (event) => {
+    event?.stopPropagation();
+    if (!appWindow) return;
+    try {
+      await appWindow.hide();
+    } catch (err) {
+      console.error('Minimize failed', err);
+    }
+  }, [appWindow]);
+
+  const handleMaximize = useCallback(async (event) => {
+    event?.stopPropagation();
+    if (!appWindow) return;
+    try {
+      await appWindow.toggleMaximize();
+      setMaximized(await appWindow.isMaximized());
+    } catch (err) {
+      console.error('Toggle maximize failed', err);
+    }
+  }, [appWindow]);
+
+  const handleClose = useCallback(async (event) => {
+    event?.stopPropagation();
+    if (!appWindow) return;
+    try {
+      await appWindow.hide();
+    } catch (err) {
+      console.error('Close failed', err);
+    }
+  }, [appWindow]);
+
+  const handleDoubleClick = useCallback(() => {
+    if (!isMac) {
+      handleMaximize();
+    }
+  }, [handleMaximize, isMac]);
+
   const handleBrainyNav = () => {
     if (isBrainyFull) {
       onKnowledgeClick && onKnowledgeClick('connections');
@@ -60,93 +119,134 @@ const Sidebar = ({
     }
     onBrainyClick && onBrainyClick();
   };
+
+  const navItems = [
+    {
+      id: 'vaults',
+      label: 'Knowledge',
+      shortLabel: 'Vaults',
+      icon: FolderIcon,
+      active: currentView === 'vaults',
+      onClick: () => onKnowledgeClick && onKnowledgeClick('vaults'),
+      testId: 'nav-vaults',
+      ariaLabel: 'View knowledge vaults',
+    },
+    {
+      id: 'search',
+      label: 'Explore',
+      shortLabel: 'Search',
+      icon: MagnifyingGlassIcon,
+      active: currentView === 'search',
+      onClick: onExploreClick,
+      testId: 'nav-search',
+      ariaLabel: 'Explore and search',
+    },
+    {
+      id: 'library',
+      label: 'Library',
+      shortLabel: 'Library',
+      icon: BookOpenIcon,
+      active: currentView === 'library',
+      onClick: () => onKnowledgeClick && onKnowledgeClick('library'),
+      ariaLabel: 'Open library',
+    },
+    {
+      id: 'brainy',
+      label: 'brainy',
+      shortLabel: 'brainy',
+      icon: SparklesIcon,
+      active: brainyActive,
+      onClick: handleBrainyNav,
+      testId: 'nav-brainy',
+      ariaLabel: isBrainyFull ? 'Open brainy' : 'Open brainy AI assistant',
+    },
+    {
+      id: 'settings',
+      label: 'Settings',
+      shortLabel: 'Settings',
+      icon: Cog6ToothIcon,
+      active: currentView === 'settings',
+      onClick: onSettingsClick,
+      testId: 'nav-settings',
+      ariaLabel: 'Open settings',
+    },
+  ];
   
   return (
-    <aside className={`${styles.sidebar} ${isExpanded ? styles.expanded : ''}`} aria-expanded={isExpanded} data-testid="sidebar">
-      <button
-        className={styles.toggleButton}
-        onClick={toggleExpanded}
-        aria-label={isExpanded ? 'Collapse sidebar' : 'Expand sidebar'}
-        title={isExpanded ? 'Collapse' : 'Expand'}
-      >
-        {isExpanded ? <ChevronLeftIcon className={styles.toggleIcon} /> : <ChevronRightIcon className={styles.toggleIcon} />}
-      </button>
-      <div className={styles.logo}>
-        {isExpanded ? (
-          <img
-            src={theme === 'dark' ? logoLockupDark : logoLockup}
-            className={styles.logoImg}
-            alt="Brainbox"
-          />
-        ) : (
-          <img src={logoIconB} className={styles.logoImgSmall} alt="Brainbox" />
-        )}
+    <header
+      className={styles.navigation}
+      data-testid="app-navigation"
+      data-tauri-drag-region
+      onDoubleClick={handleDoubleClick}
+      aria-label="Window title bar"
+    >
+      <div className={styles.brandArea} data-tauri-drag-region>
+        <span className={styles.brand} data-tauri-drag-region>brainbox</span>
+        <span className={styles.viewTitle} data-tauri-drag-region>{title}</span>
       </div>
-      <nav className={styles.nav}>
-        <ul>
-          <li className={currentView === 'vaults' ? styles.active : ''}>
-            <button
-              className={styles.navButton}
-              onClick={() => onKnowledgeClick && onKnowledgeClick('vaults')}
-              aria-label="View knowledge vaults"
-              data-testid="nav-vaults"
-            >
-              <FolderIcon className={styles.navIcon} aria-hidden="true" />
-              <span className={styles.label}>Knowledge</span>
-            </button>
-          </li>
-          <li className={currentView === 'search' ? styles.active : ''}>
-            <button
-              className={styles.navButton}
-              onClick={onExploreClick}
-              aria-label="Explore and search"
-              data-testid="nav-search"
-            >
-              <MagnifyingGlassIcon className={styles.navIcon} aria-hidden="true" />
-              <span className={styles.label}>Explore</span>
-            </button>
-          </li>
-          <li className={currentView === 'library' ? styles.active : ''}>
-            <button 
-              className={styles.navButton}
-              onClick={() => onKnowledgeClick && onKnowledgeClick('library')}
-              aria-label="Open library"
-            >
-              <BookOpenIcon className={styles.navIcon} aria-hidden="true" />
-              <span className={styles.label}>Library</span>
-            </button>
-          </li>
-          <li className={brainyActive ? styles.active : ''}>
-            <button
-              className={styles.navButton}
-              onClick={handleBrainyNav}
-              aria-label={isBrainyFull ? 'Open brainy' : 'Open brainy AI assistant'}
-              data-testid="nav-brainy"
-            >
-              <SparklesIcon className={styles.navIcon} aria-hidden="true" />
-              <span className={styles.label}>brainy</span>
-            </button>
-          </li>
-          <li className={currentView === 'settings' ? styles.active : ''}>
-            <button
-              className={styles.navButton}
-              onClick={onSettingsClick}
-              aria-label="Open settings"
-              data-testid="nav-settings"
-            >
-              <Cog6ToothIcon className={styles.navIcon} aria-hidden="true" />
-              <span className={styles.label}>Settings</span>
-            </button>
-          </li>
+
+      <nav className={styles.nav} aria-label="Primary navigation">
+        <ul className={styles.navList}>
+          {navItems.map(({ id, label, shortLabel, icon: Icon, active, onClick, testId, ariaLabel }) => (
+            <li key={id} className={active ? styles.active : ''}>
+              <button
+                type="button"
+                className={styles.navButton}
+                onClick={onClick}
+                aria-label={ariaLabel}
+                aria-current={active ? 'page' : undefined}
+                data-testid={testId}
+                data-nodrag
+                data-tauri-drag-region="false"
+              >
+                <Icon className={styles.navIcon} aria-hidden="true" />
+                <span className={styles.label}>
+                  <span className={styles.fullLabel}>{label}</span>
+                  <span className={styles.shortLabel}>{shortLabel}</span>
+                </span>
+              </button>
+            </li>
+          ))}
         </ul>
       </nav>
-      <div className={styles.themeToggle}>
+
+      <div className={styles.actions} data-tauri-drag-region="false" data-nodrag>
+        {showNoteButton && (
+          <button
+            type="button"
+            className={styles.primaryButton}
+            onClick={onCreateNote}
+            data-testid="floating-capture-button"
+            data-nodrag
+            data-tauri-drag-region="false"
+          >
+            <PlusIcon className={styles.actionIcon} aria-hidden="true" />
+            <span>New note</span>
+          </button>
+        )}
+
+        {showVaultButton && (
+          <button
+            type="button"
+            className={styles.secondaryButton}
+            onClick={onCreateVault}
+            data-testid="create-vault-button"
+            data-nodrag
+            data-tauri-drag-region="false"
+          >
+            <PlusIcon className={styles.actionIcon} aria-hidden="true" />
+            <span>New vault</span>
+          </button>
+        )}
+
         <button
           className={styles.iconButton}
           onClick={toggleTheme}
           aria-label={`Switch to ${theme === 'light' ? 'dark' : 'light'} theme`}
           title={theme === 'light' ? 'Switch to dark' : 'Switch to light'}
           data-testid="theme-toggle"
+          data-nodrag
+          data-tauri-drag-region="false"
         >
           {theme === 'light' ? (
             <MoonIcon className={styles.themeIcon} aria-hidden="true" />
@@ -154,8 +254,53 @@ const Sidebar = ({
             <SunIcon className={styles.themeIcon} aria-hidden="true" />
           )}
         </button>
+
+        {!isMac && (
+          <div className={styles.windowControls} data-tauri-drag-region="false" data-nodrag>
+            <button
+              type="button"
+              className={styles.windowButton}
+              aria-label="Minimize"
+              title="Minimize"
+              onClick={handleMinimize}
+              onDoubleClick={(event) => event.stopPropagation()}
+              data-nodrag
+              data-tauri-drag-region="false"
+            >
+              <MinusIcon className={styles.windowIcon} aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              className={styles.windowButton}
+              aria-label={maximized ? 'Restore' : 'Maximize'}
+              title={maximized ? 'Restore' : 'Maximize'}
+              onClick={handleMaximize}
+              onDoubleClick={(event) => event.stopPropagation()}
+              data-nodrag
+              data-tauri-drag-region="false"
+            >
+              {maximized ? (
+                <StopIconOutline className={styles.windowIcon} aria-hidden="true" />
+              ) : (
+                <StopIcon className={styles.windowIcon} aria-hidden="true" />
+              )}
+            </button>
+            <button
+              type="button"
+              className={`${styles.windowButton} ${styles.closeButton}`}
+              aria-label="Close"
+              title="Close"
+              onClick={handleClose}
+              onDoubleClick={(event) => event.stopPropagation()}
+              data-nodrag
+              data-tauri-drag-region="false"
+            >
+              <XMarkIcon className={styles.windowIcon} aria-hidden="true" />
+            </button>
+          </div>
+        )}
       </div>
-    </aside>
+    </header>
   );
 };
 

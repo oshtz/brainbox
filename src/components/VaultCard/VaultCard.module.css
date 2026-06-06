@@ -1,142 +1,162 @@
 .card {
   position: relative;
-  height: 168px;
-  border-radius: var(--border-radius-lg);
-  background-size: cover;
-  background-position: center;
-  overflow: hidden; /* Clip children and effects to rounded corners */
-  /* Ensure proper compositing so backdrop-filter and children don't bleed past corners */
-  -webkit-mask-image: -webkit-radial-gradient(white, black);
-  isolation: isolate;
-  transition: transform var(--transition-duration) var(--transition-timing),
+  min-height: 92px;
+  border-radius: var(--border-radius-md);
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr) 32px;
+  gap: var(--space-sm);
+  align-items: center;
+  padding: var(--space-sm);
+  overflow: visible;
+  transition: border-color var(--transition-duration) var(--transition-timing),
+              background-color var(--transition-duration) var(--transition-timing),
               box-shadow var(--transition-duration) var(--transition-timing);
   cursor: pointer;
-  border: 1px solid var(--color-border);
-}
-
-/* Create a shadow layer that gets clipped by the parent's radius */
-/* Use a simpler shadow approach to reduce GPU load */
-.card::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  /* Simplified shadow for better performance */
-  box-shadow: inset 0 0 0 1px var(--color-border);
-  pointer-events: none;
-  z-index: 0;
-  transition: opacity var(--transition-duration) var(--transition-timing);
+  border: 1px solid transparent;
+  background: var(--ui-panel-bg);
 }
 
 .card:hover {
-  /* Use opacity instead of transform for better performance */
-  opacity: 0.95;
+  background: rgba(18, 24, 38, 0.56);
+  border-color: rgba(var(--color-primary-rgb), 0.18);
+  box-shadow: var(--shadow-sm);
 }
 
-.card:hover::before {
-  opacity: 0.8;
+.card:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+.thumbnail {
+  width: 56px;
+  height: 56px;
+  border-radius: var(--border-radius-md);
+  background-size: cover;
+  background-position: center;
+  border: 1px solid transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.initial {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(15, 23, 42, 0.18);
+  color: white;
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.28);
 }
 
 .content {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  padding: var(--space-sm);
-  background: linear-gradient(
-    to bottom,
-    rgba(0, 0, 0, 0) 0%,
-    rgba(0, 0, 0, 0.22) 50%,
-    rgba(0, 0, 0, 0.55) 100%
-  );
-  position: relative;
-  z-index: 1; /* Keep content above the shadow layer */
+  min-width: 0;
+  display: grid;
+  gap: 4px;
 }
 
-.title {
-  margin: 0 0 var(--space-sm) 0;
-  color: white;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
-  font-weight: 500;
-  font-size: 1.05rem;
-  font-family: var(--font-family-title);
-}
-
-.body {
-  color: rgba(255, 255, 255, 0.9);
-  font-size: 0.82rem;
-  line-height: 1.35;
-  font-family: var(--font-family-body);
-}
-
-.footer {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  padding: 7px var(--space-sm);
-  background-color: rgba(255, 255, 255, 0.12);
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
+.titleRow {
+  min-width: 0;
   display: flex;
   align-items: center;
-  justify-content: space-between; /* label left, menu right */
-  z-index: 1; /* Keep footer above the shadow layer */
-  /* Match the parent's curved bottom corners to avoid visual square edges */
-  border-bottom-left-radius: inherit;
-  border-bottom-right-radius: inherit;
-  overflow: visible; /* allow dropdown to render above footer */
 }
 
 .label {
-  color: white;
-  font-size: 1rem; /* match top title size */
-  font-weight: 500;
-  font-family: var(--font-family-title); /* use title font */
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
-  flex: 1; /* take remaining space to the left */
+  color: var(--color-text-primary);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  font-family: var(--font-family-sans);
+  flex: 1;
   min-width: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
+.metaRow {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-2xs);
+  line-height: 1.2;
+  min-width: 0;
+}
+
+.statusDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--color-success);
+  flex: 0 0 auto;
+}
+
+.statusDot.locked {
+  background: var(--color-warning);
+}
+
+.metaDivider {
+  color: var(--color-text-tertiary);
+}
+
+.body {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  line-height: 1.35;
+  font-family: var(--font-family-body);
+}
+
 .priceTag {
   position: absolute;
-  top: var(--space-sm);
-  right: var(--space-sm);
+  top: 6px;
+  left: 6px;
   background-color: white;
   color: var(--color-text-primary);
-  font-size: 0.8rem;
-  padding: var(--space-xs) var(--space-sm);
-  border-radius: 999px;
+  font-size: var(--font-size-2xs);
+  padding: 2px 6px;
+  border-radius: var(--border-radius-sm);
   z-index: 1;
   font-family: var(--font-family-body);
   font-weight: var(--font-weight-medium);
   box-shadow: 0 2px 8px rgba(0,0,0,0.1);
 }
 
-/* Options menu (three dots) */
-.menuWrap { position: relative; z-index: 2; }
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  align-self: stretch;
+  align-items: flex-start;
+}
+
+.menuWrap {
+  position: relative;
+  z-index: 2;
+}
 
 .menuButton {
-  width: 28px;
-  height: 28px;
+  width: 30px;
+  height: 30px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: transparent; /* no button background */
-  color: #fff; /* base color; will blend for contrast */
-  border: 0; /* no border */
-  border-radius: 0;
+  background: transparent;
+  color: var(--color-text-secondary);
+  border: 1px solid transparent;
+  border-radius: var(--border-radius-md);
   box-shadow: none;
   cursor: pointer;
   text-shadow: none;
 }
 
 .menuButton:hover {
-  background: transparent; /* keep backgroundless on hover */
+  background: rgba(255,255,255,0.075);
+  border-color: transparent;
   box-shadow: none;
-  opacity: 0.9;
+  color: var(--color-text-primary);
 }
 
 .menuIcon {
@@ -150,29 +170,15 @@
   border-radius: 6px;
 }
 
-/* Adaptive contrast for the three dots over varying covers */
-@supports (mix-blend-mode: difference) {
-  .menuButton {
-    mix-blend-mode: difference; /* white dots turn dark on light backgrounds */
-  }
-}
-
-/* Fallback when blend-mode unsupported: use subtle shadow */
-@supports not (mix-blend-mode: difference) {
-  .menuButton {
-    text-shadow: 0 1px 2px rgba(0,0,0,0.5);
-  }
-}
-
 .menu {
   position: absolute;
-  bottom: calc(100% + 6px); /* open upwards from footer */
+  top: calc(100% + 6px);
   right: 0;
   min-width: 180px;
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
+  background: var(--ui-popover-bg);
+  border: 1px solid var(--ui-muted-border);
   border-radius: var(--border-radius-md);
-  box-shadow: var(--shadow-md);
+  box-shadow: var(--shadow-lg);
   overflow: hidden;
 }
 

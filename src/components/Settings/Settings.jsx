@@ -49,31 +49,31 @@ function TabButton({ tab, isActive, onClick }) {
       return {
         display: 'flex',
         alignItems: 'center',
-        gap: '0.5rem',
-        padding: '0.6rem 1rem',
-        borderRadius: 8,
+        gap: '0.4rem',
+        padding: '0.45rem 0.7rem',
+        borderRadius: 6,
         border: 'none',
         background: 'var(--color-accent)',
         color: '#fff',
         cursor: 'pointer',
         fontWeight: 600,
-        fontSize: '0.9rem',
+        fontSize: '0.82rem',
         transition: 'all 0.2s ease',
-        boxShadow: '0 2px 8px rgba(99, 102, 241, 0.25)',
+        boxShadow: 'none',
       };
     }
     return {
       display: 'flex',
       alignItems: 'center',
-      gap: '0.5rem',
-      padding: '0.6rem 1rem',
-      borderRadius: 8,
+      gap: '0.4rem',
+      padding: '0.45rem 0.7rem',
+      borderRadius: 6,
       border: 'none',
       background: isHovered ? 'var(--color-surface)' : 'transparent',
       color: isHovered ? 'var(--color-text-primary)' : 'var(--color-text-secondary)',
       cursor: 'pointer',
       fontWeight: 500,
-      fontSize: '0.9rem',
+      fontSize: '0.82rem',
       transition: 'all 0.2s ease',
     };
   };
@@ -169,6 +169,23 @@ function CaptureSettings() {
       setRegMessage('Failed to register protocol. Try running as administrator.');
     }
   };
+
+  const handleBookmarkletDragStart = useCallback((event, bookmarklet) => {
+    event.dataTransfer.setData('text/uri-list', bookmarklet);
+    event.dataTransfer.setData('text/plain', bookmarklet);
+    event.dataTransfer.effectAllowed = 'copy';
+  }, []);
+
+  const handleBookmarkletCopy = useCallback(async (bookmarklet) => {
+    try {
+      await navigator.clipboard.writeText(bookmarklet);
+      setRegStatus('success');
+      setRegMessage('Bookmarklet copied. Paste it into a browser bookmark URL.');
+    } catch (_) {
+      setRegStatus('error');
+      setRegMessage('Could not copy bookmarklet. Drag it to your bookmarks bar instead.');
+    }
+  }, []);
 
   const statusVariant = regStatus === 'success' ? 'accent' : regStatus === 'error' ? 'danger' : 'info';
 
@@ -268,24 +285,26 @@ function CaptureSettings() {
               Drag a button to your bookmarks bar to capture the page you are viewing. The localhost version keeps your current tab in place.
             </p>
             <div style={bookmarkletButtonsStyle}>
-              <a
-                href={BOOKMARKLET_LOCALHOST}
+              <button
+                type="button"
                 style={bookmarkletLinkStyle('primary')}
                 draggable="true"
-                tabIndex={0}
+                onDragStart={(event) => handleBookmarkletDragStart(event, BOOKMARKLET_LOCALHOST)}
+                onClick={() => handleBookmarkletCopy(BOOKMARKLET_LOCALHOST)}
                 aria-label="Drag to bookmarks to install capture bookmarklet using localhost"
               >
                 Capture (Localhost - Recommended)
-              </a>
-              <a
-                href={BOOKMARKLET_PROTOCOL}
+              </button>
+              <button
+                type="button"
                 style={bookmarkletLinkStyle('secondary')}
                 draggable="true"
-                tabIndex={0}
+                onDragStart={(event) => handleBookmarkletDragStart(event, BOOKMARKLET_PROTOCOL)}
+                onClick={() => handleBookmarkletCopy(BOOKMARKLET_PROTOCOL)}
                 aria-label="Drag to bookmarks to install capture bookmarklet using protocol handler"
               >
                 Capture (Protocol)
-              </a>
+              </button>
             </div>
             <p style={bodyTextMutedStyle}>
               Tip: If you cannot drag, right-click the button and choose "Bookmark link". Configure HTTPS-only mode to allow 127.0.0.1 if needed.
@@ -501,11 +520,14 @@ export default Settings;
 const settingsContainerStyle = {
   display: 'flex',
   flexDirection: 'column',
+  width: '100%',
+  maxWidth: 'var(--page-content-max-width, 1040px)',
+  margin: 0,
 };
 
 // Wrapper to handle negative margin for nav - pulls nav flush against header
 const tabNavWrapperStyle = {
-  margin: '0 -24px 0 -24px',
+  margin: 0,
   position: 'sticky',
   top: 0,
   zIndex: 10,
@@ -515,26 +537,26 @@ const tabNavWrapperStyle = {
 const tabNavStyle = {
   display: 'flex',
   flexWrap: 'wrap',
-  justifyContent: 'center',
-  gap: '0.5rem',
-  padding: '0.75rem var(--space-lg)',
-  background: 'var(--color-surface)',
-  borderBottom: '1px solid var(--color-border)',
+  justifyContent: 'flex-start',
+  gap: '0.25rem',
+  padding: '0 0 0.65rem',
+  background: 'var(--ui-main-background)',
+  borderBottom: '1px solid var(--ui-hairline-border)',
 };
 
 // Tab button base style
 const tabButtonStyle = {
   display: 'flex',
   alignItems: 'center',
-  gap: '0.75rem',
-  padding: '0.75rem 1rem',
-  borderRadius: 10,
+  gap: '0.4rem',
+  padding: '0.45rem 0.7rem',
+  borderRadius: 6,
   border: 'none',
   background: 'transparent',
   color: 'var(--color-text-secondary)',
   cursor: 'pointer',
   fontWeight: 500,
-  fontSize: '0.95rem',
+  fontSize: '0.82rem',
   textAlign: 'left',
   transition: 'all 0.2s ease',
   width: '100%',
@@ -546,21 +568,20 @@ const tabButtonActiveStyle = {
   background: 'var(--color-accent)',
   color: '#fff',
   fontWeight: 600,
-  boxShadow: '0 4px 12px rgba(99, 102, 241, 0.25)',
+  boxShadow: 'none',
 };
 
 // Tab content area
 const tabContentStyle = {
   display: 'flex',
   flexDirection: 'column',
-  gap: '1.5rem',
+  gap: '0.85rem',
   minWidth: 0,
-  padding: '24px',
-  maxWidth: 960,
-  margin: '0 auto',
+  padding: '0.85rem 0 24px',
+  maxWidth: 'none',
+  margin: 0,
   width: '100%',
   boxSizing: 'border-box',
-  paddingBottom: '48px',
 };
 
 // Legacy pageStyle kept for compatibility but not used
@@ -580,39 +601,39 @@ const appearanceLayoutStyle = {
 };
 
 const cardStyle = {
-  background: 'var(--color-elevated)',
-  borderRadius: 16,
-  border: '1px solid var(--color-border)',
-  padding: '1.75rem',
-  boxShadow: '0px 18px 40px rgba(15, 23, 42, 0.12)',
+  background: 'var(--ui-panel-bg)',
+  borderRadius: 8,
+  border: '1px solid transparent',
+  padding: '1rem',
+  boxShadow: 'none',
 };
 
 const cardHeaderStyle = {
   display: 'flex',
   alignItems: 'flex-start',
   justifyContent: 'space-between',
-  gap: '1.5rem',
+  gap: '1rem',
   flexWrap: 'wrap',
-  marginBottom: '1.5rem',
+  marginBottom: '1rem',
 };
 
 const cardTitleStyle = {
   margin: 0,
-  fontSize: '1.15rem',
+  fontSize: '1rem',
   fontWeight: 600,
   color: 'var(--color-text-primary)',
 };
 
 const cardDescriptionStyle = {
   margin: '0.35rem 0 0',
-  fontSize: '0.95rem',
+  fontSize: '0.86rem',
   color: 'var(--color-text-secondary)',
   lineHeight: 1.4,
 };
 
 const cardBodyStyle = {
   display: 'grid',
-  gap: '1.5rem',
+  gap: '1rem',
 };
 
 const subtleLabelStyle = {
@@ -632,8 +653,8 @@ const labelStyle = {
 };
 
 const inputStyle = {
-  padding: '0.65rem 0.9rem',
-  borderRadius: 10,
+  padding: '0.5rem 0.7rem',
+  borderRadius: 6,
   border: '1px solid var(--color-border)',
   background: 'var(--color-surface)',
   color: 'var(--color-text-primary)',
@@ -642,16 +663,16 @@ const inputStyle = {
 };
 
 const buttonStyle = {
-  padding: '0.6rem 1.1rem',
-  borderRadius: 999,
-  border: '1px solid var(--color-border)',
-  background: 'var(--color-surface)',
+  padding: '0.45rem 0.75rem',
+  borderRadius: 6,
+  border: '1px solid transparent',
+  background: 'var(--ui-control-bg)',
   color: 'var(--color-text-primary)',
   cursor: 'pointer',
   fontWeight: 600,
-  fontSize: '0.95rem',
-  transition: 'transform 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease',
-  boxShadow: '0 10px 20px rgba(15, 23, 42, 0.08)',
+  fontSize: '0.85rem',
+  transition: 'background-color 0.2s ease, border-color 0.2s ease, opacity 0.2s ease',
+  boxShadow: 'none',
 };
 
 const colorPickerStyle = {
@@ -660,7 +681,7 @@ const colorPickerStyle = {
   padding: 0,
   border: '1px solid var(--color-border)',
   background: 'transparent',
-  borderRadius: 10,
+  borderRadius: 6,
   cursor: 'pointer',
 };
 
@@ -669,9 +690,9 @@ const accentBadgeStyle = {
   alignItems: 'center',
   gap: '0.4rem',
   padding: '0.35rem 0.75rem',
-  borderRadius: 999,
-  border: '1px solid var(--color-border)',
-  background: 'var(--color-surface)',
+  borderRadius: 6,
+  border: '1px solid transparent',
+  background: 'var(--ui-control-bg)',
   fontSize: '0.85rem',
   fontWeight: 600,
   color: 'var(--color-text-primary)',
@@ -689,9 +710,9 @@ const presetButtonStyle = (color, isActive) => ({
   cursor: 'pointer',
   display: 'grid',
   placeItems: 'center',
-  boxShadow: isActive ? '0 0 0 4px rgba(99, 102, 241, 0.15)' : '0 8px 20px rgba(15, 23, 42, 0.12)',
-  transition: 'transform 0.2s ease, box-shadow 0.2s ease',
-  transform: isActive ? 'scale(1.05)' : 'scale(1)',
+  boxShadow: 'none',
+  transition: 'outline-color 0.2s ease',
+  transform: 'none',
 });
 
 const badgeStyle = {
@@ -699,9 +720,9 @@ const badgeStyle = {
   alignItems: 'center',
   gap: '0.5rem',
   padding: '0.35rem 0.75rem',
-  borderRadius: 999,
-  border: '1px solid var(--color-border)',
-  background: 'var(--color-surface)',
+  borderRadius: 6,
+  border: '1px solid transparent',
+  background: 'var(--ui-control-bg)',
   fontSize: '0.85rem',
   fontWeight: 600,
   color: 'var(--color-text-primary)',
@@ -721,7 +742,7 @@ const bodyTextMutedStyle = {
 
 const captureCardGridStyle = {
   display: 'grid',
-  gap: '1.5rem',
+  gap: '1rem',
   gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
   alignItems: 'start',
 };
@@ -741,21 +762,22 @@ const bookmarkletLinkStyle = (variant = 'primary') => ({
   display: 'inline-flex',
   alignItems: 'center',
   justifyContent: 'center',
-  padding: '0.65rem 1.15rem',
-  borderRadius: 999,
+  padding: '0.5rem 0.85rem',
+  borderRadius: 6,
   fontWeight: 600,
-  fontSize: '0.95rem',
+  fontSize: '0.85rem',
+  fontFamily: 'var(--font-family-body)',
   textDecoration: 'none',
   cursor: 'grab',
-  border: variant === 'primary' ? '1px solid var(--color-accent)' : '1px solid var(--color-border)',
-  background: variant === 'primary' ? 'var(--color-accent)' : 'var(--color-surface)',
+  border: variant === 'primary' ? '1px solid var(--color-accent)' : '1px solid transparent',
+  background: variant === 'primary' ? 'var(--color-accent)' : 'var(--ui-control-bg)',
   color: variant === 'primary' ? '#fff' : 'var(--color-text-primary)',
-  boxShadow: '0 10px 20px rgba(15, 23, 42, 0.1)',
+  boxShadow: 'none',
 });
 
 const cardSectionStackStyle = {
   display: 'grid',
-  gap: '1.5rem',
+  gap: '1rem',
 };
 
 const formGridStyle = {
@@ -782,7 +804,7 @@ const hotkeyBadgeStyle = {
   justifyContent: 'center',
   minWidth: 96,
   padding: '0.5rem 0.85rem',
-  borderRadius: 999,
+  borderRadius: 6,
   border: '1px solid var(--color-border)',
   background: 'var(--color-surface)',
   fontSize: '0.95rem',
@@ -948,8 +970,8 @@ function SettingCard({ id, title, description, action, children }) {
 const statusBubbleStyle = (variant = 'info') => {
   const palette = {
     info: {
-      border: 'var(--color-border)',
-      background: 'var(--color-surface)',
+      border: 'transparent',
+      background: 'var(--ui-control-bg)',
       color: 'var(--color-text-secondary)',
     },
     accent: {

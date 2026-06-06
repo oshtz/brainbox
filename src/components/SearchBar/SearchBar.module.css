@@ -1,6 +1,6 @@
 .container {
   width: 100%;
-  margin-bottom: var(--space-md);
+  margin-bottom: var(--space-sm);
 }
 
 .form {
@@ -13,9 +13,9 @@
   position: relative;
   display: flex;
   align-items: center;
-  background-color: var(--color-background);
-  border: 1px solid var(--color-border);
-  border-radius: var(--border-radius-lg);
+  background-color: var(--ui-input-bg);
+  border: 1px solid rgba(var(--color-primary-rgb), 0.18);
+  border-radius: 14px;
   overflow: hidden;
   transition: border-color var(--transition-duration) var(--transition-timing),
               box-shadow var(--transition-duration) var(--transition-timing);
@@ -23,7 +23,7 @@
 
 .inputWrapper:focus-within {
   border-color: var(--color-primary);
-  box-shadow: 0 0 0 3px var(--color-focus);
+  box-shadow: 0 0 0 2px var(--color-focus);
 }
 
 .icon {
@@ -38,7 +38,7 @@
 
 .input {
   flex: 1;
-  padding: 8px var(--space-md);
+  padding: 7px var(--space-sm);
   border: none;
   background: transparent;
   color: var(--color-text-primary);
@@ -63,8 +63,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 40px;
-  height: 40px;
+  width: 34px;
+  height: 34px;
 }
 
 .clearButton:hover {
@@ -86,21 +86,21 @@
 }
 
 .searchButton {
-  padding: 8px var(--space-md);
+  padding: 7px 11px;
   background: var(--color-primary);
-  color: var(--color-background);
+  color: #fff;
   border: 1px solid var(--color-primary);
-  border-radius: var(--border-radius-lg);
+  border-radius: 12px;
   font-weight: var(--font-weight-medium);
   cursor: pointer;
   transition: background-color var(--transition-duration) var(--transition-timing), box-shadow var(--transition-duration) var(--transition-timing), border-color var(--transition-duration) var(--transition-timing);
-  box-shadow: 0 2px 8px rgba(var(--color-primary-rgb), 0.18);
+  box-shadow: none;
 }
 
 .searchButton:hover {
   background: var(--color-primary-hover);
   border-color: var(--color-primary-hover);
-  box-shadow: 0 4px 12px rgba(var(--color-primary-rgb), 0.22);
+  box-shadow: none;
 }
 
 /* Responsive styles */

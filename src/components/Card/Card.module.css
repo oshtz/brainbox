@@ -1,10 +1,10 @@
 /* Base Card Styles */
 .card {
-  background-color: var(--color-surface);
-  border: 1px solid var(--color-border);
+  background-color: var(--ui-control-bg);
+  border: 1px solid transparent;
   border-radius: var(--border-radius-md);
   padding: var(--space-sm);
-  box-shadow: var(--shadow-sm);
+  box-shadow: none;
   overflow: hidden; /* Ensure content stays within rounded corners */
   font-family: var(--font-family-body); /* Apply body font to all card content */
 }

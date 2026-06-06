@@ -4,38 +4,39 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background-color: rgba(0, 0, 0, 0.5);
+  background-color: rgba(15, 23, 42, 0.36);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 1000;
-  backdrop-filter: blur(3px);
-  animation: fadeIn 0.2s ease-out;
+  backdrop-filter: blur(1px);
+  animation: fadeIn 0.14s ease-out;
 }
 
 .modal {
-  background-color: var(--color-surface);
+  background-color: var(--ui-popover-bg);
   border-radius: var(--border-radius-md);
   width: 90%;
   max-width: 500px;
   max-height: 90vh;
   overflow-y: auto;
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
-  animation: slideUp 0.3s ease-out;
+  border: 1px solid var(--ui-muted-border);
+  box-shadow: var(--shadow-lg);
+  animation: slideUp 0.16s ease-out;
 }
 
 .header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--space-md);
-  border-bottom: 1px solid var(--color-border);
+  padding: var(--space-sm) var(--space-md);
+  border-bottom: 1px solid var(--ui-soft-border);
 }
 
 .title {
   margin: 0;
-  font-size: 1.2rem;
-  font-weight: var(--font-weight-bold);
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-semibold);
 }
 
 .closeButton {
@@ -48,7 +49,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 50%;
+  border-radius: var(--border-radius-md);
   color: var(--color-text-secondary);
   transition: background-color var(--transition-duration) var(--transition-timing),
               color var(--transition-duration) var(--transition-timing);
@@ -69,7 +70,7 @@
 }
 
 .field {
-  margin-bottom: var(--space-md);
+  margin-bottom: var(--space-sm);
 }
 
 .field label {
@@ -77,19 +78,20 @@
   margin-bottom: var(--space-xs);
   font-weight: 500;
   color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
 }
 
 .input,
 .textarea,
 .select {
   width: 100%;
-  padding: var(--space-sm);
-  border: 1px solid var(--color-border);
+  padding: 7px var(--space-sm);
+  border: 1px solid var(--ui-muted-border);
   border-radius: var(--border-radius-sm);
-  background-color: var(--color-background);
+  background-color: rgba(255,255,255,0.045);
   color: var(--color-text-primary);
   font-family: var(--font-family-sans);
-  font-size: var(--font-size-base);
+  font-size: var(--font-size-sm);
   transition: border-color var(--transition-duration) var(--transition-timing);
 }
 
@@ -107,8 +109,8 @@
 .actions {
   display: flex;
   justify-content: flex-end;
-  gap: var(--space-md);
-  margin-top: var(--space-lg);
+  gap: var(--space-sm);
+  margin-top: var(--space-md);
 }
 
 .error {

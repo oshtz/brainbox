@@ -75,9 +75,9 @@
   max-height: 200px;
   overflow-y: auto;
   padding: 0.5rem;
-  border: 1px solid var(--color-border);
+  border: 1px solid transparent;
   border-radius: 10px;
-  background: var(--color-surface);
+  background: var(--ui-control-bg);
 }
 
 .vaultItem {
@@ -91,7 +91,7 @@
 }
 
 .vaultItem:hover {
-  background: var(--color-elevated);
+  background: var(--ui-control-hover-bg);
 }
 
 .checkbox {
@@ -150,8 +150,8 @@
   justify-content: center;
   padding: 0.65rem 1.25rem;
   border-radius: 999px;
-  border: 1px solid var(--color-border);
-  background: var(--color-surface);
+  border: 1px solid transparent;
+  background: var(--ui-control-bg);
   color: var(--color-text-primary);
   cursor: pointer;
   font-weight: 600;
@@ -176,10 +176,10 @@
 }
 
 .dialog {
-  background: var(--color-elevated);
+  background: var(--ui-popover-bg);
   border-radius: 16px;
-  border: 1px solid var(--color-border);
-  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--ui-muted-border);
+  box-shadow: 0 24px 54px rgba(0, 0, 0, 0.34);
   padding: 1.5rem;
   width: 100%;
   max-width: 400px;
@@ -197,8 +197,8 @@
   gap: 1.5rem;
   padding: 1rem;
   border-radius: 10px;
-  border: 1px solid var(--color-border);
-  background: var(--color-surface);
+  border: 1px solid transparent;
+  background: var(--ui-control-bg);
   margin-bottom: 1rem;
 }
 
@@ -236,8 +236,8 @@
 .input {
   padding: 0.75rem 1rem;
   border-radius: 10px;
-  border: 1px solid var(--color-border);
-  background: var(--color-surface);
+  border: 1px solid var(--ui-muted-border);
+  background: var(--ui-input-bg);
   color: var(--color-text-primary);
   font-size: 1rem;
 }
@@ -262,8 +262,8 @@
 .cancelButton {
   padding: 0.65rem 1.25rem;
   border-radius: 999px;
-  border: 1px solid var(--color-border);
-  background: var(--color-surface);
+  border: 1px solid transparent;
+  background: var(--ui-control-bg);
   color: var(--color-text-primary);
   cursor: pointer;
   font-weight: 600;
@@ -272,7 +272,7 @@
 }
 
 .cancelButton:hover:not(:disabled) {
-  background: var(--color-elevated);
+  background: var(--ui-control-hover-bg);
 }
 
 .cancelButton:disabled {

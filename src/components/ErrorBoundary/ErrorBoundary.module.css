@@ -11,9 +11,9 @@
   max-width: 600px;
   text-align: center;
   padding: var(--space-xl);
-  background: var(--color-surface);
+  background: var(--ui-panel-strong-bg);
   border-radius: var(--border-radius-lg);
-  border: 1px solid var(--color-border);
+  border: 1px solid var(--ui-muted-border);
   box-shadow: var(--shadow-lg);
 }
 
@@ -61,8 +61,8 @@
 }
 
 .errorStack {
-  background: var(--color-background);
-  border: 1px solid var(--color-border);
+  background: var(--ui-control-bg);
+  border: 1px solid var(--ui-muted-border);
   border-radius: var(--border-radius-md);
   padding: var(--space-md);
   font-size: var(--font-size-xs);

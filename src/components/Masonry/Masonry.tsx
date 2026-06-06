@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import { useTransition, a } from "@react-spring/web";
-import { PlayIcon, ArrowUpIcon, ArrowDownIcon, TrashIcon, EllipsisVerticalIcon } from "@heroicons/react/24/solid";
+import { PlayIcon, ArrowUpIcon, ArrowDownIcon, TrashIcon, EllipsisVerticalIcon, PlusIcon } from "@heroicons/react/24/solid";
 import "./Masonry.css";
 import { faviconForUrl } from "../../utils/urlPreview";
 
@@ -9,6 +9,7 @@ export interface MasonryItem {
   height: number;
   image: string;
   title?: string;
+  content?: string;
   // Optional metadata hints used by the grid
   metadata?: {
     item_type?: string;
@@ -84,12 +85,15 @@ const Masonry: React.FC<MasonryProps> = ({ data, onCardClick, onDeleteItem, onMo
 
   const [heights, gridItems] = useMemo<[number[], GridItem[]]>(() => {
     const heights = new Array(columns).fill(0);
-    const gutter = 16; // spacing between cards
+    const gutter = 10;
     const colWidth = columns > 0 ? (Math.max(0, width - gutter * (columns + 1)) / columns) : 0;
     const computeHeight = (child: MasonryItem): number => {
       if (!colWidth) return child.height;
       if (child?.metadata?.provider === 'youtube') {
         return Math.round((colWidth) * 9 / 16);
+      }
+      if (child?.metadata?.item_type === 'add') {
+        return 216;
       }
       if (child?.metadata?.item_type === 'url') {
         // Prefer measured height if available so cards expand with content
@@ -106,7 +110,7 @@ const Masonry: React.FC<MasonryProps> = ({ data, onCardClick, onDeleteItem, onMo
         return textBase + imageH;
       }
       // fallback for notes
-      return Math.max(160, Math.min(420, child.height || 240));
+      return Math.max(148, Math.min(360, child.height || 220));
     };
     const gridItems = data.map((child) => {
       const column = heights.indexOf(Math.min(...heights));
@@ -142,44 +146,76 @@ const Masonry: React.FC<MasonryProps> = ({ data, onCardClick, onDeleteItem, onMo
     <div ref={ref} className="masonry" style={{ height: Math.max(...heights, 0) + 16 }}>
       {transitions((style, item) => {
         const isSelected = selectedId != null && String(selectedId) === String(item.id);
+        const isAddCard = item?.metadata?.item_type === 'add';
+        const hasImage = Boolean(item.image);
+        const noteExcerpt = typeof item.content === 'string' ? item.content.trim() : '';
         return (
         <a.div
           key={item.id}
           style={style}
-          className={`masonry-card${isSelected ? ' is-selected' : ''}`}
+          className={`masonry-card${isSelected ? ' is-selected' : ''}${isAddCard ? ' is-add-card' : ''}${!hasImage ? ' no-media' : ''}`}
           data-testid="masonry-card"
           data-item-id={String(item.id)}
         >
-          <div
-            className="masonry-card-bg"
-            onClick={(e) => {
-              e.stopPropagation();
-              onCardClick?.(item);
-            }}
-            onKeyDown={e => {
-              if (e.key === 'Enter' || e.key === ' ') {
+          {isAddCard ? (
+            <button
+              type="button"
+              className="masonry-add-card"
+              onClick={(e) => {
                 e.stopPropagation();
                 onCardClick?.(item);
-              }
-            }}
-            tabIndex={0}
-            role="button"
-            aria-label={`Open item ${item.title || item.id}`}
-            style={{
-              backgroundImage: `url(${item.image})`,
-              touchAction: 'manipulation',
-              WebkitTouchCallout: 'none',
-              cursor: 'pointer'
-            }}
-          />
+              }}
+            >
+              <span className="masonry-add-icon"><PlusIcon className="masonry-action-icon" /></span>
+              <span className="masonry-add-title">{item.title}</span>
+              <span className="masonry-add-copy">{noteExcerpt}</span>
+            </button>
+          ) : (
+            <div
+              className="masonry-card-bg"
+              onClick={(e) => {
+                e.stopPropagation();
+                onCardClick?.(item);
+              }}
+              onKeyDown={e => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.stopPropagation();
+                  onCardClick?.(item);
+                }
+              }}
+              tabIndex={0}
+              role="button"
+              aria-label={`Open item ${item.title || item.id}`}
+              style={{
+                backgroundImage: hasImage ? `url(${item.image})` : undefined,
+                touchAction: 'manipulation',
+                WebkitTouchCallout: 'none',
+                cursor: 'pointer'
+              }}
+            />
+          )}
+          {!isAddCard && !hasImage && item?.metadata?.item_type !== 'url' && (
+            <button
+              type="button"
+              className="masonry-note-preview"
+              onClick={(e) => {
+                e.stopPropagation();
+                onCardClick?.(item);
+              }}
+            >
+              <span className="masonry-note-mark">"</span>
+              <span className="masonry-note-text">{noteExcerpt || item.title}</span>
+              <span className="masonry-note-title">{item.title}</span>
+            </button>
+          )}
           <div className={`masonry-card-overlay ${alwaysShowOverlay ? 'always-on' : ''}`} aria-hidden={false}>
             {item?.metadata?.provider === 'youtube' && (
               <div className="masonry-card-play" aria-label="YouTube video" title="YouTube video"><PlayIcon className="masonry-icon" /></div>
             )}
-            {item?.metadata?.item_type !== 'url' && typeof item.title === 'string' && item.title.length > 0 && (
+            {!isAddCard && hasImage && item?.metadata?.item_type !== 'url' && typeof item.title === 'string' && item.title.length > 0 && (
               <div className="masonry-card-title" title={item.title}>{item.title}</div>
             )}
-            {item?.metadata?.item_type === 'url' && item?.metadata?.provider !== 'youtube' && (
+            {!isAddCard && item?.metadata?.item_type === 'url' && item?.metadata?.provider !== 'youtube' && (
               <div
                 className="masonry-link-preview"
                 ref={(el) => {
@@ -227,7 +263,7 @@ const Masonry: React.FC<MasonryProps> = ({ data, onCardClick, onDeleteItem, onMo
                 )}
               </div>
             )}
-            {actionsMode === 'buttons' ? (
+            {!isAddCard && actionsMode === 'buttons' ? (
               <div className="masonry-card-actions">
                 {onMoveItem && (
                   <>
@@ -266,7 +302,7 @@ const Masonry: React.FC<MasonryProps> = ({ data, onCardClick, onDeleteItem, onMo
                   ><TrashIcon className="masonry-action-icon" /></button>
                 )}
               </div>
-            ) : (
+            ) : !isAddCard ? (
               <>
                 {(onMoveItem || onDeleteItem) && (
                   <div className="masonry-card-menuWrap">
@@ -321,7 +357,7 @@ const Masonry: React.FC<MasonryProps> = ({ data, onCardClick, onDeleteItem, onMo
                   </div>
                 )}
               </>
-            )}
+            ) : null}
           </div>
         </a.div>
       )})}
