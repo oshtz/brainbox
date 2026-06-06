@@ -147,7 +147,7 @@ test.describe('brainbox app shell', () => {
   });
 
   test('loads the empty vault workspace without backend failure noise', async ({ page }) => {
-    await expect(page.getByTestId('sidebar')).toBeVisible();
+    await expect(page.getByTestId('app-navigation')).toBeVisible();
     await expect(page.getByTestId('main-content')).toBeVisible();
     await expect(page.getByTestId('vaults-section')).toBeVisible();
     await expect(page.getByText('Create your first vault')).toBeVisible();
@@ -208,13 +208,13 @@ test.describe('brainbox populated workspace fixture', () => {
 
   test('renders populated vaults and opens a note item without layout clipping', async ({ page }) => {
     await expect(page.getByTestId('vault-card')).toHaveCount(3);
-    await expect(page.getByText('Research Intake - URLs and clipped source notes')).toBeVisible();
-    await expect(page.getByText('Product Roadmap / Brainbox Hardening')).toBeVisible();
+    await expect(page.getByRole('button', { name: /Open vault Research Intake/ })).toBeVisible();
+    await expect(page.getByRole('button', { name: /Open vault Product Roadmap/ })).toBeVisible();
 
     await page.getByRole('button', { name: /Open vault Research Intake/ }).click();
 
-    await expect(page.getByText('Research Intake - URLs and clipped source notes')).toBeVisible();
-    await expect(page.getByTestId('masonry-card')).toHaveCount(3);
+    await expect(page.getByRole('button', { name: 'Research Intake - URLs and clipped source notes' })).toBeVisible();
+    await expect(page.getByRole('button', { name: /^Open item / })).toHaveCount(3);
     await expect(page.getByRole('button', { name: /Open item Tauri smoke path checklist/ })).toBeVisible();
     await expect(page.getByRole('button', { name: /Open item Release readiness reference/ })).toBeVisible();
 

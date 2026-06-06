@@ -613,7 +613,7 @@ const BrainyChat: React.FC<Props> = ({ vaults, currentVaultId, onClose, onDataCh
   };
 
   return (
-    <div className={styles.container}>
+    <div className={styles.container} data-testid="brainy-chat">
       <div className={styles.header}>
         <div className={styles.headerMain}>
           <span

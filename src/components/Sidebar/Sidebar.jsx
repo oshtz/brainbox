@@ -148,6 +148,7 @@ const Sidebar = ({
       icon: BookOpenIcon,
       active: currentView === 'library',
       onClick: () => onKnowledgeClick && onKnowledgeClick('library'),
+      testId: 'nav-library',
       ariaLabel: 'Open library',
     },
     {

@@ -134,7 +134,7 @@ const Library: React.FC<Props> = ({ vaults }) => {
   const vaultOptions = useMemo(() => [{ id: 'all', title: 'All vaults' }, ...vaults], [vaults]);
 
   return (
-    <div className={styles.wrap}>
+    <div className={styles.wrap} data-testid="library-section">
       <div className={styles.toolbar}>
         <div className={styles.segmented} role="tablist" aria-label="Type filter">
           <button className={typeFilter === 'all' ? styles.active : ''} role="tab" aria-selected={typeFilter==='all'} onClick={() => setTypeFilter('all')}>All</button>
