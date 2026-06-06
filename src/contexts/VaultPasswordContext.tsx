@@ -7,8 +7,10 @@
  */
 
 import React, { createContext, useContext, useState, useCallback, useEffect, useRef, ReactNode } from 'react';
+import { invoke } from '@tauri-apps/api/core';
 import { deriveKeyFromPassword, keyToArray } from '../utils/crypto';
 import { usePrompt } from './PromptContext';
+import { isTauriRuntime } from '../utils/tauriRuntime';
 
 interface VaultPasswordContextType {
   /**
@@ -115,16 +117,20 @@ export const VaultPasswordProvider: React.FC<VaultPasswordProviderProps> = ({ ch
     };
   }, [keys.size, getTimeoutMs]);
 
+  const cacheVaultCredentials = useCallback((vaultId: string, password: string, keyArray: number[]) => {
+    setPasswords(prev => new Map(prev).set(vaultId, password));
+    setKeys(prev => new Map(prev).set(vaultId, keyArray));
+  }, []);
+
   const setVaultPassword = useCallback(async (vaultId: string, password: string) => {
     // Derive key from password
     const keyUint8 = await deriveKeyFromPassword(password, vaultId);
     const keyArray = keyToArray(keyUint8);
 
     // Store both password and derived key
-    setPasswords(prev => new Map(prev).set(vaultId, password));
-    setKeys(prev => new Map(prev).set(vaultId, keyArray));
+    cacheVaultCredentials(vaultId, password, keyArray);
     return keyArray;
-  }, []);
+  }, [cacheVaultCredentials]);
 
   const getVaultKey = useCallback(async (vaultId: string, vaultName?: string, hasPassword?: boolean): Promise<number[]> => {
     // Check if we already have a cached key
@@ -154,10 +160,16 @@ export const VaultPasswordProvider: React.FC<VaultPasswordProviderProps> = ({ ch
       throw new Error('Password is required to access this vault');
     }
 
-    // Derive and cache the key
-    const key = await setVaultPassword(vaultId, password);
+    const keyUint8 = await deriveKeyFromPassword(password, vaultId);
+    const key = keyToArray(keyUint8);
+
+    if (isTauriRuntime()) {
+      await invoke('verify_vault_password', { vaultId: Number(vaultId), key });
+    }
+
+    cacheVaultCredentials(vaultId, password, key);
     return key;
-  }, [keys, setVaultPassword, promptDialog]);
+  }, [keys, setVaultPassword, promptDialog, cacheVaultCredentials]);
 
   const hasKey = useCallback((vaultId: string): boolean => {
     return keys.has(vaultId);
