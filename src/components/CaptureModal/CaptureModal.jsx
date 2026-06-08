@@ -41,6 +41,18 @@ const CaptureModal = ({ isOpen, onClose, onSave, vaults = [], initialTitle = '',
     }
   }, [isOpen, initialTitle, initialContent]);
 
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKey = (event) => {
+      if (event.key === 'Escape') {
+        event.stopPropagation();
+        onClose();
+      }
+    };
+    document.addEventListener('keydown', handleKey, true);
+    return () => document.removeEventListener('keydown', handleKey, true);
+  }, [isOpen, onClose]);
+
   // When user selects a vault, persist it
   const handleVaultChange = (e) => {
     setSelectedVault(e.target.value);

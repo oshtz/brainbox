@@ -201,6 +201,11 @@ test.describe('brainbox app shell', () => {
     await expect(page.getByTestId('capture-content-input')).toBeVisible();
     await expect(page.getByTestId('capture-vault-select')).toBeVisible();
 
+    await page.keyboard.press('Escape');
+    await expect(page.getByTestId('capture-modal')).toHaveCount(0);
+
+    await page.getByTestId('floating-capture-button').click();
+    await expect(page.getByTestId('capture-modal')).toBeVisible();
     await page.getByTestId('capture-modal').getByRole('button', { name: 'Close' }).click();
     await expect(page.getByTestId('capture-modal')).toHaveCount(0);
   });
