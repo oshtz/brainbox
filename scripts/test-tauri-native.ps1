@@ -22,12 +22,12 @@ function Invoke-Pnpm {
   }
 }
 
-$existingBrainbox = Get-Process brainbox -ErrorAction SilentlyContinue
+$existingBrainbox = Get-Process brainbox,brainbox-portable -ErrorAction SilentlyContinue
 if ($existingBrainbox) {
   if ($StopExisting) {
     $existingBrainbox | Stop-Process -Force -ErrorAction SilentlyContinue
   } else {
-    throw "brainbox is already running. Close it first, or rerun with -StopExisting for an isolated native QA run."
+    throw "brainbox is already running. Close brainbox/brainbox-portable first, or rerun with -StopExisting for an isolated native QA run."
   }
 }
 
