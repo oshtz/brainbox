@@ -5,7 +5,7 @@
   "identifier": "com.omershatz.brainbox",
   "build": {
     "beforeDevCommand": "pnpm dev",
-    "devUrl": "http://localhost:1420",
+    "devUrl": "http://localhost:17340",
     "beforeBuildCommand": "pnpm build",
     "frontendDist": "../dist"
   },

@@ -77,7 +77,7 @@ async function connectToNativePage(port: number): Promise<{ browser: Browser; pa
   return waitFor(async () => {
     const browser = await chromium.connectOverCDP(`http://127.0.0.1:${port}`);
     const pages = browser.contexts().flatMap((context) => context.pages());
-    const page = pages.find((candidate) => candidate.url().includes('localhost:1420') || candidate.url().includes('127.0.0.1:1420')) ?? pages[0];
+    const page = pages.find((candidate) => candidate.url().includes('localhost:17340') || candidate.url().includes('127.0.0.1:17340')) ?? pages[0];
     if (!page) {
       await browser.close();
       throw new Error('No WebView page exposed over CDP');

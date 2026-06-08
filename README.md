@@ -108,7 +108,7 @@ sudo spctl --enable /Applications/brainbox.app
 pnpm tauri dev
 ```
 
-Vite is configured for Tauri at `http://127.0.0.1:1420` with strict port matching.
+Vite is configured for Tauri at `http://127.0.0.1:17340` with strict port matching.
 
 ### Run (web only)
 

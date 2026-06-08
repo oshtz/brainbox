@@ -79,7 +79,7 @@ try {
     -RedirectStandardError $devErr `
     -PassThru
 
-  Wait-ForUrl 'http://127.0.0.1:1420'
+  Wait-ForUrl 'http://127.0.0.1:17340'
 
   $exeCandidates = @(
     (Join-Path $repoRoot 'src-tauri\target\debug\brainbox.exe'),
