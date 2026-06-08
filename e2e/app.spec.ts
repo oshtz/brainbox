@@ -186,6 +186,14 @@ test.describe('brainbox app shell', () => {
     );
   });
 
+  test('navigates to library and centers the empty state', async ({ page }) => {
+    await page.getByTestId('nav-library').click();
+    await expect(page.getByTestId('library-section')).toBeVisible();
+    await expect(page.getByTestId('library-empty-state')).toBeVisible();
+    await expect(page.getByText('No items match the current filters.')).toBeVisible();
+    await expectEmptyStateInContentFrame(page, 'library-empty-state');
+  });
+
   test('opens and closes the quick capture modal', async ({ page }) => {
     await page.getByTestId('floating-capture-button').click();
     await expect(page.getByTestId('capture-modal')).toBeVisible();

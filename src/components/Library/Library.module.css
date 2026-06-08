@@ -52,12 +52,13 @@
 }
 
 .empty {
+  width: min(100%, 560px);
   max-width: 560px;
-  margin-top: var(--space-sm);
+  margin: clamp(56px, 14vh, 120px) auto 0;
   padding: var(--space-xl);
   border-radius: var(--border-radius-lg);
   background: var(--ui-panel-bg);
   border: 1px solid transparent;
-  text-align: left;
+  text-align: center;
   color: var(--color-text-secondary);
 }

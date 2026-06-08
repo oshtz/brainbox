@@ -159,7 +159,9 @@ const Library: React.FC<Props> = ({ vaults }) => {
       </div>
 
       {visible.length === 0 ? (
-        <div className={styles.empty}>{loading ? 'Loading…' : 'No items match the current filters.'}</div>
+        <div className={styles.empty} data-testid="library-empty-state">
+          {loading ? 'Loading…' : 'No items match the current filters.'}
+        </div>
       ) : (
         <Masonry
           data={visible}

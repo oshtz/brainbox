@@ -49,7 +49,7 @@
 }
 
 .content {
-  --page-content-max-width: 1040px;
+  --page-content-max-width: 100%;
   flex: 1;
   overflow-y: auto;
   padding: var(--space-sm) var(--space-md) var(--space-md);

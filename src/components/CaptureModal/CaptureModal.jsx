@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { XMarkIcon } from '@heroicons/react/24/outline';
 import styles from './CaptureModal.module.css';
 import Button from '../Button/Button';
 import { isUrl as looksLikeUrl, getYouTubeId, youtubeEmbedUrl } from '../../utils/urlPreview';
@@ -95,7 +96,7 @@ const CaptureModal = ({ isOpen, onClose, onSave, vaults = [], initialTitle = '',
         <header className={styles.header}>
           <h2 id="capture-modal-title" className={styles.title}>Quick Capture</h2>
           <button className={styles.closeButton} onClick={onClose} aria-label="Close">
-            &times;
+            <XMarkIcon className={styles.closeIcon} />
           </button>
         </header>
         

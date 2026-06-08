@@ -1,27 +1,24 @@
 .overlay {
   position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-color: rgba(15, 23, 42, 0.36);
+  inset: 0;
+  padding: var(--space-md);
+  background-color: rgba(0, 0, 0, 0.32);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 1000;
-  backdrop-filter: blur(1px);
+  backdrop-filter: blur(2px);
   animation: fadeIn 0.14s ease-out;
 }
 
 .modal {
-  background-color: var(--ui-popover-bg);
-  border-radius: var(--border-radius-md);
-  width: 90%;
-  max-width: 500px;
+  width: min(100%, 540px);
   max-height: 90vh;
   overflow-y: auto;
-  border: 1px solid var(--ui-muted-border);
-  box-shadow: var(--shadow-lg);
+  border: 1px solid var(--ui-soft-border);
+  border-radius: var(--border-radius-lg);
+  background: var(--ui-popover-bg);
+  box-shadow: var(--shadow-md);
   animation: slideUp 0.16s ease-out;
 }
 
@@ -29,34 +26,38 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--space-sm) var(--space-md);
-  border-bottom: 1px solid var(--ui-soft-border);
+  gap: var(--space-sm);
+  min-height: 46px;
+  padding: 10px 12px 9px 14px;
+  border-bottom: 1px solid var(--ui-hairline-border);
 }
 
 .title {
   margin: 0;
-  font-size: var(--font-size-md);
+  font-size: 0.98rem;
   font-weight: var(--font-weight-semibold);
+  line-height: 1.2;
 }
 
 .closeButton {
-  background: transparent;
-  border: none;
-  font-size: 1.5rem;
-  cursor: pointer;
   width: 30px;
   height: 30px;
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
   border-radius: var(--border-radius-md);
+  border: 1px solid transparent;
+  background: transparent;
   color: var(--color-text-secondary);
+  cursor: pointer;
   transition: background-color var(--transition-duration) var(--transition-timing),
+              border-color var(--transition-duration) var(--transition-timing),
               color var(--transition-duration) var(--transition-timing);
 }
 
 .closeButton:hover {
-  background-color: var(--color-surface-hover);
+  border-color: var(--ui-muted-border);
+  background-color: var(--ui-control-hover-bg);
   color: var(--color-text-primary);
 }
 
@@ -66,16 +67,17 @@
 }
 
 .form {
+  display: grid;
+  gap: var(--space-sm);
   padding: var(--space-md);
 }
 
 .field {
-  margin-bottom: var(--space-sm);
+  display: grid;
+  gap: var(--space-xs);
 }
 
 .field label {
-  display: block;
-  margin-bottom: var(--space-xs);
   font-weight: 500;
   color: var(--color-text-secondary);
   font-size: var(--font-size-xs);
@@ -85,14 +87,16 @@
 .textarea,
 .select {
   width: 100%;
-  padding: 7px var(--space-sm);
+  padding: 8px 10px;
   border: 1px solid var(--ui-muted-border);
-  border-radius: var(--border-radius-sm);
-  background-color: rgba(255,255,255,0.045);
+  border-radius: var(--border-radius-md);
+  background: var(--ui-input-bg);
   color: var(--color-text-primary);
   font-family: var(--font-family-sans);
   font-size: var(--font-size-sm);
-  transition: border-color var(--transition-duration) var(--transition-timing);
+  transition:
+    background-color var(--transition-duration) var(--transition-timing),
+    border-color var(--transition-duration) var(--transition-timing);
 }
 
 .input:focus,
@@ -104,13 +108,14 @@
 
 .textarea {
   resize: vertical;
+  min-height: 120px;
 }
 
 .actions {
   display: flex;
   justify-content: flex-end;
   gap: var(--space-sm);
-  margin-top: var(--space-md);
+  margin-top: var(--space-xs);
 }
 
 .error {
@@ -143,8 +148,8 @@
 /* Responsive styles */
 @media (max-width: 576px) {
   .modal {
-    width: 95%;
-    max-height: 80vh;
+    width: 100%;
+    max-height: calc(100vh - 2 * var(--space-md));
   }
   
   .actions {

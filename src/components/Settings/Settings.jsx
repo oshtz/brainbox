@@ -602,9 +602,9 @@ const appearanceLayoutStyle = {
 
 const cardStyle = {
   background: 'var(--ui-panel-bg)',
-  borderRadius: 8,
+  borderRadius: 'var(--border-radius-lg)',
   border: '1px solid transparent',
-  padding: '1rem',
+  padding: 'var(--space-md)',
   boxShadow: 'none',
 };
 
@@ -653,18 +653,18 @@ const labelStyle = {
 };
 
 const inputStyle = {
-  padding: '0.5rem 0.7rem',
-  borderRadius: 6,
-  border: '1px solid var(--color-border)',
-  background: 'var(--color-surface)',
+  padding: '8px 10px',
+  borderRadius: 'var(--border-radius-md)',
+  border: '1px solid var(--ui-muted-border)',
+  background: 'var(--ui-input-bg)',
   color: 'var(--color-text-primary)',
   width: '100%',
-  fontSize: '0.95rem',
+  fontSize: 'var(--font-size-sm)',
 };
 
 const buttonStyle = {
   padding: '0.45rem 0.75rem',
-  borderRadius: 6,
+  borderRadius: 'var(--border-radius-md)',
   border: '1px solid transparent',
   background: 'var(--ui-control-bg)',
   color: 'var(--color-text-primary)',
@@ -679,9 +679,9 @@ const colorPickerStyle = {
   width: 46,
   height: 36,
   padding: 0,
-  border: '1px solid var(--color-border)',
-  background: 'transparent',
-  borderRadius: 6,
+  border: '1px solid var(--ui-muted-border)',
+  background: 'var(--ui-control-bg)',
+  borderRadius: 'var(--border-radius-md)',
   cursor: 'pointer',
 };
 
@@ -690,7 +690,7 @@ const accentBadgeStyle = {
   alignItems: 'center',
   gap: '0.4rem',
   padding: '0.35rem 0.75rem',
-  borderRadius: 6,
+  borderRadius: 'var(--border-radius-md)',
   border: '1px solid transparent',
   background: 'var(--ui-control-bg)',
   fontSize: '0.85rem',
@@ -720,7 +720,7 @@ const badgeStyle = {
   alignItems: 'center',
   gap: '0.5rem',
   padding: '0.35rem 0.75rem',
-  borderRadius: 6,
+  borderRadius: 'var(--border-radius-md)',
   border: '1px solid transparent',
   background: 'var(--ui-control-bg)',
   fontSize: '0.85rem',
@@ -763,7 +763,7 @@ const bookmarkletLinkStyle = (variant = 'primary') => ({
   alignItems: 'center',
   justifyContent: 'center',
   padding: '0.5rem 0.85rem',
-  borderRadius: 6,
+  borderRadius: 'var(--border-radius-md)',
   fontWeight: 600,
   fontSize: '0.85rem',
   fontFamily: 'var(--font-family-body)',
@@ -804,9 +804,9 @@ const hotkeyBadgeStyle = {
   justifyContent: 'center',
   minWidth: 96,
   padding: '0.5rem 0.85rem',
-  borderRadius: 6,
-  border: '1px solid var(--color-border)',
-  background: 'var(--color-surface)',
+  borderRadius: 'var(--border-radius-md)',
+  border: '1px solid transparent',
+  background: 'var(--ui-control-bg)',
   fontSize: '0.95rem',
   fontWeight: 600,
   color: 'var(--color-text-primary)',
@@ -834,15 +834,15 @@ const capturePreviewStyle = {
 const captureIframeStyle = {
   width: '100%',
   minHeight: 320,
-  border: '1px solid var(--color-border)',
-  borderRadius: 12,
+  border: '1px solid var(--ui-hairline-border)',
+  borderRadius: 'var(--border-radius-lg)',
 };
 
 const capturePlaceholderStyle = {
   padding: '1.25rem',
-  borderRadius: 12,
-  border: '1px dashed var(--color-border)',
-  background: 'var(--color-elevated)',
+  borderRadius: 'var(--border-radius-lg)',
+  border: '1px dashed var(--ui-dashed-border)',
+  background: 'var(--ui-control-bg)',
   display: 'flex',
   flexDirection: 'column',
   gap: '0.75rem',
@@ -860,9 +860,9 @@ const textareaStyle = {
 
 const vaultCardStyle = {
   padding: '1.1rem 1.25rem',
-  background: 'var(--color-surface)',
-  borderRadius: 12,
-  border: '1px solid var(--color-border)',
+  background: 'var(--ui-control-bg)',
+  borderRadius: 'var(--border-radius-lg)',
+  border: '1px solid transparent',
   display: 'grid',
   gap: '0.65rem',
 };
@@ -915,9 +915,9 @@ const testGridStyle = {
 const testResultStyle = {
   margin: 0,
   padding: '1rem',
-  background: 'var(--color-surface)',
-  borderRadius: 12,
-  border: '1px solid var(--color-border)',
+  background: 'var(--ui-control-bg)',
+  borderRadius: 'var(--border-radius-lg)',
+  border: '1px solid transparent',
   whiteSpace: 'pre-wrap',
   lineHeight: 1.5,
   fontSize: '0.95rem',
@@ -931,8 +931,8 @@ const progressSectionStyle = {
 const progressTrackStyle = {
   width: '100%',
   height: 10,
-  background: 'var(--color-border)',
-  borderRadius: 999,
+  background: 'var(--ui-control-bg)',
+  borderRadius: 'var(--border-radius-md)',
   overflow: 'hidden',
 };
 
@@ -992,7 +992,7 @@ const statusBubbleStyle = (variant = 'info') => {
 
   return {
     padding: '0.75rem 1rem',
-    borderRadius: 12,
+    borderRadius: 'var(--border-radius-md)',
     border: `1px solid ${palette.border}`,
     background: palette.background,
     color: palette.color,
