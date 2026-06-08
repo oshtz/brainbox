@@ -926,7 +926,7 @@ function App() {
                       ))}
                     </div>
                   ) : searchCards.length === 0 ? (
-                    <div className={styles.emptyState}>
+                    <div className={styles.emptyState} data-testid="search-empty-state">
                       <h3 className={styles.emptyStateTitle}>No results yet</h3>
                       <p className={styles.emptyStateBody}>Try a different keyword, or search by a shorter phrase.</p>
                     </div>
@@ -975,7 +975,7 @@ function App() {
               )}
 
               {!searchQuery && (
-                <div className={styles.searchIdleState}>
+                <div className={styles.searchIdleState} data-testid="search-idle-state">
                   <h2 className={styles.emptyStateTitle}>Start a search</h2>
                   <p className={styles.emptyStateBody}>Find notes, links, summaries, and vault content from one place.</p>
                   <div className={styles.searchIdleHints} aria-hidden="true">
@@ -1097,7 +1097,7 @@ function App() {
                     ))}
                   </div>
                 ) : displayedVaultItems.length === 0 ? (
-                  <div className={styles.emptyState}>
+                  <div className={styles.emptyState} data-testid="vault-items-empty-state">
                     <h3 className={styles.emptyStateTitle}>{showConflictsOnly ? 'No conflicts' : 'No items yet'}</h3>
                     <p className={styles.emptyStateBody}>
                       {showConflictsOnly
@@ -1268,7 +1268,7 @@ function App() {
                   ))}
                 </div>
               ) : vaults.length === 0 ? (
-                <div className={styles.emptyState}>
+                <div className={styles.emptyState} data-testid="vault-empty-state">
                   <h3 className={styles.emptyStateTitle}>Create your first vault</h3>
                   <p className={styles.emptyStateBody}>Vaults keep your notes and links organized. Start with a name and optional password.</p>
                   <div className={styles.emptyStateActions}>

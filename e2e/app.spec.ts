@@ -140,6 +140,23 @@ const populatedFixture = {
   },
 };
 
+async function expectEmptyStateInContentFrame(page, testId: string) {
+  const metrics = await page.evaluate((id) => {
+    const main = document.querySelector('[data-testid="main-content"]')?.getBoundingClientRect();
+    const empty = document.querySelector(`[data-testid="${id}"]`)?.getBoundingClientRect();
+    if (!main || !empty) return null;
+
+    return {
+      centerDelta: Math.abs((empty.left + empty.width / 2) - (main.left + main.width / 2)),
+      topOffset: empty.top - main.top,
+    };
+  }, testId);
+
+  expect(metrics).toBeTruthy();
+  expect(metrics!.centerDelta).toBeLessThanOrEqual(3);
+  expect(metrics!.topOffset).toBeGreaterThanOrEqual(48);
+}
+
 test.describe('brainbox app shell', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
@@ -150,7 +167,9 @@ test.describe('brainbox app shell', () => {
     await expect(page.getByTestId('app-navigation')).toBeVisible();
     await expect(page.getByTestId('main-content')).toBeVisible();
     await expect(page.getByTestId('vaults-section')).toBeVisible();
+    await expect(page.getByTestId('vault-empty-state')).toBeVisible();
     await expect(page.getByText('Create your first vault')).toBeVisible();
+    await expectEmptyStateInContentFrame(page, 'vault-empty-state');
     await expect(page.getByText('Failed to fetch vaults.')).toHaveCount(0);
     await expect(page.getByText('Something went wrong')).toHaveCount(0);
   });
@@ -158,6 +177,8 @@ test.describe('brainbox app shell', () => {
   test('navigates to search and exposes the search input', async ({ page }) => {
     await page.getByTestId('nav-search').click();
     await expect(page.getByTestId('search-section')).toBeVisible();
+    await expect(page.getByTestId('search-idle-state')).toBeVisible();
+    await expectEmptyStateInContentFrame(page, 'search-idle-state');
     await expect(page.getByTestId('search-input')).toBeVisible();
     await expect(page.getByTestId('search-input')).toHaveAttribute(
       'placeholder',

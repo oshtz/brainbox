@@ -522,7 +522,7 @@ const settingsContainerStyle = {
   flexDirection: 'column',
   width: '100%',
   maxWidth: 'var(--page-content-max-width, 1040px)',
-  margin: 0,
+  margin: '0 auto',
 };
 
 // Wrapper to handle negative margin for nav - pulls nav flush against header

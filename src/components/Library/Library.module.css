@@ -1,6 +1,7 @@
 .wrap {
   width: 100%;
   max-width: var(--page-content-max-width, 1040px);
+  margin: 0 auto;
   padding: 0 0 var(--space-lg);
 }
 
