@@ -269,17 +269,35 @@ jobs:
           done
           pnpm tauri build --target aarch64-apple-darwin --bundles dmg --ci
 
-      - name: Verify and stage macOS artifact
-        run: |
-          APP="src-tauri/target/aarch64-apple-darwin/release/bundle/macos/brainbox.app"
-          test -d "$APP" || { echo 'Signed app bundle is missing' >&2; exit 1; }
-          codesign --verify --deep --strict --verbose=2 "$APP"
-          spctl --assess --type execute --verbose=2 "$APP"
-
           dmg_count=$(find src-tauri/target/aarch64-apple-darwin/release/bundle/dmg -maxdepth 1 -type f -name '*.dmg' | wc -l | tr -d ' ')
           test "$dmg_count" -eq 1 || { echo "Expected one DMG, found $dmg_count" >&2; exit 1; }
           dmg=$(find src-tauri/target/aarch64-apple-darwin/release/bundle/dmg -maxdepth 1 -type f -name '*.dmg')
+          xcrun notarytool submit "$dmg" --apple-id "$APPLE_ID" --password "$APPLE_PASSWORD" --team-id "$APPLE_TEAM_ID" --wait
+          xcrun stapler staple "$dmg"
+
+      - name: Verify and stage macOS artifact
+        run: |
+          dmg_count=$(find src-tauri/target/aarch64-apple-darwin/release/bundle/dmg -maxdepth 1 -type f -name '*.dmg' | wc -l | tr -d ' ')
+          test "$dmg_count" -eq 1 || { echo "Expected one DMG, found $dmg_count" >&2; exit 1; }
+          dmg=$(find src-tauri/target/aarch64-apple-darwin/release/bundle/dmg -maxdepth 1 -type f -name '*.dmg')
+          codesign --verify --strict --verbose=2 "$dmg"
           xcrun stapler validate "$dmg"
+          spctl --assess --type open --context context:primary-signature --verbose=2 "$dmg"
+
+          mount_dir=$(mktemp -d)
+          cleanup() {
+            hdiutil detach "$mount_dir" -quiet || true
+            rm -rf "$mount_dir"
+          }
+          trap cleanup EXIT
+          hdiutil attach "$dmg" -readonly -nobrowse -mountpoint "$mount_dir"
+          app_count=$(find "$mount_dir" -maxdepth 1 -type d -name '*.app' | wc -l | tr -d ' ')
+          test "$app_count" -eq 1 || { echo "Expected one app in DMG, found $app_count" >&2; exit 1; }
+          app=$(find "$mount_dir" -maxdepth 1 -type d -name '*.app')
+          codesign --verify --deep --strict --verbose=2 "$app"
+          spctl --assess --type execute --verbose=2 "$app"
+          cleanup
+          trap - EXIT
 
           mkdir release-assets
           cp "$dmg" release-assets/
