@@ -1,18 +1,15 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useTheme } from '../../contexts/ThemeContext';
 import { invoke } from '@tauri-apps/api/core';
-import { listen } from '@tauri-apps/api/event';
 import { useHotkey } from '../../contexts/HotkeyContext';
 import { KeyManagement } from '../KeyManagement';
 import { ExportImport } from '../ExportImport';
 import { AISettings } from '../AISettings';
-import { SyncSettings } from '../SyncSettings';
 import {
   LinkIcon,
   SwatchIcon,
   LockClosedIcon,
   CloudArrowDownIcon,
-  ArrowPathIcon,
   SparklesIcon,
   ArrowUpCircleIcon,
 } from '@heroicons/react/24/outline';
@@ -22,8 +19,7 @@ const TABS = [
   { id: 'capture', label: 'Capture', Icon: LinkIcon },
   { id: 'appearance', label: 'Appearance', Icon: SwatchIcon },
   { id: 'security', label: 'Security', Icon: LockClosedIcon },
-  { id: 'backup', label: 'Backup', Icon: CloudArrowDownIcon },
-  { id: 'sync', label: 'Sync', Icon: ArrowPathIcon },
+  { id: 'data', label: 'Data', Icon: CloudArrowDownIcon },
   { id: 'ai', label: 'AI', Icon: SparklesIcon },
   { id: 'updates', label: 'Updates', Icon: ArrowUpCircleIcon },
 ];
@@ -355,9 +351,10 @@ function AppearanceSettings() {
       <div style={appearanceLayoutStyle}>
         <div style={{ display: 'grid', gap: '0.75rem' }}>
           <div>
-            <label style={labelStyle}>Accent color</label>
+            <label htmlFor="settings-accent-color" style={labelStyle}>Accent color</label>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
               <input
+                id="settings-accent-color"
                 type="color"
                 value={accent}
                 onChange={(e) => setAccent(e.target.value)}
@@ -406,8 +403,8 @@ function SecuritySettings() {
 function BackupSettings() {
   return (
     <SettingCard
-      title="Backup & Transfer"
-      description="Export and import your vaults for backup or transfer to another device."
+      title="Data & backup"
+      description="Create or restore a manual encrypted backup. Automatic sync is unavailable while its safety model is being rebuilt."
     >
       <ExportImport />
     </SettingCard>
@@ -433,11 +430,11 @@ const Settings = ({ scrollToSection, onScrollComplete }) => {
   // Map scrollToSection values to tab IDs
   const sectionToTab = {
     'ai-settings': 'ai',
-    'sync-settings': 'sync',
+    'sync-settings': 'data',
     'capture-settings': 'capture',
     'appearance-settings': 'appearance',
     'security-settings': 'security',
-    'backup-settings': 'backup',
+    'backup-settings': 'data',
     'update-settings': 'updates',
   };
 
@@ -472,10 +469,8 @@ const Settings = ({ scrollToSection, onScrollComplete }) => {
         return <AppearanceSettings />;
       case 'security':
         return <SecuritySettings />;
-      case 'backup':
+      case 'data':
         return <BackupSettings />;
-      case 'sync':
-        return <SyncSettings />;
       case 'ai':
         return <AISettingsPanel />;
       case 'updates':
@@ -923,31 +918,6 @@ const testResultStyle = {
   fontSize: '0.95rem',
 };
 
-const progressSectionStyle = {
-  display: 'grid',
-  gap: '0.5rem',
-};
-
-const progressTrackStyle = {
-  width: '100%',
-  height: 10,
-  background: 'var(--ui-control-bg)',
-  borderRadius: 'var(--border-radius-md)',
-  overflow: 'hidden',
-};
-
-const progressFillStyle = {
-  height: '100%',
-  background: 'var(--color-accent)',
-  transition: 'width 0.3s ease',
-};
-
-const progressLabelStyle = {
-  fontSize: '0.85rem',
-  fontWeight: 600,
-  color: 'var(--color-text-secondary)',
-};
-
 function SettingCard({ id, title, description, action, children }) {
   return (
     <section id={id} style={cardStyle}>
@@ -1010,8 +980,6 @@ function UpdateSettings() {
   const [currentVersion, setCurrentVersion] = useState('')
   const [updateStatus, setUpdateStatus] = useState('')
   const [isChecking, setIsChecking] = useState(false)
-  const [isUpdating, setIsUpdating] = useState(false)
-  const [updateProgress, setUpdateProgress] = useState(0)
 
   useEffect(() => {
     // Get current version on component mount
@@ -1024,21 +992,6 @@ function UpdateSettings() {
       }
     })()
 
-    // Listen for update progress events
-    let unlisten1, unlisten2;
-    
-    listen('update-progress', (event) => {
-      setUpdateProgress(event.payload)
-    }).then(fn => { unlisten1 = fn }).catch(() => {})
-
-    listen('update-downloaded', () => {
-      setUpdateStatus('Update downloaded! Restarting application...')
-    }).then(fn => { unlisten2 = fn }).catch(() => {})
-
-    return () => {
-      if (unlisten1) unlisten1()
-      if (unlisten2) unlisten2()
-    }
   }, [])
 
   async function checkForUpdates() {
@@ -1049,7 +1002,7 @@ function UpdateSettings() {
       if (result && result.version) {
         setUpdateStatus(`Update available: v${result.version}`)
       } else {
-        setUpdateStatus('You are running the latest version!')
+        setUpdateStatus('You are running the latest version.')
       }
     } catch (e) {
       setUpdateStatus(`Error checking for updates: ${e}`)
@@ -1058,26 +1011,14 @@ function UpdateSettings() {
     }
   }
 
-  async function installUpdate() {
-    setIsUpdating(true)
-    setUpdateProgress(0)
-    setUpdateStatus('Downloading update...')
-    try {
-      await invoke('install_update')
-      // App will restart automatically after successful update
-    } catch (e) {
-      setUpdateStatus(`Error installing update: ${e}`)
-      setIsUpdating(false)
-    }
-  }
-
   const hasUpdate = typeof updateStatus === 'string' && updateStatus.includes('Update available')
   const releaseName = formatReleaseName(currentVersion)
+  const releasesUrl = 'https://github.com/oshtz/brainbox/releases/latest'
 
   return (
     <SettingCard
       title="App updates"
-      description="Stay on the latest release and pick up fixes the moment they land."
+      description="Check for a release, then download it manually from GitHub."
       action={
         <div style={badgeStyle} aria-live="polite">
           <span style={{ opacity: 0.65 }}>Version</span>
@@ -1090,40 +1031,19 @@ function UpdateSettings() {
           <button
             type="button"
             onClick={checkForUpdates}
-            style={{ ...buttonStyle, opacity: isChecking || isUpdating ? 0.6 : 1 }}
-            disabled={isChecking || isUpdating}
+            style={{ ...buttonStyle, opacity: isChecking ? 0.6 : 1 }}
+            disabled={isChecking}
           >
             {isChecking ? 'Checking...' : 'Check for updates'}
           </button>
 
-          {hasUpdate && (
-            <button
-              type="button"
-              onClick={installUpdate}
-              style={{
-                ...buttonStyle,
-                background: 'var(--color-accent)',
-                border: '1px solid var(--color-accent)',
-                color: '#fff',
-                opacity: isUpdating ? 0.7 : 1,
-              }}
-              disabled={isUpdating}
-            >
-              {isUpdating ? 'Installing...' : 'Install update'}
-            </button>
-          )}
+          <a href={releasesUrl} target="_blank" rel="noreferrer" style={buttonStyle}>
+            Open GitHub Releases
+          </a>
+          <button type="button" style={buttonStyle} onClick={() => navigator.clipboard.writeText(releasesUrl)}>
+            Copy release link
+          </button>
         </div>
-
-        {isUpdating && updateProgress > 0 && (
-          <div style={progressSectionStyle}>
-            <div style={progressTrackStyle}>
-              <div style={{ ...progressFillStyle, width: `${updateProgress}%` }} />
-            </div>
-            <span style={progressLabelStyle}>
-              {Math.round(updateProgress)}% downloaded
-            </span>
-          </div>
-        )}
 
         {updateStatus && (
           <div style={statusBubbleStyle(hasUpdate ? 'accent' : 'info')} role="status">

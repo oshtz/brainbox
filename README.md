@@ -12,7 +12,7 @@ Local‑first capture, organize, and search for links and notes. brainbox is a d
 > - Local-first data storage with SQLite
 > - Client-side encryption with proper key derivation
 > - React + TypeScript frontend architecture
-> - Auto-updates and protocol handlers
+> - Release checks and protocol handlers
 
 ## Features
 
@@ -24,12 +24,12 @@ Local‑first capture, organize, and search for links and notes. brainbox is a d
 - Hotkey: global capture hotkey (Windows) to pop open the capture modal.
 - Protocol: `brainbox://capture?url=...&title=...` handler (Windows) for one‑click sends.
 - Tray: system tray icon with show/hide/quit actions.
-- Auto-Updates: seamless updates via GitHub releases.
+- Update checks: detects newer published GitHub releases; installation is manual.
 - Local‑first: data stored in a local SQLite database; no cloud required.
 
 ## Tech Stack
 
-- Desktop: Tauri 2 (Rust), plugins: global_shortcut, shell, single_instance, updater.
+- Desktop: Tauri 2 (Rust), plugins: global_shortcut and single_instance.
 - Backend: Rust (`rusqlite`, `tantivy`, `reqwest`, `quick-xml`, `chacha20poly1305`).
 - Frontend: React 18, TypeScript, Vite.
 - Styling: CSS tokens, themes, and custom component library.
@@ -62,45 +62,7 @@ pnpm install
    - **Windows**: `brainbox-portable.exe`
    - **macOS**: `.dmg` file (Apple Silicon M1/M2/M3+ only)
 
-**macOS Installation Instructions**
-
-Due to Apple's security requirements, unsigned apps show security warnings. Follow these steps:
-
-1. **Download the DMG** from the releases page
-2. **Open the DMG** and drag brainbox to Applications
-
-**If you see "brainbox is damaged and can't be opened":**
-
-This is a common issue with unsigned apps. Try these solutions in order:
-
-**Method 1: Remove Quarantine (Recommended)**
-```bash
-xattr -dr com.apple.quarantine /Applications/brainbox.app
-```
-
-**Method 2: Disable Gatekeeper Temporarily**
-```bash
-sudo spctl --master-disable
-# Launch the app, then re-enable:
-sudo spctl --master-enable
-```
-
-**Method 3: Allow Specific App**
-```bash
-sudo spctl --add /Applications/brainbox.app
-sudo spctl --enable /Applications/brainbox.app
-```
-
-**Method 4: Right-click Method**
-1. Right-click the app in Applications and select "Open"
-2. Click "Open" when macOS asks for confirmation
-
-**If none of the above work:**
-- Try downloading the DMG again (it might have been corrupted)
-- Check that you're using an Apple Silicon Mac (M1/M2/M3+)
-- Report the issue on GitHub with your macOS version
-
-> **Note**: brainbox is an open source project and the macOS version is unsigned to avoid requiring Apple Developer credentials. These security warnings are normal for unsigned apps.
+The Windows portable executable is unsigned and may trigger SmartScreen or antivirus warnings. macOS DMGs are signed, notarized, and stapled. Verify the matching SHA-256 manifest before running either artifact.
 
 ### Run (desktop)
 
@@ -108,7 +70,7 @@ sudo spctl --enable /Applications/brainbox.app
 pnpm tauri dev
 ```
 
-Vite is configured for Tauri at `http://127.0.0.1:17340` with strict port matching.
+Vite is configured for Tauri at `http://127.0.0.1:17341` with strict port matching.
 
 ### Run (web only)
 
@@ -144,15 +106,9 @@ This builds the real Tauri debug binary without bundling, starts the Vite dev se
 
 Release gates and manual desktop QA are tracked in [docs/release-readiness.md](docs/release-readiness.md).
 
-### Auto-Updates
+### Update Checks
 
-brainbox includes an automatic update system that keeps your app current without manual downloads:
-
-- **Automatic Checks**: App silently checks for updates on startup
-- **Manual Control**: Check for updates anytime in Settings → App Updates
-- **Simple Artifacts**: macOS updates use the release DMG, and Windows updates use the portable EXE
-- **Cross-Platform**: Works on Windows and macOS
-- **Non-Intrusive**: You choose when to install updates
+brainbox can check the latest published GitHub release and report a newer version. Download and installation are manual until signed Tauri updater artifacts and previous-version upgrade proof are in place.
 
 ## Usage
 
@@ -216,12 +172,13 @@ brainy is an intelligent assistant built into brainbox with full tool calling ca
 - Storage: database file is created at the OS "local app data" directory as `brainbox.sqlite`.
   - Windows: `%LOCALAPPDATA%` (e.g., `C:\\Users\\<you>\\AppData\\Local`).
   - macOS: `~/Library/Application Support`.
-- Index: search index stored under `search_index/` in the same directory.
+- Search: decrypted tokens live only in RAM while the app is running; legacy on-disk search indexes are removed at startup.
 - Encryption: uses XChaCha20‑Poly1305 (32‑byte key) for item content and vault passwords.
   - **✅ Security Update (v0.0.1)**: Encryption keys are now properly derived from user passwords using PBKDF2 with 100,000 iterations and vault-specific salts.
   - Keys are derived on-demand and cached in memory during the session for performance.
   - Keys are automatically cleared when vaults are closed or the app exits.
   - New sync exports require a sync file passphrase and wrap vault names, item titles, content, summaries, covers, and device name in an encrypted envelope. Legacy plaintext sync files can still be imported for migration.
+  - Manual `.brainbox` backups also require a passphrase and are encrypted before leaving the app; legacy JSON exports remain importable for migration.
   - Standalone capture files are not exported by encrypted sync because they sit outside the sync JSON envelope.
   - **⚠️ Educational Purpose**: This implementation demonstrates proper cryptographic practices but is intended for learning. For production use with sensitive data, additional security measures would be required:
     - Hardware-backed key storage (TPM, Secure Enclave)
@@ -275,17 +232,17 @@ brainbox/
 
 ### Branching Strategy
 
-- **`main` branch**: Production-ready code that triggers automatic releases
+- **`main` branch**: Validated integration branch; it does not publish releases
 - **`dev` branch**: Active development (default working branch)
 
 ### Workflow
 
 1. Work on features in the `dev` branch
 2. Test thoroughly before merging to `main`
-3. Merge `dev` → `main` triggers automatic CI/CD pipeline
-4. GitHub Actions builds and releases for all platforms
+3. Merge `dev` → `main` and confirm CI passes
+4. Create a matching `vMAJOR.MINOR.PATCH` tag to run the protected release workflow
 
-GitHub Actions can be configured to build and release for all platforms automatically.
+The release workflow validates first, packages an unsigned EVB portable executable and a notarized DMG, verifies checksums, then publishes a complete draft.
 
 ## Known Issues
 

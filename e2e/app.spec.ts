@@ -163,51 +163,31 @@ test.describe('brainbox app shell', () => {
     await expect(page.getByTestId('app')).toBeVisible();
   });
 
-  test('loads the empty vault workspace without backend failure noise', async ({ page }) => {
+  test('opens the empty Library with a clear Inbox path', async ({ page }) => {
     await expect(page.getByTestId('app-navigation')).toBeVisible();
     await expect(page.getByTestId('main-content')).toBeVisible();
-    await expect(page.getByTestId('vaults-section')).toBeVisible();
-    await expect(page.getByTestId('vault-empty-state')).toBeVisible();
-    await expect(page.getByText('Create your first vault')).toBeVisible();
-    await expectEmptyStateInContentFrame(page, 'vault-empty-state');
+    await expect(page.getByTestId('library-section')).toBeVisible();
+    await expect(page.getByTestId('library-empty-state')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Create your Inbox' })).toBeVisible();
+    await expectEmptyStateInContentFrame(page, 'library-empty-state');
     await expect(page.getByText('Failed to fetch vaults.')).toHaveCount(0);
     await expect(page.getByText('Something went wrong')).toHaveCount(0);
   });
 
-  test('navigates to search and exposes the search input', async ({ page }) => {
-    await page.getByTestId('nav-search').click();
-    await expect(page.getByTestId('search-section')).toBeVisible();
-    await expect(page.getByTestId('search-idle-state')).toBeVisible();
-    await expectEmptyStateInContentFrame(page, 'search-idle-state');
-    await expect(page.getByTestId('search-input')).toBeVisible();
-    await expect(page.getByTestId('search-input')).toHaveAttribute(
-      'placeholder',
-      'Search your knowledge vaults...'
-    );
+  test('uses one Library navigation surface', async ({ page }) => {
+    await expect(page.getByTestId('nav-library')).toHaveAttribute('aria-current', 'page');
+    await expect(page.getByTestId('nav-search')).toHaveCount(0);
+    await expect(page.getByTestId('nav-vaults')).toHaveCount(0);
+    await expect(page.getByTestId('library-search-input')).toBeVisible();
+    await expect(page.getByText('Ctrl K')).toBeVisible();
   });
 
-  test('navigates to library and centers the empty state', async ({ page }) => {
-    await page.getByTestId('nav-library').click();
-    await expect(page.getByTestId('library-section')).toBeVisible();
-    await expect(page.getByTestId('library-empty-state')).toBeVisible();
-    await expect(page.getByText('No items match the current filters.')).toBeVisible();
-    await expectEmptyStateInContentFrame(page, 'library-empty-state');
-  });
-
-  test('opens and closes the quick capture modal', async ({ page }) => {
+  test('routes first capture through Inbox creation', async ({ page }) => {
     await page.getByTestId('floating-capture-button').click();
-    await expect(page.getByTestId('capture-modal')).toBeVisible();
-    await expect(page.getByTestId('capture-title-input')).toBeVisible();
-    await expect(page.getByTestId('capture-content-input')).toBeVisible();
-    await expect(page.getByTestId('capture-vault-select')).toBeVisible();
-
+    await expect(page.getByTestId('create-vault-modal')).toBeVisible();
+    await expect(page.getByTestId('vault-name-input')).toHaveValue('Inbox');
     await page.keyboard.press('Escape');
-    await expect(page.getByTestId('capture-modal')).toHaveCount(0);
-
-    await page.getByTestId('floating-capture-button').click();
-    await expect(page.getByTestId('capture-modal')).toBeVisible();
-    await page.getByTestId('capture-modal').getByRole('button', { name: 'Close' }).click();
-    await expect(page.getByTestId('capture-modal')).toHaveCount(0);
+    await expect(page.getByTestId('create-vault-modal')).toHaveCount(0);
   });
 
   test('opens create vault modal and validates required name locally', async ({ page }) => {
@@ -240,15 +220,8 @@ test.describe('brainbox populated workspace fixture', () => {
     await expect(page.getByTestId('app')).toBeVisible();
   });
 
-  test('renders populated vaults and opens a note item without layout clipping', async ({ page }) => {
-    await expect(page.getByTestId('vault-card')).toHaveCount(3);
-    await expect(page.getByRole('button', { name: /Open vault Research Intake/ })).toBeVisible();
-    await expect(page.getByRole('button', { name: /Open vault Product Roadmap/ })).toBeVisible();
-
-    await page.getByRole('button', { name: /Open vault Research Intake/ }).click();
-
-    await expect(page.getByRole('button', { name: 'Research Intake - URLs and clipped source notes' })).toBeVisible();
-    await expect(page.getByRole('button', { name: /^Open item / })).toHaveCount(3);
+  test('renders the combined Library and opens a note item', async ({ page }) => {
+    await expect(page.getByRole('button', { name: /^Open item / })).toHaveCount(6);
     await expect(page.getByRole('button', { name: /Open item Tauri smoke path checklist/ })).toBeVisible();
     await expect(page.getByRole('button', { name: /Open item Release readiness reference/ })).toBeVisible();
 
@@ -259,20 +232,34 @@ test.describe('brainbox populated workspace fixture', () => {
     await expect(page.getByText('Desktop smoke path tracks launch')).toBeVisible();
   });
 
-  test('searches populated fixture data and opens the result from its source vault', async ({ page }) => {
-    await page.getByTestId('nav-search').click();
-    await page.getByTestId('search-input').fill('compact');
-    await page.getByTestId('search-input').press('Enter');
-
-    await expect(page.getByTestId('search-results')).toBeVisible();
-    await expect(page.getByText('Results for "compact"')).toBeVisible();
-    await expect(page.getByTestId('masonry-card')).toHaveCount(1);
+  test('searches and scopes populated data inside the Library', async ({ page }) => {
+    await page.getByTestId('library-search-input').fill('compact');
+    await expect(page.getByTestId('masonry-card')).toHaveCount(2);
     await expect(page.getByText('Compact card density QA')).toBeVisible();
 
-    await page.getByRole('button', { name: /Open item Compact card density QA/ }).click();
+    await page.getByTestId('library-search-input').fill('');
+    await page.getByLabel('Filter by vault').selectOption('1');
+    await expect(page.getByTestId('masonry-card')).toHaveCount(3);
+  });
 
-    await expect(page.getByTestId('item-panel')).toBeVisible();
-    await expect(page.getByTestId('item-panel').locator('input').first()).toHaveValue(/Compact card density QA/);
-    await expect(page.getByText('Compact card density QA checks wrapping')).toBeVisible();
+  test('filters notes and links without heuristic categories', async ({ page }) => {
+    await page.getByRole('button', { name: 'Links' }).click();
+    await expect(page.getByTestId('masonry-card')).toHaveCount(1);
+    await page.getByRole('button', { name: 'Notes' }).click();
+    await expect(page.getByTestId('masonry-card')).toHaveCount(5);
+    await expect(page.getByRole('button', { name: 'Quotes' })).toHaveCount(0);
+  });
+
+  test('captures content first and keeps overrides available', async ({ page }) => {
+    await page.getByTestId('floating-capture-button').click();
+    await expect(page.getByTestId('capture-modal')).toHaveAttribute('aria-modal', 'true');
+    await expect(page.getByTestId('capture-content-input')).toBeFocused();
+    await page.getByTestId('capture-content-input').fill('A title derived from the first line\nMore detail');
+    await page.getByText('Title and destination').click();
+    await expect(page.getByTestId('capture-title-input')).toHaveAttribute('placeholder', 'A title derived from the first line');
+    await expect(page.getByTestId('capture-vault-select')).not.toHaveValue('');
+
+    await page.keyboard.press('Escape');
+    await expect(page.getByTestId('capture-modal')).toHaveCount(0);
   });
 });

@@ -5,6 +5,8 @@ interface Props {
   onClose: () => void;
   onSave: (data: { title: string; content: string; vaultId: string }) => void;
   vaults?: VaultOpt[];
+  initialVaultId?: string;
+  initialVaultId?: string;
   initialTitle?: string;
   initialContent?: string;
 }

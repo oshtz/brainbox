@@ -1,1472 +1,283 @@
-// Import brainbox components
-import Button from './components/Button/Button';
+import { useEffect, useState } from 'react';
+import { emit, listen } from '@tauri-apps/api/event';
+import { invoke } from '@tauri-apps/api/core';
 import Sidebar from './components/Sidebar/Sidebar';
-import VaultCard from './components/VaultCard/VaultCard';
 import CaptureModal from './components/CaptureModal/CaptureModal';
-import SearchBar from './components/SearchBar/SearchBar';
 import Settings from './components/Settings/Settings';
 import CreateVaultModal from './components/CreateVaultModal/CreateVaultModal';
 import BrainyChat from './components/BrainyChat';
-import { useState, useEffect } from 'react';
-import { listen } from '@tauri-apps/api/event';
-import { emit } from '@tauri-apps/api/event';
-import { invoke } from '@tauri-apps/api/core';
-import {
-  ChevronDownIcon,
-  EllipsisHorizontalIcon,
-  MagnifyingGlassIcon,
-  PlusIcon,
-  SparklesIcon,
-  Squares2X2Icon,
-} from '@heroicons/react/24/outline';
-import Masonry from './components/Masonry/Masonry.tsx';
-import { meshGradientForId, generateMeshGradientDataURL } from './utils/meshGradient';
-import ItemPanel from './components/ItemPanel/ItemPanel';
-import { getYouTubeId, youtubeThumbnailUrl } from './utils/urlPreview';
-import { deriveKeyFromPassword, keyToArray } from './utils/crypto';
-import { aiService } from './utils/ai/service';
-import { isTauriRuntime } from './utils/tauriRuntime';
-import {
-  getE2EItem,
-  getE2EMetadata,
-  listE2EItems,
-  listE2EVaults,
-  searchE2EItems,
-} from './utils/e2eFixtures';
-import {
-  Vault,
-  VaultItem,
-  CaptureData,
-  ProtocolCapture,
-  SearchResult,
-  AppView,
-  BackendVault,
-  BackendVaultItem,
-  BackendUrlMetadata,
-  BackendSearchResult,
-  ItemMetadata,
-  CaptureFromProtocolPayload
-} from './types';
-
-import styles from './App.module.css';
 import Library from './components/Library/Library';
-import Connections from './components/Connections/Connections';
-import ChangeCoverDialog from './components/ChangeCoverDialog/ChangeCoverDialog.jsx';
-import { ChangePasswordDialog } from './components/ChangePasswordDialog';
-import SyncAvailableDialog from './components/SyncAvailableDialog/SyncAvailableDialog';
 import { useVaultPassword } from './contexts/VaultPasswordContext';
 import { useToast } from './contexts/ToastContext';
-import { useConfirm } from './contexts/ConfirmContext';
-import { usePrompt } from './contexts/PromptContext';
-import { useSyncManager } from './utils/useSyncManager';
+import { aiService } from './utils/ai/service';
+import { isTauriRuntime } from './utils/tauriRuntime';
+import { listE2EVaults } from './utils/e2eFixtures';
+import {
+  BackendVault,
+  BackendVaultItem,
+  CaptureData,
+  CaptureFromProtocolPayload,
+  ProtocolCapture,
+  Vault,
+} from './types';
+import styles from './App.module.css';
 
-const vaultFilterOptions = [
-  { id: 'all', label: 'All' },
-  { id: 'notes', label: 'Notes' },
-  { id: 'images', label: 'Images' },
-  { id: 'links', label: 'Links' },
-  { id: 'quotes', label: 'Quotes' },
-  { id: 'books', label: 'Books' },
-  { id: 'places', label: 'Places' },
-  { id: 'tasks', label: 'Tasks' },
-];
+type AppView = 'library' | 'brainy' | 'settings';
 
-const classifyVaultItem = (item: VaultItem): string => {
-  const text = `${item.title || ''} ${item.content || ''}`.toLowerCase();
-  if (item.metadata?.item_type === 'url') return 'links';
-  if (/\[[ x]\]|todo|task|done|checklist/.test(text)) return 'tasks';
-  if (/quote|“|”|author|said|—|--/.test(text)) return 'quotes';
-  if (/book|novel|read|reading|author|chapter/.test(text)) return 'books';
-  if (/place|visit|travel|tokyo|japan|italy|city|country|restaurant|hotel/.test(text)) return 'places';
-  if (item.image) return 'images';
-  return 'notes';
-};
+const transformVault = (vault: BackendVault): Vault => ({
+  id: String(vault.id),
+  title: vault.name || '',
+  has_password: vault.has_password,
+  created_at: vault.created_at,
+  updated_at: vault.updated_at,
+});
 
-const getErrorMessage = (err: unknown): string => {
-  if (typeof err === 'string') return err;
-  if (err instanceof Error) return err.message;
-  try { return JSON.stringify(err); } catch { return String(err); }
-};
-
-// Transform backend vault item to frontend VaultItem
-const transformBackendItem = (item: BackendVaultItem): VaultItem => {
-  const rawContent = typeof item.content === 'string' ? item.content : '';
-  const isUrl = /^https?:\/\/[^\s]+$/.test(rawContent.trim());
-  const meta: ItemMetadata = {
-    item_type: isUrl ? 'url' : 'note',
-    url: isUrl ? rawContent : undefined,
-    created_at: item.created_at,
-    updated_at: item.updated_at,
-    ...(item.metadata as Partial<ItemMetadata> || {}),
-  };
-
-  let cover = item.image ?? undefined;
-  if (!cover && isUrl) {
-    const yt = getYouTubeId(rawContent);
-    if (yt) {
-      cover = youtubeThumbnailUrl(yt, 'hq');
-      meta.provider = 'youtube';
-    }
-  }
-
-  return {
-    id: item.id?.toString() || '',
-    vault_id: item.vault_id?.toString(),
-    title: item.title,
-    content: rawContent,
-    createdAt: new Date(item.created_at),
-    updatedAt: new Date(item.updated_at),
-    image: cover,
-    summary: item.summary ?? undefined,
-    height: 260,
-    metadata: meta,
-  };
-};
-
-const transformBackendVault = (vault: BackendVault): Vault => {
-  const idStr = vault.id?.toString() || '';
-  return {
-    id: idStr,
-    title: vault.name || '',
-    backgroundImage: vault.cover_image || meshGradientForId(idStr, 640, 420),
-    has_password: vault.has_password,
-    created_at: vault.created_at,
-    updated_at: vault.updated_at,
-  };
-};
-
-const transformFixtureItem = (item: BackendVaultItem): VaultItem => {
-  const transformed = transformBackendItem(item);
-  const metadata = getE2EMetadata(transformed.content);
-
-  if (!metadata) return transformed;
-
-  return {
-    ...transformed,
-    metadata: {
-      ...transformed.metadata,
-      preview_title: metadata.title,
-      preview_description: metadata.description,
-      preview_image: metadata.image,
-    },
-  };
-};
+const errorMessage = (error: unknown) => error instanceof Error ? error.message : String(error);
 
 function App() {
-  // Vault password management
-  const { getVaultKey, setVaultPassword, clearKey } = useVaultPassword();
-  const { showSuccess, showError, showInfo, showWarning } = useToast();
-  const confirmDialog = useConfirm();
-  const promptDialog = usePrompt();
-
-  // Sync manager for startup check and sync on close
-  const { pendingSync, dismissPendingSync } = useSyncManager({
-    onSyncError: (error) => {
-      console.error('Sync check error:', error);
-    },
-    showToast: (type, message) => {
-      if (type === 'success') showSuccess(message);
-      else if (type === 'error') showError(message);
-      else if (type === 'warning') showWarning(message);
-      else showInfo(message);
-    },
-  });
-
-  // State for sync import dialog
-  const [isSyncImporting, setIsSyncImporting] = useState(false);
-
-  // State for the capture modal
-  const [isCaptureModalOpen, setIsCaptureModalOpen] = useState<boolean>(false);
-  // State for the create vault modal
-  const [isCreateVaultModalOpen, setIsCreateVaultModalOpen] = useState<boolean>(false);
-  // Current view state (vaults or search)
-  const [currentView, setCurrentView] = useState<AppView>('vaults');
-  // Search query state
-  const [searchQuery, setSearchQuery] = useState<string>('');
-  const [isSearching, setIsSearching] = useState<boolean>(false);
-  const [pendingOpenItemId, setPendingOpenItemId] = useState<string | null>(null);
-  const [searchSelectedItem, setSearchSelectedItem] = useState<VaultItem | null>(null);
-  const [searchCards, setSearchCards] = useState<SearchResult[]>([]);
-  // Vaults state
+  const { getVaultKey, setVaultPassword } = useVaultPassword();
+  const { showError, showSuccess } = useToast();
+  const [currentView, setCurrentView] = useState<AppView>('library');
   const [vaults, setVaults] = useState<Vault[]>([]);
-  const [isLoadingVaults, setIsLoadingVaults] = useState<boolean>(false);
-  // Add selectedVaultId state
-  const [selectedVaultId, setSelectedVaultId] = useState<string | null>(null);
-  const selectedVault = vaults.find(v => v.id === selectedVaultId);
-  const isVaultWorkspace = currentView === 'vaults' && Boolean(selectedVaultId);
-  const [vaultSearchQuery, setVaultSearchQuery] = useState<string>('');
-  const [vaultFilter, setVaultFilter] = useState<string>('all');
-
-  // Add state for vault items and selected item for slide-in panel
-  const [vaultItems, setVaultItems] = useState<VaultItem[]>([]);
-  const [isLoadingVaultItems, setIsLoadingVaultItems] = useState<boolean>(false);
-  const [selectedItem, setSelectedItem] = useState<VaultItem | null>(null);
-  // When item panel is generating summary, lock selecting other items
-  const [isItemBusy, setIsItemBusy] = useState<boolean>(false);
-
-  // Add state for protocol capture
+  const [isLoadingVaults, setIsLoadingVaults] = useState(true);
+  const [selectedVaultId, setSelectedVaultId] = useState('all');
+  const [isCaptureOpen, setIsCaptureOpen] = useState(false);
+  const [isCreateVaultOpen, setIsCreateVaultOpen] = useState(false);
+  const [captureAfterVaultCreate, setCaptureAfterVaultCreate] = useState(false);
   const [protocolCapture, setProtocolCapture] = useState<ProtocolCapture | null>(null);
-  // State for change cover dialog
-  const [coverVault, setCoverVault] = useState<{ id: string; title: string } | null>(null);
-  // State for change password dialog
-  const [changePasswordVault, setChangePasswordVault] = useState<{ id: number; name: string; has_password?: boolean } | null>(null);
-  // State for settings scroll target (e.g., 'ai-settings')
-  const [settingsScrollTarget, setSettingsScrollTarget] = useState<string | null>(null);
-  // State for brainy chat panel
-  const [isBrainyChatOpen, setIsBrainyChatOpen] = useState<boolean>(false);
+  const [settingsTarget, setSettingsTarget] = useState<string | null>(null);
+  const [isBrainyOpen, setIsBrainyOpen] = useState(false);
   const [brainyMode, setBrainyMode] = useState<'sidebar' | 'full'>(aiService.getBrainyMode());
-  // State for conflict filter in vault view
-  const [showConflictsOnly, setShowConflictsOnly] = useState<boolean>(false);
-  const skeletonCards = Array.from({ length: 8 }, (_, i) => i);
-  const isDetailOpen = Boolean(selectedItem || searchSelectedItem);
+  const [libraryRefreshToken, setLibraryRefreshToken] = useState(0);
 
-  // Compute conflict count and filtered items
-  const conflictItems = vaultItems.filter(item => item.title?.includes('[Conflict]'));
-  const hasConflicts = conflictItems.length > 0;
-  const vaultSearchTerm = vaultSearchQuery.trim().toLowerCase();
-  const baseVaultItems = showConflictsOnly ? conflictItems : vaultItems;
-  const displayedVaultItems = baseVaultItems.filter((item) => {
-    const matchesFilter = vaultFilter === 'all' || classifyVaultItem(item) === vaultFilter;
-    const searchable = `${item.title || ''} ${item.content || ''} ${item.summary || ''} ${item.metadata?.url || ''}`.toLowerCase();
-    const matchesSearch = !vaultSearchTerm || searchable.includes(vaultSearchTerm);
-    return matchesFilter && matchesSearch;
-  });
-  const currentTitle = isVaultWorkspace
-    ? (selectedVault?.title || 'Knowledge')
-    : currentView === 'vaults' ? 'Knowledge'
-      : currentView === 'search' ? 'Explore Knowledge'
-        : currentView === 'library' ? 'Library'
-          : currentView === 'connections' ? 'Connections'
-            : 'Settings';
-
-  useEffect(() => {
-    document.documentElement.toggleAttribute('data-vault-workspace', isVaultWorkspace);
-    return () => {
-      document.documentElement.removeAttribute('data-vault-workspace');
-    };
-  }, [isVaultWorkspace]);
-
-  useEffect(() => {
-    setVaultSearchQuery('');
-    setVaultFilter('all');
-  }, [selectedVaultId]);
-
-  // Change cover handlers
-  const handleCoverFromUrl = async (vaultId: string, url: string) => {
-    try {
-      await invoke('update_vault_cover', { vaultId: Number(vaultId), coverImage: url });
-      await fetchVaults();
-      try { emit('vaults-changed'); } catch {}
-    } catch (e) {
-      console.error(e);
-      showError('Failed to update cover image.');
-    }
-  };
-  const handleCoverMesh = async (vaultId: string) => {
-    try {
-      const dataUrl = generateMeshGradientDataURL({ seed: `${vaultId}-${Date.now()}`, width: 640, height: 420 });
-      await invoke('update_vault_cover', { vaultId: Number(vaultId), coverImage: dataUrl });
-      await fetchVaults();
-      try { emit('vaults-changed'); } catch {}
-    } catch (e) {
-      console.error(e);
-      showError('Failed to update cover image.');
-    }
-  };
-  const handleCoverFromFile = async (vaultId: string, dataUrl: string) => {
-    try {
-      await invoke('update_vault_cover', { vaultId: Number(vaultId), coverImage: dataUrl });
-      await fetchVaults();
-      try { emit('vaults-changed'); } catch {}
-    } catch (e) {
-      console.error(e);
-      showError('Failed to update cover image.');
-    }
-  };
-  const handleCoverClear = async (vaultId: string) => {
-    try {
-      await invoke('update_vault_cover', { vaultId: Number(vaultId), coverImage: null });
-      await fetchVaults();
-      try { emit('vaults-changed'); } catch {}
-    } catch (e) {
-      console.error(e);
-      showError('Failed to clear cover image.');
-    }
-  };
-
-  // Fetch vaults from backend
   const fetchVaults = async () => {
     setIsLoadingVaults(true);
-    if (!isTauriRuntime()) {
-      setVaults(listE2EVaults().map(transformBackendVault));
-      setIsLoadingVaults(false);
-      return;
-    }
-
     try {
-      const result = await invoke<BackendVault[]>('list_vaults');
-      // Map backend vaults to UI vault objects
-      setVaults(result.map(transformBackendVault));
-    } catch (err) {
-      console.error('Failed to fetch vaults:', err);
+      const result = isTauriRuntime()
+        ? await invoke<BackendVault[]>('list_vaults')
+        : listE2EVaults();
+      const nextVaults = result.map(transformVault);
+      setVaults(nextVaults);
+      return nextVaults;
+    } catch (error) {
+      console.error('Failed to fetch vaults:', error);
       showError('Failed to fetch vaults.');
+      return [];
     } finally {
       setIsLoadingVaults(false);
     }
   };
 
-  // (file picker helper removed; handled by ChangeCoverDialog component)
+  const openCapture = (capture: ProtocolCapture | null = null) => {
+    setProtocolCapture(capture);
+    if (vaults.length === 0) {
+      setCaptureAfterVaultCreate(true);
+      setIsCreateVaultOpen(true);
+      return;
+    }
+    setIsCaptureOpen(true);
+  };
 
-  // (legacy change cover flow removed)
-
-  // Fetch vault items when a vault is selected
-  useEffect(() => {
-    if (!selectedVaultId) {
-      setVaultItems([]);
+  const handleCaptureSave = async (capture: CaptureData) => {
+    if (!capture.vaultId) {
+      showError('Choose a vault before saving.');
       return;
     }
 
-    // Abort flag to prevent stale effect runs from updating state (React 18 StrictMode)
-    let cancelled = false;
-
-    setIsLoadingVaultItems(true);
-
-    if (!isTauriRuntime()) {
-      const fixtureItems = listE2EItems(selectedVaultId);
-      setVaultItems(fixtureItems.map(transformFixtureItem));
-
-      if (pendingOpenItemId) {
-        const found = fixtureItems.find((item) => String(item.id) === String(pendingOpenItemId));
-        if (found) {
-          setSelectedItem(transformFixtureItem(found));
-          setPendingOpenItemId(null);
-        }
-      }
-
-      setIsLoadingVaultItems(false);
-      return;
-    }
-
-    // Get vault info for password handling
-    const vault = vaults.find(v => v.id === selectedVaultId);
-    const vaultName = vault?.title;
-    const hasPassword = vault?.has_password;
-
-    getVaultKey(selectedVaultId, vaultName, hasPassword)
-      .then(key => invoke<BackendVaultItem[]>('list_vault_items', { vaultId: Number(selectedVaultId), key }))
-      .then((result) => {
-        if (cancelled) return;
-        setVaultItems(result.map(transformBackendItem));
-
-        // Prefetch URL metadata for non-YouTube links to enrich previews
-        const urlItems = result.filter((item) => {
-          const rawContent = typeof item.content === 'string' ? item.content : '';
-          const isUrl = /^https?:\/\/[^\s]+$/.test(rawContent.trim());
-          const yt = isUrl ? getYouTubeId(rawContent) : null;
-          return isUrl && !yt;
-        });
-        urlItems.forEach(async (it) => {
-          if (cancelled) return;
-          const url = typeof it.content === 'string' ? it.content : '';
-          try {
-            const meta = await invoke<BackendUrlMetadata>('fetch_url_metadata', { url });
-            if (cancelled) return;
-            setVaultItems(prev => prev.map(p => {
-              if (String(p.id) !== String(it.id)) return p;
-              return {
-                ...p,
-                metadata: {
-                  ...p.metadata,
-                  preview_title: meta?.title,
-                  preview_description: meta?.description,
-                  preview_image: meta?.image,
-                },
-              };
-            }));
-          } catch (_) {}
-        });
-
-        // If we navigated here to open a specific item, select it now
-        if (pendingOpenItemId) {
-          const found = result.find((r) => String(r.id) === String(pendingOpenItemId));
-          if (found) {
-            setSelectedItem(transformBackendItem(found));
-            setPendingOpenItemId(null);
-          }
-        }
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        const message = getErrorMessage(err);
-        if (/password is required/i.test(message)) {
-          setVaultItems([]);
-          setSelectedVaultId(null);
-          return;
-        }
-        if (/invalid password/i.test(message) || /decryption failed/i.test(message)) {
-          if (selectedVaultId) {
-            clearKey(selectedVaultId);
-          }
-          setVaultItems([]);
-          setSelectedVaultId(null);
-          showError(`Incorrect password for "${vaultName || 'this vault'}".`);
-          return;
-        }
-        setVaultItems([]);
-        console.error('Failed to fetch vault items:', err);
-      })
-      .finally(() => {
-        if (!cancelled) setIsLoadingVaultItems(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [selectedVaultId, vaults, getVaultKey, clearKey, showError]);
-
-  // Function to handle saving captured content
-  const handleCaptureSave = async (captureData: CaptureData) => {
     try {
-      // Check content field for URLs
-      const isUrl = typeof captureData.content === 'string' &&
-                   /^https?:\/\/[^\s]+$/.test(captureData.content.trim());
-
-      // Get vault info for password handling
-      const vault = vaults.find(v => v.id === captureData.vaultId);
-      const key = await getVaultKey(captureData.vaultId, vault?.title, vault?.has_password);
-
-      const result = await invoke<BackendVaultItem>('add_vault_item', {
-        vaultId: Number(captureData.vaultId),
-        title: captureData.title,
-        content: captureData.content,
-        metadata: isUrl ? {
-          item_type: 'url',
-          url: captureData.content
-        } : {},
+      const vault = vaults.find((candidate) => candidate.id === capture.vaultId);
+      const key = await getVaultKey(capture.vaultId, vault?.title, vault?.has_password);
+      await invoke<BackendVaultItem>('add_vault_item', {
+        vaultId: Number(capture.vaultId),
+        title: capture.title,
+        content: capture.content,
+        metadata: /^https?:\/\/[^\s]+$/.test(capture.content.trim())
+          ? { item_type: 'url', url: capture.content.trim() }
+          : {},
         key,
       });
-
-      // Index for search
-      import('./utils/searchIndexer').then(({ addToIndex }) => {
-        addToIndex({
-          id: result.id?.toString() || undefined,
-          title: result.title,
-          content: captureData.content,
-          itemType: isUrl ? 'url' : 'note',
-          createdAt: new Date(result.created_at),
-          updatedAt: new Date(result.updated_at),
-          path: `vault/${captureData.vaultId}/item/${result.id}`,
-          tags: [],
-        });
-      });
-
-      // Refresh vault items if we're viewing the target vault
-      if (selectedVaultId === captureData.vaultId) {
-        setVaultItems([]);
-        setIsLoadingVaultItems(true);
-        invoke<BackendVaultItem[]>('list_vault_items', { vaultId: Number(selectedVaultId), key })
-          .then((items) => {
-            setVaultItems(items.map(transformBackendItem));
-
-            // Prefetch metadata for non-YouTube URLs
-            const urlItems = items.filter((item) => {
-              const rawContent = typeof item.content === 'string' ? item.content : '';
-              const isUrlContent = /^https?:\/\/[^\s]+$/.test(rawContent.trim());
-              const yt = isUrlContent ? getYouTubeId(rawContent) : null;
-              return isUrlContent && !yt;
-            });
-            urlItems.forEach(async (it) => {
-              const url = typeof it.content === 'string' ? it.content : '';
-              try {
-                const meta = await invoke<BackendUrlMetadata>('fetch_url_metadata', { url });
-                setVaultItems(prev => prev.map(p => {
-                  if (String(p.id) !== String(it.id)) return p;
-                  return {
-                    ...p,
-                    metadata: {
-                      ...p.metadata,
-                      preview_title: meta?.title,
-                      preview_description: meta?.description,
-                      preview_image: meta?.image,
-                    },
-                  };
-                }));
-              } catch (_) {}
-            });
-          })
-          .finally(() => setIsLoadingVaultItems(false));
-      }
-      try { emit('items-changed', { type: 'create', vaultId: String(captureData.vaultId) }); } catch {}
-      showSuccess(`Saved "${captureData.title}" to vault.`);
-    } catch (err) {
-      console.error('Failed to save item:', err);
+      await emit('items-changed', { type: 'create', vaultId: capture.vaultId });
+      setLibraryRefreshToken((token) => token + 1);
+      showSuccess(`Saved "${capture.title}".`);
+    } catch (error) {
+      console.error('Failed to save item:', error);
       showError('Failed to save item.');
     }
   };
 
-  // Function to handle search
-  const handleSearch = (query: string) => {
-    setSearchQuery(query);
-    setIsSearching(true);
+  const handleCreateVault = async ({
+    name,
+    password,
+    has_password,
+  }: {
+    name: string;
+    password: string;
+    has_password?: boolean;
+  }) => {
+    try {
+      const result = await invoke<BackendVault>('create_vault', {
+        name,
+        password,
+        hasPassword: has_password,
+      });
+      const vaultId = String(result.id);
+      await setVaultPassword(vaultId, password || '');
+      const nextVaults = await fetchVaults();
+      await emit('vaults-changed');
 
-    if (!isTauriRuntime()) {
-      setSearchSelectedItem(null);
-      const cards = searchE2EItems(query, 50)
-        .map((result) => {
-          const item = getE2EItem(
-            result.id,
-            result.vault_id ? [String(result.vault_id)] : undefined
-          );
-
-          if (!item) return null;
-
-          return {
-            ...transformFixtureItem(item),
-            vault_id: String(item.vault_id),
-            height: 260,
-          };
-        })
-        .filter((card): card is SearchResult => card !== null);
-
-      setSearchCards(cards);
-      setIsSearching(false);
-      return;
-    }
-
-    invoke<BackendSearchResult[]>('search', { query, limit: 50 })
-      .then((results) => {
-        setSearchSelectedItem(null);
-        setSearchCards([]);
-        // Build cards for results by fetching full items
-        return Promise.all((results || []).map(async (r) => {
-          try {
-            const candidateVaults = r.vault_id
-              ? vaults.filter(v => v.id === String(r.vault_id))
-              : vaults;
-
-            let it: BackendVaultItem | null = null;
-            for (const vault of candidateVaults) {
-              try {
-                const key = await getVaultKey(vault.id, vault.title, vault.has_password);
-                it = await invoke<BackendVaultItem>('get_vault_item', { itemId: Number(r.id), key });
-                break;
-              } catch {
-                // Old index entries may not know their vault; try the next vault.
-              }
-            }
-
-            if (!it) return null;
-            const transformed = transformBackendItem(it);
-            const card: SearchResult = {
-              ...transformed,
-              vault_id: String(it.vault_id),
-              height: 260,
-            };
-            // Enrich metadata for non-YouTube URLs
-            const rawContent = typeof it.content === 'string' ? it.content : '';
-            const isUrl = /^https?:\/\/[^\s]+$/.test(rawContent.trim());
-            const yt = isUrl ? getYouTubeId(rawContent) : null;
-            if (isUrl && !yt) {
-              try {
-                const m = await invoke<BackendUrlMetadata>('fetch_url_metadata', { url: rawContent });
-                card.metadata.preview_title = m?.title;
-                card.metadata.preview_description = m?.description;
-                card.metadata.preview_image = m?.image;
-              } catch {}
-            }
-            return card;
-          } catch {
-            return null;
-          }
-        })).then((cards) => {
-          setSearchCards(cards.filter((c): c is SearchResult => c !== null));
-        });
-      })
-      .catch((err) => {
-        console.error('Search failed', err);
-        setSearchCards([]);
-      })
-      .finally(() => setIsSearching(false));
-  };
-
-  // Handle navigation between views
-  const handleNavigation = (view: AppView | undefined) => {
-    const nextView = view ?? 'vaults';
-
-    setCurrentView(nextView);
-    setIsBrainyChatOpen(false);
-    setSelectedItem(null);
-    setSearchSelectedItem(null);
-    setIsItemBusy(false);
-
-    // Reset search when navigating to vaults
-    if (nextView === 'vaults') {
-      setSearchQuery('');
-      setSelectedVaultId(null);
-      setShowConflictsOnly(false);
+      if (captureAfterVaultCreate) {
+        setCaptureAfterVaultCreate(false);
+        setSelectedVaultId(vaultId);
+        if (nextVaults.some((vault) => vault.id === vaultId)) setIsCaptureOpen(true);
+      }
+    } catch (error) {
+      showError(`Failed to create vault: ${errorMessage(error)}`);
     }
   };
 
-  const handleBrainyNavigation = () => {
+  const navigate = (view: AppView) => {
+    setCurrentView(view);
+    if (view !== 'brainy') setIsBrainyOpen(false);
+  };
+
+  const openBrainy = () => {
     if (brainyMode === 'full') {
-      handleNavigation('connections');
+      setCurrentView('brainy');
       return;
     }
-    setSelectedItem(null);
-    setSearchSelectedItem(null);
-    setIsItemBusy(false);
-    setIsBrainyChatOpen(v => !v);
+    setIsBrainyOpen((open) => !open);
   };
-
-  useEffect(() => {
-    if (!isTauriRuntime()) return;
-
-    // Listen for the global shortcut event from backend
-    let unlisten: (() => void) | undefined;
-    listen('capture-hotkey-pressed', () => {
-      setIsCaptureModalOpen(true);
-    }).then((fn: () => void) => {
-      unlisten = fn;
-    });
-    return () => {
-      if (unlisten) unlisten();
-    };
-  }, []);
 
   useEffect(() => {
     fetchVaults();
-    if (!isTauriRuntime()) return;
-    
-    // Check for updates on app startup (silent check)
-    const checkForUpdatesOnStartup = async () => {
-      try {
-        const result = await invoke('check_for_updates');
-        if (result) {
-          // Update available - users can check manually in settings
-        }
-      } catch (e) {
-        // Silent failure - don't bother the user on startup
-      }
-    };
-    
-    // Check for updates after a short delay to not block app startup
-    setTimeout(checkForUpdatesOnStartup, 3000);
   }, []);
 
   useEffect(() => {
     const handler = (event: Event) => {
-      const detail = (event as CustomEvent).detail as 'sidebar' | 'full' | undefined;
-      setBrainyMode(detail || aiService.getBrainyMode());
+      const mode = (event as CustomEvent).detail as 'sidebar' | 'full' | undefined;
+      setBrainyMode(mode || aiService.getBrainyMode());
     };
     window.addEventListener('brainy-mode-changed', handler);
     return () => window.removeEventListener('brainy-mode-changed', handler);
   }, []);
 
   useEffect(() => {
-    if (brainyMode === 'full' && isBrainyChatOpen) {
-      setIsBrainyChatOpen(false);
-    }
-  }, [brainyMode, isBrainyChatOpen]);
-
-  // Refresh vault list when other parts of the app change vaults
-  useEffect(() => {
     if (!isTauriRuntime()) return;
+    const unlisteners: Array<() => void> = [];
 
-    let unlisten: (() => void) | undefined;
-    listen('vaults-changed', () => {
-      fetchVaults();
-    }).then((fn: () => void) => {
-      unlisten = fn;
-    });
-    return () => { if (unlisten) unlisten(); };
-  }, []);
+    listen('capture-hotkey-pressed', () => openCapture()).then((unlisten) => unlisteners.push(unlisten));
+    listen('vaults-changed', fetchVaults).then((unlisten) => unlisteners.push(unlisten));
+    listen<CaptureFromProtocolPayload>('capture-from-protocol', ({ payload }) => {
+      openCapture({ title: payload?.title || '', url: payload?.url || '' });
+    }).then((unlisten) => unlisteners.push(unlisten));
+    listen<string>('tauri://protocol', ({ payload }) => {
+      if (!payload?.startsWith('brainbox://capture?')) return;
+      const params = new URLSearchParams(payload.split('?')[1]);
+      openCapture({ title: params.get('title') || '', url: params.get('url') || '' });
+    }).then((unlisten) => unlisteners.push(unlisten));
 
-  // Listen for protocol events from Tauri (now using capture-from-protocol event)
-  useEffect(() => {
-    if (!isTauriRuntime()) return;
+    return () => unlisteners.forEach((unlisten) => unlisten());
+  }, [vaults]);
 
-    let unlistenCapture: (() => void) | undefined;
-    let unlistenProtocol: (() => void) | undefined;
-
-    // Existing: Listen for backend event
-    listen<CaptureFromProtocolPayload>('capture-from-protocol', (event) => {
-      if (event?.payload && typeof event.payload === 'object') {
-        setProtocolCapture({
-          title: event.payload.title || '',
-          url: event.payload.url || '',
-        });
-        setIsCaptureModalOpen(true);
-      }
-    }).then((fn) => {
-      unlistenCapture = fn;
-    });
-
-    // NEW: Listen for tauri://protocol event (when app is already running)
-    listen<string>('tauri://protocol', (event) => {
-      const url = event.payload;
-      if (url && url.startsWith('brainbox://capture?')) {
-        // Parse query params from the URL
-        const params = new URLSearchParams(url.split('?')[1]);
-        setProtocolCapture({
-          title: params.get('title') || '',
-          url: params.get('url') || '',
-        });
-        setIsCaptureModalOpen(true);
-      }
-    }).then((fn) => {
-      unlistenProtocol = fn;
-    });
-
-    return () => {
-      if (unlistenCapture) unlistenCapture();
-      if (unlistenProtocol) unlistenProtocol();
-    };
-  }, []);
-
-  // Helper to fetch items for the currently selected vault
-  const fetchItemsForSelectedVault = async () => {
-    if (!selectedVaultId) {
-      setVaultItems([]);
-      return;
-    }
-    if (!isTauriRuntime()) {
-      setVaultItems(listE2EItems(selectedVaultId).map(transformFixtureItem));
-      return;
-    }
-
-    setIsLoadingVaultItems(true);
-
-    try {
-      // Get vault info for password handling
-      const vault = vaults.find(v => v.id === selectedVaultId);
-      const key = await getVaultKey(selectedVaultId, vault?.title, vault?.has_password);
-      const result = await invoke<BackendVaultItem[]>('list_vault_items', { vaultId: Number(selectedVaultId), key });
-
-      setVaultItems(result.map(transformBackendItem));
-
-      const urlItems = result.filter((item) => {
-        const rawContent = typeof item.content === 'string' ? item.content : '';
-        const isUrl = /^https?:\/\/[^\s]+$/.test(rawContent.trim());
-        const yt = isUrl ? getYouTubeId(rawContent) : null;
-        return isUrl && !yt;
-      });
-
-      urlItems.forEach(async (it) => {
-        const url = typeof it.content === 'string' ? it.content : '';
-        try {
-          const meta = await invoke<BackendUrlMetadata>('fetch_url_metadata', { url });
-          setVaultItems(prev => prev.map(p => {
-            if (String(p.id) !== String(it.id)) return p;
-            return {
-              ...p,
-              metadata: {
-                ...p.metadata,
-                preview_title: meta?.title,
-                preview_description: meta?.description,
-                preview_image: meta?.image,
-              },
-            };
-          }));
-        } catch (_) {}
-      });
-    } catch (err) {
-      setVaultItems([]);
-      console.error('Failed to fetch vault items:', err);
-    } finally {
-      setIsLoadingVaultItems(false);
-    }
-  };
-
-  // Listen for global item changes (e.g., brainy actions) and refresh current vault items
-  useEffect(() => {
-    if (!isTauriRuntime()) return;
-
-    let unlisten: (() => void) | undefined;
-    listen('items-changed', () => {
-      fetchItemsForSelectedVault();
-    }).then((fn: () => void) => {
-      unlisten = fn;
-    });
-    return () => { if (unlisten) unlisten(); };
-  }, [selectedVaultId]);
-
-  // Handle sync import from the dialog
-  const handleSyncImport = async (passwords: Record<string, string>, syncPassphrase?: string) => {
-    setIsSyncImporting(true);
-    try {
-      const result = await invoke<{
-        imported_vaults: number;
-        imported_items: number;
-        imported_captures: number;
-        conflicts: string[];
-        warnings: string[];
-        skipped_vaults: string[];
-      }>('sync_import_vaults', {
-        passwords,
-        syncPassphrase: syncPassphrase?.trim() || null,
-      });
-
-      // Build success message
-      let message = `Imported ${result.imported_vaults} vaults, ${result.imported_items} items`;
-      if (result.imported_captures > 0) {
-        message += `, ${result.imported_captures} captures`;
-      }
-
-      if (result.conflicts.length > 0) {
-        showWarning(`${message}. ${result.conflicts.length} conflicts created.`);
-      } else if (result.skipped_vaults.length > 0) {
-        showWarning(`${message}. Skipped: ${result.skipped_vaults.join(', ')}`);
-      } else {
-        showSuccess(message);
-      }
-
-      // Notify the rest of the app that data has changed
-      if (result.imported_vaults > 0 || result.imported_items > 0) {
-        await emit('vaults-changed');
-        await emit('items-changed', { type: 'sync-import' });
-        await fetchVaults();
-      }
-
-      dismissPendingSync();
-    } catch (e) {
-      console.error('Sync import failed:', e);
-      showError(`Import failed: ${getErrorMessage(e)}`);
-    } finally {
-      setIsSyncImporting(false);
-    }
-  };
+  const vaultProps = vaults.map(({ id, title, has_password }) => ({ id, title, has_password }));
+  const title = currentView === 'settings' ? 'Settings' : currentView === 'brainy' ? 'brainy' : 'Library';
 
   return (
     <>
-      <div className={`${styles.app} ${isDetailOpen ? styles.appNudged : ''} ${isVaultWorkspace ? styles.vaultMode : ''}`} data-testid="app">
-      <Sidebar
-        title={currentTitle}
-        onExploreClick={() => handleNavigation('search')}
-        onKnowledgeClick={handleNavigation}
-        onSettingsClick={() => handleNavigation('settings')}
-        onBrainyClick={handleBrainyNavigation}
-        onCreateNote={() => setIsCaptureModalOpen(true)}
-        onCreateVault={() => setIsCreateVaultModalOpen(true)}
-        showVaultButton={currentView === 'vaults' && !selectedVaultId}
-        showNoteButton={currentView !== 'settings' && currentView !== 'connections'}
-        currentView={currentView}
-        isBrainyOpen={isBrainyChatOpen}
-        brainyMode={brainyMode}
-      />
+      <div className={styles.app} data-testid="app">
+        <Sidebar
+          title={title}
+          currentView={currentView}
+          isBrainyOpen={isBrainyOpen}
+          brainyMode={brainyMode}
+          onLibraryClick={() => navigate('library')}
+          onSettingsClick={() => navigate('settings')}
+          onBrainyClick={openBrainy}
+          onCreateNote={() => openCapture()}
+        />
 
-      <div className={styles.workspaceBody}>
-      <main className={styles.main} data-testid="main-content">
-        {isVaultWorkspace && (
-          <div className={styles.vaultWorkspaceChrome}>
-            <div className={styles.vaultTopRow}>
-              <label className={styles.vaultSearchBox}>
-                <MagnifyingGlassIcon className={styles.vaultSearchIcon} aria-hidden="true" />
-                <input
-                  type="search"
-                  value={vaultSearchQuery}
-                  onChange={(event) => setVaultSearchQuery(event.target.value)}
-                  placeholder="Search notes, images, links, thoughts..."
-                  aria-label="Search this vault"
+        <div className={styles.workspaceBody}>
+          <main className={styles.main} data-testid="main-content">
+            <div className={styles.content}>
+              {currentView === 'settings' ? (
+                <Settings
+                  scrollToSection={settingsTarget}
+                  onScrollComplete={() => setSettingsTarget(null)}
                 />
-                <span className={styles.vaultShortcut}>⌘ K</span>
-              </label>
-              <div className={styles.vaultTopActions}>
-                <button type="button" className={styles.vaultScopeButton} onClick={() => setSelectedVaultId(null)}>
-                  <span>{selectedVault?.title || 'Everything'}</span>
-                  <ChevronDownIcon className={styles.vaultControlIcon} aria-hidden="true" />
-                </button>
-                <button type="button" className={styles.vaultIconButton} title="Grid view" aria-label="Grid view">
-                  <Squares2X2Icon className={styles.vaultControlIcon} aria-hidden="true" />
-                </button>
-                <button type="button" className={styles.vaultIconButton} title="More options" aria-label="More options">
-                  <EllipsisHorizontalIcon className={styles.vaultControlIcon} aria-hidden="true" />
-                </button>
-              </div>
-            </div>
-            <div className={styles.vaultFilterRow} aria-label="Vault filters">
-              {vaultFilterOptions.map((filter) => (
-                <button
-                  key={filter.id}
-                  type="button"
-                  className={`${styles.vaultFilterChip} ${vaultFilter === filter.id ? styles.vaultFilterChipActive : ''}`}
-                  onClick={() => setVaultFilter(filter.id)}
-                >
-                  {filter.label}
-                </button>
-              ))}
-              <button
-                type="button"
-                className={styles.vaultFilterAdd}
-                onClick={() => setIsCaptureModalOpen(true)}
-                aria-label="Add new note"
-                title="Add new note"
-              >
-                <PlusIcon className={styles.vaultControlIcon} aria-hidden="true" />
-              </button>
-            </div>
-          </div>
-        )}
-        
-<div className={`${styles.content}${isVaultWorkspace ? ` ${styles.contentNoTopPadding} ${styles.vaultWorkspaceContent}` : ''}`}>
-          {currentView === 'settings' ? (
-            <Settings scrollToSection={settingsScrollTarget} onScrollComplete={() => setSettingsScrollTarget(null)} />
-          ) : currentView === 'search' ? (
-            <div className={styles.searchContainer} data-testid="search-section">
-              <SearchBar onSearch={handleSearch} />
-              
-              {searchQuery && (
-                <div className={styles.searchResults} data-testid="search-results">
-                  <h2 className={styles.searchResultsTitle}>
-                    Results for "{searchQuery}"
-                  </h2>
-                  {isSearching ? (
-                    <div className={styles.skeletonGrid} aria-busy="true">
-                      {skeletonCards.map((key) => (
-                        <div key={`search-skel-${key}`} className={styles.skeletonCard} />
-                      ))}
-                    </div>
-                  ) : searchCards.length === 0 ? (
-                    <div className={styles.emptyState} data-testid="search-empty-state">
-                      <h3 className={styles.emptyStateTitle}>No results yet</h3>
-                      <p className={styles.emptyStateBody}>Try a different keyword, or search by a shorter phrase.</p>
-                    </div>
-                  ) : (
-                    <div style={{ marginTop: 8 }}>
-                      <Masonry
-                        data={searchCards.map(card => ({
-                          ...card,
-                          image: card.image || '',
-                          height: card.height || 260
-                        }))}
-                        alwaysShowOverlay
-                        actionsMode="menu"
-                        selectedId={searchSelectedItem?.id}
-                        onCardClick={(item) => {
-                          if (isItemBusy && searchSelectedItem) { return; }
-                          const searchItem = searchCards.find(c => c.id === item.id);
-                          if (searchItem) setSearchSelectedItem(searchItem);
-                        }}
-                        onDeleteItem={async (item) => {
-                          if (!item?.id) return;
-                          const confirmed = await confirmDialog({
-                            title: 'Delete item?',
-                            message: 'This will remove the item from your vault.',
-                            confirmLabel: 'Delete'
-                          });
-                          if (!confirmed) return;
-                          try {
-                            await Promise.all([
-                              invoke('delete_vault_item', { itemId: Number(item.id) }),
-                              invoke('delete_document', { id: String(item.id) }).catch(() => {})
-                            ]);
-                            setSearchCards((prev) => prev.filter(i => String(i.id) !== String(item.id)));
-                            setSearchSelectedItem((cur) => cur && String(cur.id) === String(item.id) ? null : cur);
-                            try { emit('items-changed', { type: 'delete', itemId: String(item.id) }); } catch {}
-                            showSuccess('Item deleted.');
-                          } catch (err) {
-                            console.error('Failed to delete', err);
-                            showError('Failed to delete item.');
-                          }
-                        }}
-                      />
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {!searchQuery && (
-                <div className={styles.searchIdleState} data-testid="search-idle-state">
-                  <h2 className={styles.emptyStateTitle}>Start a search</h2>
-                  <p className={styles.emptyStateBody}>Find notes, links, summaries, and vault content from one place.</p>
-                  <div className={styles.searchIdleHints} aria-hidden="true">
-                    <span>notes</span>
-                    <span>links</span>
-                    <span>summaries</span>
-                  </div>
-                </div>
-              )}
-
-              {searchSelectedItem && (
-                <div style={{ marginTop: 16 }}>
-                  <ItemPanel
-                    item={searchSelectedItem}
-                    currentVaultId={String(searchSelectedItem?.vault_id || '')}
-                    vaults={vaults.map(v => ({ id: v.id, title: v.title, has_password: v.has_password }))}
-                    onClose={() => { setSearchSelectedItem(null); setIsItemBusy(false); }}
-                    onUpdateContent={async (id, content) => {
-                      const urlish = /^https?:\/\/[^\s]+$/.test(String(content).trim());
-                      setSearchSelectedItem((cur) => cur && cur.id === id ? { ...cur, content, metadata: { ...cur.metadata, item_type: urlish ? 'url' : 'note', url: urlish ? content : undefined } } : cur);
-                      setSearchCards((prev) => prev.map(c => String(c.id) === String(id) ? { ...c, content, metadata: { ...c.metadata, item_type: urlish ? 'url' : 'note', url: urlish ? content : undefined } } : c));
-                      try { emit('items-changed', { type: 'edit', itemId: String(id) }); } catch {}
+              ) : currentView === 'brainy' ? (
+                <div className={styles.brainyFullPage}>
+                  <BrainyChat
+                    vaults={vaultProps}
+                    currentVaultId={selectedVaultId === 'all' ? undefined : selectedVaultId}
+                    onClose={() => navigate('library')}
+                    onOpenSettings={() => {
+                      setSettingsTarget('ai-settings');
+                      navigate('settings');
                     }}
-                    onUpdateSummary={async (id, summary) => {
-                      setSearchSelectedItem((cur) => cur && cur.id === id ? { ...cur, summary } : cur);
-                      setSearchCards((prev) => prev.map(c => String(c.id) === String(id) ? { ...c, summary } : c));
-                      try { emit('items-changed', { type: 'summarize', itemId: String(id) }); } catch {}
-                    }}
-                    onSummarizingChange={(busy) => setIsItemBusy(busy)}
-                    onRename={async (id, newTitle) => {
-                      try {
-                        await invoke('update_vault_item_title', { itemId: Number(id), title: newTitle });
-                        setSearchSelectedItem((cur) => cur && cur.id === id ? { ...cur, title: newTitle } : cur);
-                        setSearchCards((prev) => prev.map(c => String(c.id) === String(id) ? { ...c, title: newTitle } : c));
-                        try { emit('items-changed', { type: 'rename', itemId: String(id) }); } catch {}
-                      } catch (e) {
-                        console.error(e);
-                        showError('Failed to rename item.');
-                      }
-                    }}
-                    onMove={async (id, targetVaultId) => {
-                      try {
-                        await invoke('move_vault_item', { itemId: Number(id), targetVaultId: Number(targetVaultId) });
-                        setSearchSelectedItem((cur) => cur && cur.id === id ? { ...cur, vault_id: targetVaultId, metadata: { ...cur.metadata, vault_id: targetVaultId } } : cur);
-                        try { emit('items-changed', { type: 'move', itemId: String(id), toVaultId: String(targetVaultId) }); } catch {}
-                      } catch (e) {
-                        console.error(e);
-                        showError('Failed to move item.');
-                      }
-                    }}
-                    onUpdateImage={async (id, image) => {
-                      try {
-                        await invoke('update_vault_item_image', { itemId: Number(id), image });
-                        setSearchSelectedItem((cur) => cur && cur.id === id ? { ...cur, image: image ?? undefined } : cur);
-                        setSearchCards((prev) => prev.map(c => String(c.id) === String(id) ? { ...c, image: image ?? undefined } : c));
-                        try { emit('items-changed', { type: 'image', itemId: String(id) }); } catch {}
-                      } catch (e) {
-                        console.error(e);
-                        showError('Failed to update image.');
-                      }
-                    }}
-                    onDelete={async (id) => {
-                      try {
-                        const confirmed = await confirmDialog({
-                          title: 'Delete item?',
-                          message: 'This will remove the item from your vault.',
-                          confirmLabel: 'Delete'
-                        });
-                        if (!confirmed) return;
-                        await Promise.all([
-                          invoke('delete_vault_item', { itemId: Number(id) }),
-                          invoke('delete_document', { id: String(id) }).catch(() => {})
-                        ]);
-                        setSearchSelectedItem(null);
-                        setSearchCards((prev) => prev.filter(c => String(c.id) !== String(id)));
-                        try { emit('items-changed', { type: 'delete', itemId: String(id) }); } catch {}
-                        showSuccess('Item deleted.');
-                      } catch (e) {
-                        console.error(e);
-                        showError('Failed to delete item.');
-                      }
+                    onDataChange={() => {
+                      fetchVaults();
+                      setLibraryRefreshToken((token) => token + 1);
                     }}
                   />
-                </div>
-              )}
-            </div>
-          ) : currentView === 'library' ? (
-            <Library vaults={vaults.map(v => ({ id: v.id, title: v.title }))} />
-          ) : currentView === 'connections' ? (
-            <Connections onOpenAISettings={() => {
-              setSettingsScrollTarget('ai-settings');
-              setCurrentView('settings');
-            }} />
-          ) : currentView === 'vaults' && selectedVaultId ? (
-            <section className={styles.vaults}>
-              {(hasConflicts || vaultSearchQuery || vaultFilter !== 'all') && (
-                <div className={styles.vaultBoardStatus}>
-                  <span>
-                    {displayedVaultItems.length} {displayedVaultItems.length === 1 ? 'item' : 'items'}
-                    {vaultFilter !== 'all' ? ` in ${vaultFilterOptions.find(f => f.id === vaultFilter)?.label || vaultFilter}` : ''}
-                    {vaultSearchQuery ? ` matching "${vaultSearchQuery}"` : ''}
-                  </span>
-                {hasConflicts && (
-                  <button
-                    type="button"
-                    className={`${styles.vaultConflictButton} ${showConflictsOnly ? styles.vaultConflictButtonActive : ''}`}
-                    onClick={() => setShowConflictsOnly(!showConflictsOnly)}
-                  >
-                    {showConflictsOnly ? 'Show All Items' : `View Conflicts (${conflictItems.length})`}
-                  </button>
-                )}
-              </div>
-              )}
-              <div style={{padding: '0 0 2rem 0'}}>
-                {isLoadingVaultItems ? (
-                  <div className={styles.skeletonGrid} aria-busy="true">
-                    {skeletonCards.map((key) => (
-                      <div key={`vault-skel-${key}`} className={styles.skeletonCard} />
-                    ))}
-                  </div>
-                ) : displayedVaultItems.length === 0 ? (
-                  <div className={styles.emptyState} data-testid="vault-items-empty-state">
-                    <h3 className={styles.emptyStateTitle}>{showConflictsOnly ? 'No conflicts' : 'No items yet'}</h3>
-                    <p className={styles.emptyStateBody}>
-                      {showConflictsOnly
-                        ? 'All sync conflicts have been resolved.'
-                        : 'Capture a note or link to start building this vault.'}
-                    </p>
-                    <div className={styles.emptyStateActions}>
-                      {showConflictsOnly ? (
-                        <Button onClick={() => setShowConflictsOnly(false)}>Show All Items</Button>
-                      ) : (
-                        <Button onClick={() => setIsCaptureModalOpen(true)}>Create note</Button>
-                      )}
-                    </div>
-                  </div>
-                ) : (
-                  <Masonry
-                    data={[
-                      {
-                        id: '__add_note__',
-                        title: 'Add new note',
-                        content: 'Start typing or paste anything...',
-                        image: '',
-                        height: 210,
-                        metadata: { item_type: 'add' },
-                      } as any,
-                      ...displayedVaultItems.map(item => ({
-                        ...item,
-                        image: item.image || '',
-                        height: item.height || 260
-                      }))
-                    ]}
-                    actionsMode="menu"
-                    selectedId={selectedItem?.id}
-                    onCardClick={(item) => {
-                      if (String(item.id) === '__add_note__') {
-                        setIsCaptureModalOpen(true);
-                        return;
-                      }
-                      if (isItemBusy && selectedItem) { return; }
-                      const vaultItem = vaultItems.find(v => v.id === item.id);
-                      if (vaultItem) setSelectedItem(vaultItem);
-                    }}
-                    onDeleteItem={async (item) => {
-                      if (!item?.id) return;
-                      const confirmed = await confirmDialog({
-                        title: 'Delete item?',
-                        message: 'This will remove the item from your vault.',
-                        confirmLabel: 'Delete'
-                      });
-                      if (!confirmed) return;
-                      try {
-                        await Promise.all([
-                          invoke('delete_vault_item', { itemId: Number(item.id) }),
-                          // best-effort: remove from search index if present
-                          invoke('delete_document', { id: String(item.id) }).catch(() => {})
-                        ]);
-                        setVaultItems((prev) => prev.filter(i => i.id !== item.id));
-                        if (selectedItem?.id === item.id) setSelectedItem(null);
-                        try { emit('items-changed', { type: 'delete', itemId: String(item.id) }); } catch {}
-                        showSuccess('Item deleted.');
-                      } catch (err) {
-                        console.error('Failed to delete', err);
-                        showError('Failed to delete item.');
-                      }
-                    }}
-                    onMoveItem={(item, direction) => {
-                      setVaultItems((prev) => {
-                        const idx = prev.findIndex(i => i.id === item.id);
-                        if (idx === -1) return prev;
-                        const newArr = [...prev];
-                        const swapWith = direction === 'up' ? idx - 1 : idx + 1;
-                        if (swapWith < 0 || swapWith >= newArr.length) return prev;
-                        [newArr[idx], newArr[swapWith]] = [newArr[swapWith], newArr[idx]];
-                        // Persist ordering to backend (best-effort)
-                        const orderedIds = newArr.map(i => Number(i.id));
-                        if (selectedVaultId) {
-                          invoke('update_vault_items_order', { vaultId: Number(selectedVaultId), orderedIds })
-                            .catch(err => console.warn('Failed to persist order', err));
-                        }
-                        return newArr;
-                      });
-                    }}
-                  />
-                )}
-              </div>
-              {/* Slide-in panel for item details */}
-              {selectedItem && (
-                  <ItemPanel
-                    item={selectedItem}
-                    currentVaultId={selectedVaultId!}
-                    vaults={vaults.map(v => ({ id: v.id, title: v.title, has_password: v.has_password }))}
-                  onClose={() => { setSelectedItem(null); setIsItemBusy(false); }}
-                    onUpdateContent={async (id, content) => {
-                      const urlish = /^https?:\/\/[^\s]+$/.test(String(content).trim());
-                      setVaultItems((prev) => prev.map(i => i.id === id ? { ...i, content, metadata: { ...i.metadata, item_type: urlish ? 'url' : 'note', url: urlish ? content : undefined } } : i));
-                      setSelectedItem((cur) => cur && cur.id === id ? { ...cur, content, metadata: { ...cur.metadata, item_type: urlish ? 'url' : 'note', url: urlish ? content : undefined } } : cur);
-                      try { emit('items-changed', { type: 'edit', itemId: String(id) }); } catch {}
-                    }}
-                  onUpdateSummary={async (id, summary) => {
-                    setVaultItems((prev) => prev.map(i => i.id === id ? { ...i, summary } : i));
-                    setSelectedItem((cur) => cur && cur.id === id ? { ...cur, summary } : cur);
-                    try { emit('items-changed', { type: 'summarize', itemId: String(id) }); } catch {}
-                  }}
-                  onSummarizingChange={(busy) => setIsItemBusy(busy)}
-                  onRename={async (id, newTitle) => {
-                    try {
-                      await invoke('update_vault_item_title', { itemId: Number(id), title: newTitle });
-                      setVaultItems((prev) => prev.map(i => i.id === id ? { ...i, title: newTitle } : i));
-                      setSelectedItem((cur) => cur && cur.id === id ? { ...cur, title: newTitle } : cur);
-                      try { emit('items-changed', { type: 'rename', itemId: String(id) }); } catch {}
-                    } catch (e) {
-                      console.error(e);
-                      showError('Failed to rename item.');
-                    }
-                  }}
-                  onMove={async (id, targetVaultId) => {
-                    try {
-                      await invoke('move_vault_item', { itemId: Number(id), targetVaultId: Number(targetVaultId) });
-                      setVaultItems((prev) => prev.filter(i => i.id !== id));
-                      setSelectedItem(null);
-                      try { emit('items-changed', { type: 'move', itemId: String(id), toVaultId: String(targetVaultId) }); } catch {}
-                    } catch (e) {
-                      console.error(e);
-                      showError('Failed to move item.');
-                    }
-                  }}
-                  onUpdateImage={async (id, image) => {
-                    try {
-                      await invoke('update_vault_item_image', { itemId: Number(id), image });
-                      setVaultItems((prev) => prev.map(i => i.id === id ? { ...i, image: image ?? undefined } : i));
-                      setSelectedItem((cur) => cur && cur.id === id ? { ...cur, image: image ?? undefined } : cur);
-                      try { emit('items-changed', { type: 'image', itemId: String(id) }); } catch {}
-                    } catch (e) {
-                      console.error(e);
-                      showError('Failed to update image.');
-                    }
-                  }}
-                  onDelete={async (id) => {
-                    try {
-                      const confirmed = await confirmDialog({
-                        title: 'Delete item?',
-                        message: 'This will remove the item from your vault.',
-                        confirmLabel: 'Delete'
-                      });
-                      if (!confirmed) return;
-                      await Promise.all([
-                        invoke('delete_vault_item', { itemId: Number(id) }),
-                        invoke('delete_document', { id: String(id) }).catch(() => {})
-                      ]);
-                      setVaultItems(prev => prev.filter(i => i.id !== id));
-                      setSelectedItem(null);
-                      try { emit('items-changed', { type: 'delete', itemId: String(id) }); } catch {}
-                      showSuccess('Item deleted.');
-                    } catch (e) {
-                      console.error(e);
-                      showError('Failed to delete item.');
-                    }
-                  }}
-                />
-              )}
-            </section>
-          ) : (
-            <section className={styles.vaults} data-testid="vaults-section">
-              {isLoadingVaults && vaults.length === 0 ? (
-                <div className={styles.skeletonGrid} aria-busy="true">
-                  {skeletonCards.map((key) => (
-                    <div key={`vault-grid-skel-${key}`} className={styles.skeletonCard} />
-                  ))}
-                </div>
-              ) : vaults.length === 0 ? (
-                <div className={styles.emptyState} data-testid="vault-empty-state">
-                  <h3 className={styles.emptyStateTitle}>Create your first vault</h3>
-                  <p className={styles.emptyStateBody}>Vaults keep your notes and links organized. Start with a name and optional password.</p>
-                  <div className={styles.emptyStateActions}>
-                    <Button onClick={() => setIsCreateVaultModalOpen(true)}>New vault</Button>
-                  </div>
                 </div>
               ) : (
-                <div className={styles.grid}>
-                  {vaults.map(vault => (
-                    <VaultCard 
-                      key={vault.id}
-                      title={vault.title}
-                      backgroundImage={vault.backgroundImage}
-                      color={vault.color}
-                      priceTag={vault.priceTag}
-                      locked={vault.has_password}
-                      updatedAt={vault.updated_at}
-                      onClick={() => setSelectedVaultId(vault.id)}
-                    onRename={async () => {
-                      const newName = await promptDialog({
-                        title: 'Rename vault',
-                        label: 'Vault name',
-                        defaultValue: vault.title,
-                        confirmLabel: 'Rename'
-                      });
-                      if (newName === null) return;
-                      const trimmed = newName.trim();
-                      if (!trimmed || trimmed === vault.title) return;
-                      try {
-                        await invoke('rename_vault', { vaultId: Number(vault.id), name: trimmed });
-                        await fetchVaults();
-                        try { emit('vaults-changed'); } catch {}
-                      } catch (e) {
-                          console.error(e);
-                          showError('Failed to rename vault.');
-                        }
-                      }}
-                      onChangeCover={() => setCoverVault({ id: vault.id, title: vault.title })}
-                      onChangePassword={() => setChangePasswordVault({ id: Number(vault.id), name: vault.title, has_password: vault.has_password })}
-                    onDelete={async () => {
-                      const confirmed = await confirmDialog({
-                        title: `Delete vault "${vault.title}"?`,
-                        message: 'This will remove all items inside.',
-                        confirmLabel: 'Delete'
-                      });
-                      if (!confirmed) return;
-                      const password = await promptDialog({
-                        title: 'Confirm vault deletion',
-                        message: `Enter the password for "${vault.title}". Leave it blank if there is no password.`,
-                        label: 'Vault password',
-                        inputType: 'password',
-                        autoComplete: 'current-password',
-                        confirmLabel: 'Delete vault'
-                      });
-                      if (password === null) return;
-                      try {
-                        const keyUint8 = await deriveKeyFromPassword(password, vault.id);
-                        const key = keyToArray(keyUint8);
-                        await invoke('verify_vault_password', { vaultId: Number(vault.id), key });
-                      } catch (err) {
-                        console.error('Password verification failed', err);
-                        const msg = getErrorMessage(err);
-                        const allowForce = await confirmDialog({
-                          title: 'Password could not be verified',
-                          message: 'This vault may have been created with an older version. Delete it anyway?',
-                          confirmLabel: 'Delete anyway',
-                          cancelLabel: 'Cancel'
-                        });
-                        if (!allowForce) {
-                          if (/invalid password/i.test(msg)) {
-                            showError('Incorrect password.');
-                          } else {
-                            showError('Failed to verify vault password.');
-                          }
-                          return;
-                        }
-                      }
-                      try {
-                        await invoke('delete_vault', { vaultId: Number(vault.id) });
-                        if (selectedVaultId === vault.id) {
-                          setSelectedVaultId(null);
-                        }
-                          await fetchVaults();
-                          try { emit('vaults-changed'); } catch {}
-                          showSuccess('Vault deleted.');
-                        } catch (e) {
-                          console.error(e);
-                          showError('Failed to delete vault.');
-                        }
-                      }}
-                    >
-                      {vault.children}
-                    </VaultCard>
-                  ))}
-                </div>
+                <Library
+                  vaults={vaultProps}
+                  loadingVaults={isLoadingVaults}
+                  selectedVaultId={selectedVaultId}
+                  onVaultChange={setSelectedVaultId}
+                  onCreateNote={() => openCapture()}
+                  onCreateVault={() => {
+                    setCaptureAfterVaultCreate(false);
+                    setIsCreateVaultOpen(true);
+                  }}
+                  refreshToken={libraryRefreshToken}
+                />
               )}
-            </section>
+            </div>
+          </main>
+
+          {isBrainyOpen && brainyMode === 'sidebar' && (
+            <aside className={styles.brainyChatPanel} aria-label="brainy assistant">
+              <BrainyChat
+                vaults={vaultProps}
+                currentVaultId={selectedVaultId === 'all' ? undefined : selectedVaultId}
+                onClose={() => setIsBrainyOpen(false)}
+                onOpenSettings={() => {
+                  setSettingsTarget('ai-settings');
+                  navigate('settings');
+                }}
+                onDataChange={() => {
+                  fetchVaults();
+                  setLibraryRefreshToken((token) => token + 1);
+                }}
+              />
+            </aside>
           )}
         </div>
-      </main>
-
-      {isVaultWorkspace && brainyMode === 'sidebar' && !isBrainyChatOpen && (
-        <button
-          type="button"
-          className={styles.brainyOrb}
-          onClick={() => setIsBrainyChatOpen(true)}
-          aria-label="Open brainy"
-          title="Open brainy"
-        >
-          <span className={styles.brainyOrbFace}>
-            <SparklesIcon className={styles.brainyOrbIcon} aria-hidden="true" />
-          </span>
-          <span>brainy</span>
-        </button>
-      )}
-
-      {/* brainy Chat Panel */}
-      {isBrainyChatOpen && brainyMode === 'sidebar' && (
-        <div className={styles.brainyChatPanel}>
-          <BrainyChat
-            vaults={vaults.map(v => ({ id: v.id, title: v.title, has_password: v.has_password }))}
-            currentVaultId={selectedVaultId || undefined}
-            onClose={() => setIsBrainyChatOpen(false)}
-            onOpenSettings={() => {
-              setSettingsScrollTarget('ai-settings');
-              setCurrentView('settings');
-            }}
-            onDataChange={() => {
-              // Refresh data when brainy makes changes
-              fetchVaults();
-              if (selectedVaultId) {
-                fetchItemsForSelectedVault();
-              }
-            }}
-          />
-        </div>
-      )}
       </div>
-      {/* Create Vault Modal */}
+
       <CreateVaultModal
-        isOpen={isCreateVaultModalOpen}
-        onClose={() => setIsCreateVaultModalOpen(false)}
-        onCreate={async ({ name, password, has_password }: { name: string; password: string; has_password?: boolean }) => {
-          try {
-            const result = await invoke<BackendVault>('create_vault', { name, password, hasPassword: has_password });
-            const vaultId = String(result.id);
-
-            // Store the password for this vault session (empty string for password-less vaults)
-            await setVaultPassword(vaultId, password || '');
-
-            await fetchVaults(); // Refresh vault list
-          } catch (err) {
-            showError(`Failed to create vault: ${getErrorMessage(err)}`);
-          }
+        isOpen={isCreateVaultOpen}
+        initialName={captureAfterVaultCreate ? 'Inbox' : ''}
+        onClose={() => {
+          setIsCreateVaultOpen(false);
+          setCaptureAfterVaultCreate(false);
         }}
+        onCreate={handleCreateVault}
       />
-      </div>
-      {/* Capture modal with live URL preview */}
       <CaptureModal
-        isOpen={isCaptureModalOpen}
-        onClose={() => { setIsCaptureModalOpen(false); setProtocolCapture(null); }}
+        isOpen={isCaptureOpen}
+        onClose={() => {
+          setIsCaptureOpen(false);
+          setProtocolCapture(null);
+        }}
         onSave={handleCaptureSave}
-        vaults={vaults.map(v => ({ id: v.id, title: v.title }))}
+        vaults={vaultProps}
+        initialVaultId={selectedVaultId === 'all' ? '' : selectedVaultId}
         initialTitle={protocolCapture?.title || ''}
         initialContent={protocolCapture?.url || ''}
       />
-      {/* Change Cover dialog */}
-      <ChangeCoverDialog
-        isOpen={!!coverVault}
-        onClose={() => setCoverVault(null)}
-        vaultTitle={coverVault?.title}
-        onPickUrl={(url: string) => { if (!coverVault) return; handleCoverFromUrl(coverVault.id, url); setCoverVault(null); }}
-        onPickMesh={() => { if (!coverVault) return; handleCoverMesh(coverVault.id); setCoverVault(null); }}
-        onPickFile={(dataUrl: string) => { if (!coverVault) return; handleCoverFromFile(coverVault.id, dataUrl); setCoverVault(null); }}
-        onClear={() => { if (!coverVault) return; handleCoverClear(coverVault.id); setCoverVault(null); }}
-      />
-      {/* Change Password dialog */}
-      {changePasswordVault && (
-        <ChangePasswordDialog
-          vault={changePasswordVault}
-          onClose={() => setChangePasswordVault(null)}
-          onSuccess={() => {
-            clearKey(String(changePasswordVault.id));
-            fetchVaults(); // Refresh vault list to update has_password
-          }}
-        />
-      )}
-      {/* Sync Available dialog */}
-      {pendingSync && (
-        <SyncAvailableDialog
-          isOpen={!!pendingSync}
-          preview={pendingSync}
-          isImporting={isSyncImporting}
-          onImport={handleSyncImport}
-          onDismiss={dismissPendingSync}
-          onClose={dismissPendingSync}
-        />
-      )}
     </>
   );
 }

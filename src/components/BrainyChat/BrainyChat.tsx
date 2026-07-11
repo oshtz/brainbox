@@ -48,24 +48,6 @@ interface ChatThread {
   summaryUpTo?: number;
 }
 
-interface SerializedMessage {
-  id: string;
-  role: 'user' | 'assistant' | 'system';
-  content: string;
-  timestamp: string;
-}
-
-interface SerializedThread {
-  id: string;
-  title: string;
-  messages: SerializedMessage[];
-  createdAt: string;
-  updatedAt: string;
-  summary?: string;
-  summaryUpdatedAt?: string;
-  summaryUpTo?: number;
-}
-
 interface Props {
   vaults: VaultInfo[];
   currentVaultId?: string;
@@ -103,104 +85,12 @@ const generateThreadTitle = (messages: ChatMessage[]) => {
   return 'New Chat';
 };
 
-const loadThreads = (): ChatThread[] => {
-  try {
-    const saved = localStorage.getItem(THREADS_STORAGE_KEY);
-    if (saved) {
-      const parsed: SerializedThread[] = JSON.parse(saved);
-      return parsed.map((thread) => ({
-        ...thread,
-        createdAt: new Date(thread.createdAt),
-        updatedAt: new Date(thread.updatedAt),
-        summary: thread.summary,
-        summaryUpdatedAt: thread.summaryUpdatedAt ? new Date(thread.summaryUpdatedAt) : undefined,
-        summaryUpTo: thread.summaryUpTo,
-        messages: (thread.messages || [])
-          .map((msg) => {
-            if (msg.role !== 'user' && msg.role !== 'assistant' && msg.role !== 'system') return null;
-            return {
-              id: msg.id,
-              role: msg.role === 'system' ? 'assistant' : msg.role,
-              content: msg.content,
-              timestamp: new Date(msg.timestamp),
-            } as ChatMessage;
-          })
-          .filter((msg): msg is ChatMessage => !!msg),
-      }));
-    }
-
-    const oldHistory = localStorage.getItem(HISTORY_STORAGE_KEY);
-    if (oldHistory) {
-      const parsed = JSON.parse(oldHistory) as SerializedMessage[];
-      const messages = parsed
-        .map((msg) => {
-          if (msg.role !== 'user' && msg.role !== 'assistant' && msg.role !== 'system') return null;
-          return {
-            id: msg.id || generateId(),
-            role: msg.role === 'system' ? 'assistant' : msg.role,
-            content: msg.content,
-            timestamp: new Date(msg.timestamp),
-          } as ChatMessage;
-        })
-        .filter((msg): msg is ChatMessage => !!msg);
-      if (messages.length > 0) {
-        return [
-          {
-            id: generateId(),
-            title: generateThreadTitle(messages),
-            messages,
-            createdAt: messages[0]?.timestamp || new Date(),
-            updatedAt: messages[messages.length - 1]?.timestamp || new Date(),
-          },
-        ];
-      }
-    }
-  } catch {
-    return [];
-  }
-
-  return [];
-};
-
-const serializeThreads = (threads: ChatThread[]): SerializedThread[] => {
-  return threads.map((thread) => ({
-    id: thread.id,
-    title: thread.title,
-    createdAt: thread.createdAt.toISOString(),
-    updatedAt: thread.updatedAt.toISOString(),
-    summary: thread.summary,
-    summaryUpdatedAt: thread.summaryUpdatedAt?.toISOString(),
-    summaryUpTo: thread.summaryUpTo,
-    messages: thread.messages
-      .filter((msg) => msg.role === 'user' || msg.role === 'assistant')
-      .map((msg) => ({
-        id: msg.id,
-        role: msg.role as 'user' | 'assistant',
-        content: msg.content,
-        timestamp: msg.timestamp.toISOString(),
-      })),
-  }));
-};
-
 const BrainyChat: React.FC<Props> = ({ vaults, currentVaultId, onClose, onDataChange, onOpenSettings }) => {
   const { getVaultKey } = useVaultPassword();
   const promptDialog = usePrompt();
   const confirmDialog = useConfirm();
-  const initialThreadsRef = useRef<ChatThread[] | null>(null);
-  const initialThreads = initialThreadsRef.current ?? loadThreads();
-  if (!initialThreadsRef.current) {
-    initialThreadsRef.current = initialThreads;
-  }
-  const [threads, setThreads] = useState<ChatThread[]>(initialThreads);
-  const [activeThreadId, setActiveThreadId] = useState<string | null>(() => {
-    try {
-      const saved = localStorage.getItem(ACTIVE_THREAD_KEY);
-      if (saved) return saved;
-    } catch {
-      return null;
-    }
-    return initialThreadsRef.current?.[0]?.id || null;
-  });
+  const [threads, setThreads] = useState<ChatThread[]>([]);
+  const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
   const [input, setInput] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [isCompacting, setIsCompacting] = useState(false);
@@ -334,24 +224,23 @@ const BrainyChat: React.FC<Props> = ({ vaults, currentVaultId, onClose, onDataCh
     setIsConfigured(aiService.isConfigured());
   }, []);
 
-  // Persist threads
+  // Chat is intentionally session-only. Offer to remove plaintext history left
+  // by older releases, but never delete it without the user's approval.
   useEffect(() => {
-    try {
-      localStorage.setItem(THREADS_STORAGE_KEY, JSON.stringify(serializeThreads(threads)));
-    } catch {
-      // ignore persistence errors
-    }
-  }, [threads]);
-
-  // Persist active thread
-  useEffect(() => {
-    if (!activeThreadId) return;
-    try {
-      localStorage.setItem(ACTIVE_THREAD_KEY, activeThreadId);
-    } catch {
-      // ignore persistence errors
-    }
-  }, [activeThreadId]);
+    const hasLegacyHistory = [THREADS_STORAGE_KEY, HISTORY_STORAGE_KEY, ACTIVE_THREAD_KEY]
+      .some((key) => localStorage.getItem(key) !== null);
+    if (!hasLegacyHistory) return;
+    void confirmDialog({
+      title: 'Remove old local chat history?',
+      message: 'Older brainbox versions stored Brainy chats unencrypted. New chats are session-only. Remove the old plaintext history now?',
+      confirmLabel: 'Remove history',
+    }).then((confirmed) => {
+      if (!confirmed) return;
+      localStorage.removeItem(THREADS_STORAGE_KEY);
+      localStorage.removeItem(HISTORY_STORAGE_KEY);
+      localStorage.removeItem(ACTIVE_THREAD_KEY);
+    });
+  }, [confirmDialog]);
 
   // Ensure active thread exists
   useEffect(() => {

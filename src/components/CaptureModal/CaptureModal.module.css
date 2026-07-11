@@ -39,6 +39,12 @@
   line-height: 1.2;
 }
 
+.description {
+  margin: 3px 0 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+}
+
 .closeButton {
   width: 30px;
   height: 30px;
@@ -109,6 +115,28 @@
 .textarea {
   resize: vertical;
   min-height: 120px;
+}
+
+.details {
+  border-top: 1px solid var(--ui-hairline-border);
+  padding-top: var(--space-sm);
+}
+
+.details summary {
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  margin-bottom: var(--space-sm);
+}
+
+.details[open] {
+  display: grid;
+  gap: var(--space-sm);
+}
+
+.optional {
+  font-weight: var(--font-weight-normal);
 }
 
 .actions {

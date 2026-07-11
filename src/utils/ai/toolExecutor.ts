@@ -7,7 +7,7 @@
 
 import { invoke } from '@tauri-apps/api/core';
 import { BackendSearchResult, BackendVault, BackendVaultItem } from '../../types';
-import { ToolCall, ToolResult, DESTRUCTIVE_TOOLS } from './tools';
+import { ToolCall, ToolResult, WRITE_TOOLS } from './tools';
 
 export interface VaultInfo {
   id: string;
@@ -22,7 +22,7 @@ export interface ToolExecutorConfig {
   getVaultInfo: (vaultId: string) => VaultInfo | undefined;
   /** Function to get all vaults */
   getVaults: () => VaultInfo[];
-  /** Function to request user confirmation for destructive actions */
+  /** Function to request user confirmation before any data mutation */
   confirmAction?: (message: string) => Promise<boolean>;
   /** Callback when data changes (for UI refresh) */
   onDataChange?: () => void;
@@ -66,12 +66,13 @@ export class ToolExecutor {
     const { id, name, arguments: args } = toolCall;
 
     try {
-      // Check if destructive action needs confirmation
-      if (DESTRUCTIVE_TOOLS.has(name)) {
+      // AI may read autonomously, but every mutation requires explicit approval.
+      if (WRITE_TOOLS.has(name)) {
         const confirmed = await this.config.confirmAction?.(
-          `brainy wants to execute "${name}". Allow this action?`
+          this.describeWrite(name, args)
         );
-        if (confirmed === false) {
+        // Fail closed when no confirmation UI is configured.
+        if (confirmed !== true) {
           return {
             tool_use_id: id,
             success: false,
@@ -102,16 +103,33 @@ export class ToolExecutor {
   }
 
   private isWriteOperation(name: string): boolean {
-    return [
-      'create_vault',
-      'rename_vault',
-      'create_item',
-      'update_item_title',
-      'update_item_content',
-      'move_item',
-      'delete_item',
-      'summarize_item',
-    ].includes(name);
+    return WRITE_TOOLS.has(name);
+  }
+
+  private describeWrite(name: string, args: Record<string, unknown>): string {
+    const quoted = (value: unknown) => {
+      const text = String(value ?? '').replace(/\s+/g, ' ').trim();
+      return `"${text.length > 80 ? `${text.slice(0, 77)}...` : text}"`;
+    };
+
+    switch (name) {
+      case 'create_vault':
+        return `brainy wants to create vault ${quoted(args.name)}. Type yes to approve.`;
+      case 'rename_vault':
+        return `brainy wants to rename vault ${args.vault_id} to ${quoted(args.name)}. Type yes to approve.`;
+      case 'create_item':
+        return `brainy wants to create item ${quoted(args.title)} in vault ${args.vault_id}. Type yes to approve.`;
+      case 'update_item_title':
+        return `brainy wants to change item ${args.item_id}'s title to ${quoted(args.title)}. Type yes to approve.`;
+      case 'update_item_content':
+        return `brainy wants to replace item ${args.item_id}'s content (${String(args.content ?? '').length} characters). Type yes to approve.`;
+      case 'move_item':
+        return `brainy wants to move item ${args.item_id} to vault ${args.target_vault_id}. Type yes to approve.`;
+      case 'delete_item':
+        return `brainy wants to permanently delete item ${args.item_id}. Type yes to approve.`;
+      default:
+        return `brainy wants to execute ${quoted(name)}. Type yes to approve.`;
+    }
   }
 
   private async executeInternal(name: string, args: Record<string, unknown>): Promise<unknown> {
@@ -287,11 +305,34 @@ export class ToolExecutor {
       }
 
       case 'move_item': {
-        await invoke('move_vault_item', {
-          itemId: Number(args.item_id),
-          targetVaultId: Number(args.target_vault_id),
-        });
-        return { success: true, message: 'Moved item to target vault' };
+        const itemId = args.item_id as string;
+        const targetVaultId = args.target_vault_id as string;
+        const targetVault = this.config.getVaultInfo(targetVaultId);
+        const targetKey = await this.config.getVaultKey(
+          targetVaultId,
+          targetVault?.title,
+          targetVault?.has_password
+        );
+
+        for (const sourceVault of this.config.getVaults()) {
+          try {
+            const sourceKey = await this.config.getVaultKey(
+              sourceVault.id,
+              sourceVault.title,
+              sourceVault.has_password
+            );
+            await invoke('move_vault_item', {
+              itemId: Number(itemId),
+              targetVaultId: Number(targetVaultId),
+              sourceKey,
+              targetKey,
+            });
+            return { success: true, message: 'Moved item to target vault' };
+          } catch {
+            // Wrong source vault/key: continue until the owning vault is found.
+          }
+        }
+        throw new Error(`Could not move item ${itemId}`);
       }
 
       case 'delete_item': {

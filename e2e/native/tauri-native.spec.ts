@@ -77,7 +77,7 @@ async function connectToNativePage(port: number): Promise<{ browser: Browser; pa
   return waitFor(async () => {
     const browser = await chromium.connectOverCDP(`http://127.0.0.1:${port}`);
     const pages = browser.contexts().flatMap((context) => context.pages());
-    const page = pages.find((candidate) => candidate.url().includes('localhost:17340') || candidate.url().includes('127.0.0.1:17340')) ?? pages[0];
+    const page = pages.find((candidate) => candidate.url().includes('localhost:17341') || candidate.url().includes('127.0.0.1:17341')) ?? pages[0];
     if (!page) {
       await browser.close();
       throw new Error('No WebView page exposed over CDP');
@@ -178,7 +178,10 @@ async function closeBrainyIfOpen(page: Page) {
   const brainy = page.getByTestId('brainy-chat');
   if (!(await brainy.isVisible().catch(() => false))) return;
 
-  await brainy.getByRole('button', { name: 'Close' }).click();
+  await page.keyboard.press('Escape');
+  if (await brainy.isVisible().catch(() => false)) {
+    await brainy.getByRole('button', { name: 'Close' }).click({ force: true });
+  }
   await expect(brainy).toHaveCount(0);
 }
 
@@ -197,21 +200,11 @@ test.beforeEach(async () => {
   await closeBrainyIfOpen(app!.page);
 });
 
-test('native top-level tabs share the same content frame at desktop size', async ({}, testInfo) => {
+test('native Library and Settings share the same content frame at desktop size', async ({}, testInfo) => {
   const page = app!.page;
   await resizeNativeWindow(page, 1115, 768);
 
   const sections: Array<{ name: string; open: () => Promise<void>; locator: ReturnType<Page['locator']> }> = [
-    {
-      name: 'Knowledge',
-      open: async () => page.getByTestId('nav-vaults').click(),
-      locator: page.getByTestId('vaults-section'),
-    },
-    {
-      name: 'Explore',
-      open: async () => page.getByTestId('nav-search').click(),
-      locator: page.getByTestId('search-section'),
-    },
     {
       name: 'Library',
       open: async () => page.getByTestId('nav-library').click(),
@@ -223,6 +216,9 @@ test('native top-level tabs share the same content frame at desktop size', async
       locator: page.getByTestId('settings-section'),
     },
   ];
+
+  await expect(page.getByTestId('nav-vaults')).toHaveCount(0);
+  await expect(page.getByTestId('nav-search')).toHaveCount(0);
 
   const leftEdges: Record<string, number> = {};
 
@@ -236,9 +232,9 @@ test('native top-level tabs share the same content frame at desktop size', async
     });
   }
 
-  const baseline = leftEdges.Knowledge;
+  const baseline = leftEdges.Library;
   for (const [name, x] of Object.entries(leftEdges)) {
-    expect.soft(Math.abs(x - baseline), `${name} left edge (${x}) should align with Knowledge (${baseline})`).toBeLessThanOrEqual(2);
+    expect.soft(Math.abs(x - baseline), `${name} left edge (${x}) should align with Library (${baseline})`).toBeLessThanOrEqual(2);
   }
 });
 
@@ -266,7 +262,9 @@ test('native Settings tabs fit in a narrow Tauri window', async ({}, testInfo) =
   await expect(page.getByTestId('settings-section')).toBeVisible();
   await expect(page.getByRole('tab', { name: /Capture/ })).toBeVisible();
   await expect(page.getByRole('tab', { name: /Appearance/ })).toBeVisible();
+  await expect(page.getByRole('tab', { name: /Data/ })).toBeVisible();
   await expect(page.getByRole('tab', { name: /Updates/ })).toBeVisible();
+  await expect(page.getByRole('tab', { name: /Sync/ })).toHaveCount(0);
   await expect(page.getByText('Capture tools')).toBeVisible();
 
   await testInfo.attach('native-settings-narrow', {
@@ -278,24 +276,29 @@ test('native Settings tabs fit in a narrow Tauri window', async ({}, testInfo) =
 test('native wrong-password attempt keeps a protected vault locked', async () => {
   const page = app!.page;
   await resizeNativeWindow(page, 1115, 768);
-  await page.getByTestId('nav-vaults').click();
+  await page.getByTestId('nav-library').click();
 
   await page.getByTestId('create-vault-button').click();
   await page.getByTestId('vault-name-input').fill('Protected QA Vault');
   await page.getByTestId('vault-has-password-checkbox').check();
   await page.getByTestId('vault-password-input').fill('correct-password');
   await page.getByTestId('create-vault-submit').click();
-  await expect(page.getByRole('button', { name: /Open vault Protected QA Vault/ })).toBeVisible();
+  await expect(page.getByLabel('Filter by vault').getByRole('option', { name: 'Protected QA Vault' })).toHaveCount(1);
+  await page.getByTestId('floating-capture-button').click();
+  await page.getByTestId('capture-content-input').fill('Protected QA secret');
+  await page.getByTestId('capture-submit-button').click();
+  await expect(page.getByTestId('masonry-card').getByText('Protected QA secret')).toBeVisible();
 
   await page.reload();
   await expect(page.getByTestId('app')).toBeVisible();
-  await page.getByRole('button', { name: /Open vault Protected QA Vault/ }).click();
   await expect(page.getByRole('dialog', { name: 'Unlock vault' })).toBeVisible();
   await page.getByLabel('Vault password').fill('wrong-password');
   await page.getByRole('button', { name: 'Unlock' }).click();
 
-  await expect(page.getByTestId('toast-error')).toContainText('Incorrect password');
-  await expect(page.getByTestId('vaults-section')).toBeVisible();
-  await expect(page.getByRole('button', { name: /Open vault Protected QA Vault/ })).toBeVisible();
+  await expect(page.getByRole('dialog', { name: 'Unlock vault' })).toHaveCount(0);
+  await expect(page.getByTestId('library-section')).toBeVisible();
+  await expect(page.getByLabel('Filter by vault').getByRole('option', { name: 'Protected QA Vault' })).toHaveCount(1);
+  await expect(page.getByText('Protected QA secret')).toHaveCount(0);
+  await expect(page.getByText('0 items')).toBeVisible();
   await expect(page.getByText('What should we work on?')).toHaveCount(0);
 });

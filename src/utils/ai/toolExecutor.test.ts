@@ -57,6 +57,9 @@ describe('ToolExecutor', () => {
       key,
     });
     expect(config.getVaultKey).toHaveBeenCalledWith('2', 'Research', false);
+    expect(config.confirmAction).toHaveBeenCalledWith(
+      'brainy wants to create item "New note" in vault 2. Type yes to approve.'
+    );
     expect(config.onDataChange).toHaveBeenCalledTimes(1);
     expect(result).toEqual({
       tool_use_id: 'tool-create_item',
@@ -69,7 +72,7 @@ describe('ToolExecutor', () => {
     });
   });
 
-  it('does not invoke destructive backend commands when the user cancels', async () => {
+  it('does not invoke write commands when the user cancels', async () => {
     const { executor, config } = createExecutor({
       confirmAction: vi.fn().mockResolvedValue(false),
     });
@@ -79,7 +82,7 @@ describe('ToolExecutor', () => {
     }));
 
     expect(config.confirmAction).toHaveBeenCalledWith(
-      'brainy wants to execute "delete_item". Allow this action?'
+      'brainy wants to permanently delete item 7. Type yes to approve.'
     );
     expect(mockInvoke).not.toHaveBeenCalled();
     expect(result).toEqual({

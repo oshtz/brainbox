@@ -7,7 +7,8 @@ use rand::{rngs::OsRng, RngCore};
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::fs;
+use std::fs::{self, OpenOptions};
+use std::io::Write;
 use std::path::{Path, PathBuf};
 
 /// Sync file format version
@@ -219,8 +220,20 @@ pub fn sync_export(
     // Get all vaults (including soft-deleted for sync)
     let vaults = Vault::list_all_for_sync(conn).map_err(|e| e.to_string())?;
 
+    let missing_passwords: Vec<&str> = vaults
+        .iter()
+        .filter(|vault| vault.has_password && !passwords.contains_key(&vault.id))
+        .map(|vault| vault.name.as_str())
+        .collect();
+    if !missing_passwords.is_empty() {
+        return Err(format!(
+            "Passwords are required for all protected vaults before export: {}",
+            missing_passwords.join(", ")
+        ));
+    }
+
     let mut sync_vaults = Vec::new();
-    let mut skipped_vaults = Vec::new();
+    let skipped_vaults = Vec::new();
     let mut exported_items = 0;
     let mut warnings = Vec::new();
 
@@ -234,19 +247,16 @@ pub fn sync_export(
         });
 
         let (local_key, sync_key) = if vault.has_password {
-            if let Some(password) = passwords.get(&vault.id) {
-                (
-                    derive_key_from_password(password, &vault.id.to_string(), 100_000),
-                    portable_sync_key(&vault_uuid, password),
-                )
-            } else {
-                skipped_vaults.push(vault.name.clone());
-                warnings.push(format!(
-                    "Skipped vault '{}': password required but not provided",
-                    vault.name
-                ));
-                continue;
+            let password = passwords
+                .get(&vault.id)
+                .expect("protected vault passwords were validated");
+            let local_key = derive_key_from_password(password, &vault.id.to_string(), 100_000);
+            let verified_password = decrypt_content(&local_key, &vault.encrypted_password)
+                .map_err(|_| format!("Invalid password for vault '{}'", vault.name))?;
+            if verified_password != *password {
+                return Err(format!("Invalid password for vault '{}'", vault.name));
             }
+            (local_key, portable_sync_key(&vault_uuid, password))
         } else {
             // No password protection - derive key from empty password and vault ID
             // This matches how the frontend derives keys for passwordless vaults
@@ -334,7 +344,7 @@ pub fn sync_export(
     let envelope = encrypt_sync_envelope(&sync_file, sync_passphrase)?;
     let json = serde_json::to_string_pretty(&envelope)
         .map_err(|e| format!("Failed to serialize sync file: {}", e))?;
-    fs::write(&sync_file_path, json).map_err(|e| format!("Failed to write sync file: {}", e))?;
+    write_sync_snapshot(&sync_file_path, json.as_bytes())?;
 
     // Update last_sync_at
     let now = chrono::Utc::now().to_rfc3339();
@@ -348,6 +358,40 @@ pub fn sync_export(
         skipped_vaults,
         warnings,
     })
+}
+
+fn write_sync_snapshot(path: &Path, contents: &[u8]) -> Result<(), String> {
+    let temp_path = path.with_file_name(format!("{}.tmp", SYNC_FILE_NAME));
+    let backup_path = path.with_file_name(format!("{}.bak", SYNC_FILE_NAME));
+    let mut temp = OpenOptions::new()
+        .create(true)
+        .truncate(true)
+        .write(true)
+        .open(&temp_path)
+        .map_err(|e| format!("Failed to create sync snapshot: {}", e))?;
+    temp.write_all(contents)
+        .and_then(|_| temp.sync_all())
+        .map_err(|e| format!("Failed to persist sync snapshot: {}", e))?;
+    drop(temp);
+
+    if path.exists() {
+        let _ = fs::remove_file(&backup_path);
+        fs::rename(path, &backup_path)
+            .map_err(|e| format!("Failed to preserve previous sync snapshot: {}", e))?;
+    }
+
+    if let Err(error) = fs::rename(&temp_path, path) {
+        if backup_path.exists() {
+            let _ = fs::rename(&backup_path, path);
+        }
+        return Err(format!("Failed to replace sync snapshot: {}", error));
+    }
+
+    if backup_path.exists() {
+        fs::remove_file(&backup_path)
+            .map_err(|e| format!("Failed to remove old sync snapshot: {}", e))?;
+    }
+    Ok(())
 }
 
 /// Get sync status information
@@ -467,7 +511,7 @@ fn bytes_to_hex(bytes: &[u8]) -> String {
 }
 
 fn hex_to_bytes(hex: &str) -> Result<Vec<u8>, String> {
-    if hex.len() % 2 != 0 {
+    if !hex.len().is_multiple_of(2) {
         return Err("Invalid encrypted sync payload".to_string());
     }
 
@@ -730,6 +774,32 @@ pub fn sync_import(
         ));
     }
 
+    for sync_vault in &sync_file.vaults {
+        let local_vault = Vault::get_by_uuid(conn, &sync_vault.uuid).map_err(|e| e.to_string())?;
+        let password = passwords.get(&sync_vault.uuid);
+        if sync_vault.has_password || local_vault.as_ref().is_some_and(|vault| vault.has_password) {
+            let password = password.ok_or_else(|| {
+                format!(
+                    "Password is required for protected vault '{}' before import",
+                    sync_vault.name
+                )
+            })?;
+            if let Some(local_vault) = local_vault.filter(|vault| vault.has_password) {
+                let local_key =
+                    derive_key_from_password(password, &local_vault.id.to_string(), 100_000);
+                let verified_password =
+                    decrypt_content(&local_key, &local_vault.encrypted_password)
+                        .map_err(|_| format!("Invalid password for vault '{}'", sync_vault.name))?;
+                if verified_password != *password {
+                    return Err(format!("Invalid password for vault '{}'", sync_vault.name));
+                }
+            }
+        }
+        for sync_item in &sync_vault.items {
+            sync_item_plaintext(sync_vault, sync_item, password)?;
+        }
+    }
+
     let last_sync_at = SyncSettings::get(conn, "last_sync_at").map_err(|e| e.to_string())?;
 
     let mut imported_vaults = 0;
@@ -737,6 +807,12 @@ pub fn sync_import(
     let mut conflicts = Vec::new();
     let mut warnings = Vec::new();
     let mut skipped_vaults = Vec::new();
+
+    let database = conn;
+    let tx = database
+        .unchecked_transaction()
+        .map_err(|e| e.to_string())?;
+    let conn: &Connection = &tx;
 
     // Process each vault from sync file
     for sync_vault in &sync_file.vaults {
@@ -932,6 +1008,12 @@ pub fn sync_import(
         }
     }
 
+    let now = chrono::Utc::now().to_rfc3339();
+    SyncSettings::set(conn, "last_sync_at", &now).map_err(|e| e.to_string())?;
+    SyncSettings::set(conn, "last_sync_device", &sync_file.device_name)
+        .map_err(|e| e.to_string())?;
+    tx.commit().map_err(|e| e.to_string())?;
+
     // Copy captures from sync folder
     let captures_src = sync_folder.join(CAPTURES_FOLDER_NAME);
     let local_captures_folder = get_captures_folder()?;
@@ -965,12 +1047,6 @@ pub fn sync_import(
             }
         }
     }
-
-    // Update last_sync_at
-    let now = chrono::Utc::now().to_rfc3339();
-    SyncSettings::set(conn, "last_sync_at", &now).map_err(|e| e.to_string())?;
-    SyncSettings::set(conn, "last_sync_device", &sync_file.device_name)
-        .map_err(|e| e.to_string())?;
 
     // Note: Search index rebuild should be triggered by the frontend after import
 
@@ -1399,6 +1475,13 @@ mod tests {
 
         let vault_id = conn.last_insert_rowid();
         let key = derive_key_from_password(password, &vault_id.to_string(), 100_000);
+        let encrypted_password =
+            encrypt_password(&key, password).expect("password verifier should encrypt");
+        conn.execute(
+            "UPDATE vaults SET encrypted_password = ?1 WHERE id = ?2",
+            params![encrypted_password, vault_id],
+        )
+        .expect("password verifier should store");
         let item = VaultItem::insert(conn, vault_id, "Secret title", "Secret body", &key)
             .expect("item should insert");
         VaultItem::update_summary(conn, item.id, "Secret summary").expect("summary should update");
@@ -1559,6 +1642,103 @@ mod tests {
             .expect("legacy content should decrypt after import");
         assert_eq!(imported_content, "Legacy body");
 
+        let _ = fs::remove_dir_all(sync_dir);
+    }
+
+    #[test]
+    fn sync_export_requires_every_protected_vault_before_replacing_snapshot() {
+        let sync_dir = temp_sync_dir();
+        let sync_path = sync_dir.join(SYNC_FILE_NAME);
+        fs::write(&sync_path, "previous snapshot").expect("previous snapshot should write");
+        let conn = setup_conn(&sync_dir);
+        insert_password_vault(&conn, "vault password");
+
+        let error = sync_export(&conn, HashMap::new(), Some("sync passphrase"))
+            .expect_err("missing vault password should stop export");
+
+        assert!(error.contains("Passwords are required for all protected vaults"));
+        assert_eq!(
+            fs::read_to_string(&sync_path).expect("previous snapshot should remain"),
+            "previous snapshot"
+        );
+        assert!(!sync_dir.join(format!("{}.tmp", SYNC_FILE_NAME)).exists());
+        assert!(!sync_dir.join(format!("{}.bak", SYNC_FILE_NAME)).exists());
+        let _ = fs::remove_dir_all(sync_dir);
+    }
+
+    #[test]
+    fn sync_export_replaces_existing_snapshot_without_leaving_work_files() {
+        let sync_dir = temp_sync_dir();
+        let conn = setup_conn(&sync_dir);
+        let (vault_id, _) = insert_password_vault(&conn, "vault password");
+        let passwords = HashMap::from([(vault_id, "vault password".to_string())]);
+
+        sync_export(&conn, passwords.clone(), Some("sync passphrase"))
+            .expect("first export should succeed");
+        let first = fs::read(sync_dir.join(SYNC_FILE_NAME)).expect("first snapshot should read");
+        SyncSettings::set(&conn, "device_name", "Changed Device")
+            .expect("device name should update");
+        sync_export(&conn, passwords, Some("sync passphrase"))
+            .expect("replacement export should succeed");
+        let second = fs::read(sync_dir.join(SYNC_FILE_NAME)).expect("second snapshot should read");
+
+        assert_ne!(first, second);
+        assert!(!sync_dir.join(format!("{}.tmp", SYNC_FILE_NAME)).exists());
+        assert!(!sync_dir.join(format!("{}.bak", SYNC_FILE_NAME)).exists());
+        let _ = fs::remove_dir_all(sync_dir);
+    }
+
+    #[test]
+    fn sync_import_rolls_back_all_database_changes_on_constraint_failure() {
+        let sync_dir = temp_sync_dir();
+        let now = chrono::Utc::now().to_rfc3339();
+        let duplicate_item_uuid = uuid::Uuid::new_v4().to_string();
+        let item = SyncItem {
+            uuid: duplicate_item_uuid,
+            title: "Item".to_string(),
+            content: "Body".to_string(),
+            content_encrypted: false,
+            created_at: now.clone(),
+            updated_at: now.clone(),
+            deleted_at: None,
+            image: None,
+            summary: None,
+            summary_encrypted: false,
+            sort_order: None,
+        };
+        let vault = |name: &str| SyncVault {
+            uuid: uuid::Uuid::new_v4().to_string(),
+            name: name.to_string(),
+            created_at: now.clone(),
+            updated_at: now.clone(),
+            deleted_at: None,
+            cover_image: None,
+            has_password: false,
+            items: vec![item.clone()],
+        };
+        let sync_file = SyncFile {
+            format_version: SYNC_FORMAT_VERSION.to_string(),
+            device_id: "remote".to_string(),
+            device_name: "Remote".to_string(),
+            exported_at: now.clone(),
+            vaults: vec![vault("First"), vault("Second")],
+            captures: vec![],
+        };
+        fs::write(
+            sync_dir.join(SYNC_FILE_NAME),
+            serde_json::to_string(&sync_file).expect("sync file should serialize"),
+        )
+        .expect("sync file should write");
+        let conn = setup_conn(&sync_dir);
+
+        sync_import(&conn, HashMap::new(), None)
+            .expect_err("duplicate item UUID should fail import");
+
+        assert!(Vault::list(&conn).expect("vaults should list").is_empty());
+        assert!(
+            conn.is_autocommit(),
+            "failed import must close its transaction"
+        );
         let _ = fs::remove_dir_all(sync_dir);
     }
 }
