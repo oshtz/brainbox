@@ -141,24 +141,26 @@ jobs:
         shell: pwsh
         env:
           EVB_INSTALLER_URL: ${{ vars.EVB_INSTALLER_URL }}
-          EVB_INSTALLER_SHA256: ${{ vars.EVB_INSTALLER_SHA256 }}
+          EVB_INSTALLER_SIGNER_THUMBPRINT: ${{ vars.EVB_INSTALLER_SIGNER_THUMBPRINT }}
         run: |
-          if ([string]::IsNullOrWhiteSpace($env:EVB_INSTALLER_URL) -or [string]::IsNullOrWhiteSpace($env:EVB_INSTALLER_SHA256)) {
-            throw 'EVB_INSTALLER_URL and EVB_INSTALLER_SHA256 repository variables are required'
+          if ([string]::IsNullOrWhiteSpace($env:EVB_INSTALLER_URL) -or [string]::IsNullOrWhiteSpace($env:EVB_INSTALLER_SIGNER_THUMBPRINT)) {
+            throw 'EVB_INSTALLER_URL and EVB_INSTALLER_SIGNER_THUMBPRINT repository variables are required'
           }
 
           $installer = Join-Path $env:RUNNER_TEMP 'enigmavb-setup.exe'
           Invoke-WebRequest -Uri $env:EVB_INSTALLER_URL -OutFile $installer -UseBasicParsing -TimeoutSec 120
+          if ((Get-Item $installer).Length -lt 1MB) { throw 'EVB installer is unexpectedly small' }
+
           $actualHash = (Get-FileHash $installer -Algorithm SHA256).Hash
-          $expectedHashes = @($env:EVB_INSTALLER_SHA256 -split '[,\s]+' | Where-Object { $_ })
-          if ($actualHash -notin $expectedHashes) {
-            throw "EVB installer hash mismatch: got $actualHash"
-          }
+          Write-Host "Downloaded EVB installer SHA-256: $actualHash"
 
           $signature = Get-AuthenticodeSignature $installer
-          $expectedSigner = '2603B1C2032C7C286F56FB80A638A2B1EC8E8AC9'
-          if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Thumbprint -ne $expectedSigner) {
+          if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Thumbprint -ne $env:EVB_INSTALLER_SIGNER_THUMBPRINT.Trim()) {
             throw "EVB installer Authenticode validation failed: $($signature.Status)"
+          }
+
+          if ((Get-Item $installer).VersionInfo.ProductName.Trim() -ne 'Enigma Virtual Box') {
+            throw 'Downloaded installer is not Enigma Virtual Box'
           }
           "EVB_INSTALLER=$installer" | Out-File $env:GITHUB_ENV -Append
 

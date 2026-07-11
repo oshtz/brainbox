@@ -27,9 +27,9 @@ CI runs these gates on pull requests and pushes to `main`/`dev`. Browser tests s
 
 - Releases run only for an existing `vMAJOR.MINOR.PATCH` tag or an explicit manual dispatch naming that tag. A push to `main` never publishes.
 - The tag must match `package.json`, `src-tauri/Cargo.toml`, and `src-tauri/tauri.conf.json` exactly.
-- Repository variables `EVB_INSTALLER_URL` and `EVB_INSTALLER_SHA256` must identify an operator-approved Enigma Virtual Box installer. `EVB_INSTALLER_SHA256` accepts a comma-separated allowlist when the official endpoint serves multiple approved signed variants; every download must also match the pinned Enigma Authenticode signer. The protected `release` environment must provide `APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`, `APPLE_ID`, `APPLE_PASSWORD`, and `APPLE_TEAM_ID`.
+- Repository variables `EVB_INSTALLER_URL` and `EVB_INSTALLER_SIGNER_THUMBPRINT` must identify the official Enigma Virtual Box endpoint and its operator-approved Authenticode certificate. The endpoint serves dynamically varied signed installers, so each download is size/product checked, must have a valid signature from the pinned signer, and has its observed SHA-256 logged for provenance. The protected `release` environment must provide `APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`, `APPLE_ID`, `APPLE_PASSWORD`, and `APPLE_TEAM_ID`.
 - Windows produces one unsigned `brainbox-portable.exe`; macOS produces one signed, notarized, and stapled Apple Silicon `.dmg`. Each platform also produces a SHA-256 manifest.
-- Packaging fails on a missing or hash-mismatched EVB installer, missing or implausibly small portable executable, missing or duplicate DMG, failed notarization, or checksum mismatch.
+- Packaging fails on an invalid or wrong-publisher EVB installer, missing or implausibly small portable executable, missing or duplicate DMG, failed notarization, or checksum mismatch.
 - Publishing creates a draft only after both platform jobs pass, verifies all four expected assets, then publishes once. Published tags and assets are immutable; fix forward with a new version.
 - The Windows portable build is intentionally unsigned. SmartScreen and antivirus warnings are expected and must be disclosed in the release notes.
 
