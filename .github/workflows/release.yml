@@ -150,8 +150,15 @@ jobs:
           $installer = Join-Path $env:RUNNER_TEMP 'enigmavb-setup.exe'
           Invoke-WebRequest -Uri $env:EVB_INSTALLER_URL -OutFile $installer -UseBasicParsing -TimeoutSec 120
           $actualHash = (Get-FileHash $installer -Algorithm SHA256).Hash
-          if ($actualHash -ne $env:EVB_INSTALLER_SHA256.Trim()) {
-            throw "EVB installer hash mismatch: expected $env:EVB_INSTALLER_SHA256, got $actualHash"
+          $expectedHashes = @($env:EVB_INSTALLER_SHA256 -split '[,\s]+' | Where-Object { $_ })
+          if ($actualHash -notin $expectedHashes) {
+            throw "EVB installer hash mismatch: got $actualHash"
+          }
+
+          $signature = Get-AuthenticodeSignature $installer
+          $expectedSigner = '2603B1C2032C7C286F56FB80A638A2B1EC8E8AC9'
+          if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Thumbprint -ne $expectedSigner) {
+            throw "EVB installer Authenticode validation failed: $($signature.Status)"
           }
           "EVB_INSTALLER=$installer" | Out-File $env:GITHUB_ENV -Append
 
