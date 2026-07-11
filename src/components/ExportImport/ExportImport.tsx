@@ -32,11 +32,12 @@ export const ExportImport: React.FC<ExportImportProps> = ({ onImportComplete }) 
   const [loading, setLoading] = useState(true);
   const [selectedVaults, setSelectedVaults] = useState<Set<number>>(new Set());
   const [isExporting, setIsExporting] = useState(false);
+  const [exportPassphrase, setExportPassphrase] = useState('');
   const [isImporting, setIsImporting] = useState(false);
   const [importPassword, setImportPassword] = useState('');
   const [showImportDialog, setShowImportDialog] = useState(false);
   const [importData, setImportData] = useState<string | null>(null);
-  const [importPreview, setImportPreview] = useState<{ vaultCount: number; itemCount: number } | null>(null);
+  const [importPreview, setImportPreview] = useState<{ vaultCount: number; itemCount: number; encrypted: boolean } | null>(null);
 
   useEffect(() => {
     loadVaults();
@@ -79,6 +80,10 @@ export const ExportImport: React.FC<ExportImportProps> = ({ onImportComplete }) 
       showError('Please select at least one vault to export');
       return;
     }
+    if (!exportPassphrase.trim()) {
+      showError('Enter a backup passphrase');
+      return;
+    }
 
     setIsExporting(true);
     try {
@@ -96,6 +101,7 @@ export const ExportImport: React.FC<ExportImportProps> = ({ onImportComplete }) 
       const jsonData = await invoke<string>('export_vaults', {
         vaultIds,
         keys,
+        backupPassphrase: exportPassphrase,
       });
 
       // Create and download file
@@ -103,13 +109,14 @@ export const ExportImport: React.FC<ExportImportProps> = ({ onImportComplete }) 
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `brainbox-export-${new Date().toISOString().split('T')[0]}.json`;
+      a.download = `brainbox-backup-${new Date().toISOString().split('T')[0]}.brainbox`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
 
       showSuccess(`Exported ${vaultIds.length} vault(s) successfully`);
+      setExportPassphrase('');
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       if (!message.includes('Password is required')) {
@@ -131,20 +138,20 @@ export const ExportImport: React.FC<ExportImportProps> = ({ onImportComplete }) 
         const data = JSON.parse(content);
 
         // Validate format
-        if (!data.version || !data.vaults || !Array.isArray(data.vaults)) {
+        const encrypted = typeof data.ciphertext === 'string' && data.encryption === 'XChaCha20-Poly1305';
+        if (!encrypted && (!data.version || !data.vaults || !Array.isArray(data.vaults))) {
           showError('Invalid export file format');
           return;
         }
 
-        // Calculate preview
-        const vaultCount = data.vaults.length;
-        const itemCount = data.vaults.reduce(
+        const vaultCount = encrypted ? 0 : data.vaults.length;
+        const itemCount = encrypted ? 0 : data.vaults.reduce(
           (sum: number, v: { items?: unknown[] }) => sum + (v.items?.length || 0),
           0
         );
 
         setImportData(content);
-        setImportPreview({ vaultCount, itemCount });
+        setImportPreview({ vaultCount, itemCount, encrypted });
         setShowImportDialog(true);
       } catch {
         showError('Failed to parse export file');
@@ -165,7 +172,7 @@ export const ExportImport: React.FC<ExportImportProps> = ({ onImportComplete }) 
     try {
       const importedIds = await invoke<number[]>('import_vaults', {
         jsonData: importData,
-        password: importPassword,
+        backupPassphrase: importPassword,
       });
 
       showSuccess(`Imported ${importedIds.length} vault(s) successfully`);
@@ -237,12 +244,26 @@ export const ExportImport: React.FC<ExportImportProps> = ({ onImportComplete }) 
           </div>
         )}
 
+        <div className={styles.field}>
+          <label htmlFor="export-passphrase" className={styles.fieldLabel}>Backup passphrase</label>
+          <input
+            id="export-passphrase"
+            type="password"
+            value={exportPassphrase}
+            onChange={(event) => setExportPassphrase(event.target.value)}
+            className={styles.input}
+            autoComplete="new-password"
+            placeholder="Required to restore this backup"
+          />
+          <span className={styles.fieldHint}>Keep this somewhere safe. brainbox cannot recover it.</span>
+        </div>
+
         <div className={styles.actions}>
           <button
             type="button"
             onClick={handleExport}
             className={styles.primaryButton}
-            disabled={isExporting || selectedVaults.size === 0}
+            disabled={isExporting || selectedVaults.size === 0 || !exportPassphrase.trim()}
           >
             {isExporting ? 'Exporting...' : `Export ${selectedVaults.size} Vault(s)`}
           </button>
@@ -256,14 +277,13 @@ export const ExportImport: React.FC<ExportImportProps> = ({ onImportComplete }) 
         </div>
 
         <p className={styles.description}>
-          Import vaults from a brainbox export file. All imported vaults will be encrypted
-          with a password you choose.
+          Restore a passphrase-encrypted brainbox backup. Legacy JSON exports are accepted for migration.
         </p>
 
         <input
           ref={fileInputRef}
           type="file"
-          accept=".json"
+          accept=".brainbox,.json,application/json"
           onChange={handleFileSelect}
           className={styles.fileInput}
           id="import-file"
@@ -276,10 +296,21 @@ export const ExportImport: React.FC<ExportImportProps> = ({ onImportComplete }) 
       {/* Import Dialog */}
       {showImportDialog && importPreview && (
         <div className={styles.dialogBackdrop} onClick={cancelImport}>
-          <div className={styles.dialog} onClick={(e) => e.stopPropagation()}>
-            <h3 className={styles.dialogTitle}>Import Vaults</h3>
+          <div
+            className={styles.dialog}
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="import-backup-title"
+          >
+            <h3 id="import-backup-title" className={styles.dialogTitle}>Import Vaults</h3>
 
             <div className={styles.previewBox}>
+              {importPreview.encrypted ? (
+                <div className={styles.previewItem}>Encrypted backup — unlock to inspect and restore.</div>
+              ) : null}
+              {!importPreview.encrypted && (
+                <>
               <div className={styles.previewItem}>
                 <span className={styles.previewLabel}>Vaults:</span>
                 <span className={styles.previewValue}>{importPreview.vaultCount}</span>
@@ -288,11 +319,13 @@ export const ExportImport: React.FC<ExportImportProps> = ({ onImportComplete }) 
                 <span className={styles.previewLabel}>Items:</span>
                 <span className={styles.previewValue}>{importPreview.itemCount}</span>
               </div>
+                </>
+              )}
             </div>
 
             <div className={styles.field}>
               <label htmlFor="import-password" className={styles.fieldLabel}>
-                Password for imported vaults
+                Backup passphrase
               </label>
               <input
                 id="import-password"
@@ -300,11 +333,11 @@ export const ExportImport: React.FC<ExportImportProps> = ({ onImportComplete }) 
                 value={importPassword}
                 onChange={(e) => setImportPassword(e.target.value)}
                 className={styles.input}
-                placeholder="Enter a password (can be empty)"
+                placeholder="Enter the backup passphrase"
                 autoComplete="new-password"
               />
               <span className={styles.fieldHint}>
-                All imported vaults will use this password
+                This decrypts the backup and protects the restored vaults.
               </span>
             </div>
 
@@ -313,7 +346,7 @@ export const ExportImport: React.FC<ExportImportProps> = ({ onImportComplete }) 
                 type="button"
                 onClick={cancelImport}
                 className={styles.cancelButton}
-                disabled={isImporting}
+                disabled={isImporting || !importPassword.trim()}
               >
                 Cancel
               </button>

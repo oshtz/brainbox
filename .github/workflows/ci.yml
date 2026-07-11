@@ -5,6 +5,9 @@ on:
   push:
     branches: [main, dev]
 
+permissions:
+  contents: read
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -38,20 +41,38 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Install Playwright browser
+        run: pnpm exec playwright install chromium
+
       - name: Build frontend
         run: pnpm run build
 
       - name: Run unit tests
         run: pnpm run test:run
 
-      - name: Check Rust
-        run: cargo check --manifest-path src-tauri/Cargo.toml
+      - name: Run browser end-to-end tests
+        run: pnpm run test:e2e
+
+      - name: Check Rust formatting
+        run: cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check
+
+      - name: Lint Rust
+        run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --all-features -- -D warnings
 
       - name: Test Rust
         run: cargo test --manifest-path src-tauri/Cargo.toml
 
+      - name: Run native WebView2 QA
+        run: pnpm run test:tauri:qa
+
       - name: Run Tauri desktop smoke
         run: pnpm run smoke:tauri
 
-      - name: Audit production dependencies
-        run: pnpm audit --prod
+      - name: Audit JavaScript dependencies
+        run: pnpm audit
+
+      - name: Install Rust audit tool
+        run: cargo install cargo-audit --locked
+
+      - name: Audit Rust dependencies
+        run: cargo audit --file src-tauri/Cargo.lock

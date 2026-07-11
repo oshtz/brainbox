@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { XMarkIcon } from '@heroicons/react/24/outline';
 import styles from './CaptureModal.module.css';
 import Button from '../Button/Button';
@@ -7,10 +7,21 @@ import LinkPreview from '../LinkPreview/LinkPreview';
 
 const LAST_USED_VAULT_KEY = 'brainbox-last-used-vault-id';
 
-const CaptureModal = ({ isOpen, onClose, onSave, vaults = [], initialTitle = '', initialContent = '' }) => {
+const deriveTitle = (content) => {
+  const trimmed = content.trim();
+  if (/^https?:\/\//i.test(trimmed)) {
+    try {
+      return new URL(trimmed).hostname.replace(/^www\./, '');
+    } catch {}
+  }
+  return trimmed.split(/\r?\n/).find((line) => line.trim())?.trim().slice(0, 80) || 'Untitled note';
+};
+
+const CaptureModal = ({ isOpen, onClose, onSave, vaults = [], initialVaultId = '', initialTitle = '', initialContent = '' }) => {
   const [title, setTitle] = useState(initialTitle);
   const [content, setContent] = useState(initialContent);
   const [selectedVault, setSelectedVault] = useState('');
+  const contentRef = useRef(null);
   
   // Use vaults prop for dropdown
   const vaultOptions = vaults;
@@ -18,9 +29,8 @@ const CaptureModal = ({ isOpen, onClose, onSave, vaults = [], initialTitle = '',
   // Effect: when modal opens or vaults change, set default vault selection
   useEffect(() => {
     if (!isOpen) return;
-    // If only one vault, auto-select it
-    if (vaultOptions.length === 1) {
-      setSelectedVault(vaultOptions[0].id);
+    if (initialVaultId && vaultOptions.some(v => v.id === initialVaultId)) {
+      setSelectedVault(initialVaultId);
       return;
     }
     // Try to restore last used vault
@@ -29,15 +39,16 @@ const CaptureModal = ({ isOpen, onClose, onSave, vaults = [], initialTitle = '',
       setSelectedVault(lastUsed);
       return;
     }
-    // Otherwise, reset selection
-    setSelectedVault('');
-  }, [isOpen, vaultOptions]);
+    const inbox = vaultOptions.find(v => (v.title || v.name || '').toLowerCase() === 'inbox');
+    setSelectedVault(inbox?.id || vaultOptions[0]?.id || '');
+  }, [isOpen, initialVaultId, vaultOptions]);
 
   // Reset fields when modal opens or initial values change
   useEffect(() => {
     if (isOpen) {
       setTitle(initialTitle);
       setContent(initialContent);
+      requestAnimationFrame(() => contentRef.current?.focus());
     }
   }, [isOpen, initialTitle, initialContent]);
 
@@ -61,7 +72,8 @@ const CaptureModal = ({ isOpen, onClose, onSave, vaults = [], initialTitle = '',
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    onSave({ title, content, vaultId: selectedVault });
+    const finalTitle = title.trim() || deriveTitle(content);
+    onSave({ title: finalTitle, content: content.trim(), vaultId: selectedVault });
     handleReset();
     onClose();
   };
@@ -102,11 +114,16 @@ const CaptureModal = ({ isOpen, onClose, onSave, vaults = [], initialTitle = '',
         className={styles.modal}
         onClick={(e) => e.stopPropagation()}
         role="dialog"
+        aria-modal="true"
         aria-labelledby="capture-modal-title"
+        aria-describedby="capture-modal-description"
         data-testid="capture-modal"
       >
         <header className={styles.header}>
-          <h2 id="capture-modal-title" className={styles.title}>Quick Capture</h2>
+          <div>
+            <h2 id="capture-modal-title" className={styles.title}>Quick capture</h2>
+            <p id="capture-modal-description" className={styles.description}>Paste a thought or link. The title is optional.</p>
+          </div>
           <button className={styles.closeButton} onClick={onClose} aria-label="Close">
             <XMarkIcon className={styles.closeIcon} />
           </button>
@@ -114,55 +131,57 @@ const CaptureModal = ({ isOpen, onClose, onSave, vaults = [], initialTitle = '',
         
         <form onSubmit={handleSubmit} className={styles.form}>
           <div className={styles.field}>
-            <label htmlFor="capture-title">Title</label>
-            <input
-              id="capture-title"
-              type="text"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="Give your note a title..."
-              required
-              className={styles.input}
-              data-testid="capture-title-input"
-            />
-          </div>
-
-          <div className={styles.field}>
-            <label htmlFor="capture-content">Content</label>
+            <label htmlFor="capture-content">Note or link</label>
             <textarea
+              ref={contentRef}
               id="capture-content"
               value={content}
               onChange={(e) => setContent(e.target.value)}
-              placeholder="What's on your mind?"
-              rows={5}
+              placeholder="Paste anything or start typing…"
+              rows={7}
+              required
               className={styles.textarea}
               data-testid="capture-content-input"
             />
             {urlPreview}
           </div>
 
-          <div className={styles.field}>
-            <label htmlFor="capture-vault">Save to Vault</label>
-            <select
-              id="capture-vault"
-              value={selectedVault}
-              onChange={handleVaultChange}
-              required
-              className={styles.select}
-              data-testid="capture-vault-select"
-            >
-              <option value="" disabled>Select a vault...</option>
-              {vaultOptions.map(vault => (
-                <option key={vault.id} value={vault.id}>
-                  {vault.title || vault.name}
-                </option>
-              ))}
-            </select>
-          </div>
+          <details className={styles.details}>
+            <summary>Title and destination</summary>
+            <div className={styles.field}>
+              <label htmlFor="capture-title">Title <span className={styles.optional}>(optional)</span></label>
+              <input
+                id="capture-title"
+                type="text"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder={deriveTitle(content)}
+                className={styles.input}
+                data-testid="capture-title-input"
+              />
+            </div>
+            <div className={styles.field}>
+              <label htmlFor="capture-vault">Save to vault</label>
+              <select
+                id="capture-vault"
+                value={selectedVault}
+                onChange={handleVaultChange}
+                required
+                className={styles.select}
+                data-testid="capture-vault-select"
+              >
+                {vaultOptions.map(vault => (
+                  <option key={vault.id} value={vault.id}>
+                    {vault.title || vault.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </details>
           
           <div className={styles.actions}>
-            <Button variant="secondary" type="button" onClick={handleReset} data-testid="capture-cancel-button">
-              Reset
+            <Button variant="secondary" type="button" onClick={onClose} data-testid="capture-cancel-button">
+              Cancel
             </Button>
             <Button type="submit" data-testid="capture-submit-button">
               Save

@@ -1,54 +1,49 @@
 # Release Readiness
 
-brainbox is currently documented as an educational/local-first project, not production software for sensitive data. Use this checklist before treating any build as release-ready.
+brainbox is an educational/local-first project, not production software for sensitive data. A release is allowed only after every automated gate and both packaged-app smoke checks pass.
 
 ## Automated Gates
 
-Run these from a clean checkout:
+Run from a clean checkout:
 
-```bash
+```powershell
 corepack enable
 pnpm install --frozen-lockfile
 pnpm run build
 pnpm run test:run
 pnpm run test:e2e
-cargo check --manifest-path src-tauri/Cargo.toml
+cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check
+cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --all-features -- -D warnings
 cargo test --manifest-path src-tauri/Cargo.toml
+pnpm run test:tauri:qa
 pnpm run smoke:tauri
-pnpm audit --prod
+pnpm audit
+cargo audit --file src-tauri/Cargo.lock
 ```
 
-`pnpm run smoke:tauri` builds the real Tauri debug binary, starts the Vite dev server expected by the debug app, launches the desktop process with an isolated temporary `BRAINBOX_DATA_DIR`, waits for the SQLite DB and search index to initialize, and then closes both processes.
+CI runs these gates on pull requests and pushes to `main`/`dev`. Browser tests supplement, but do not replace, native WebView2 QA and the Tauri runtime smoke test.
 
-Release builds publish only the supported end-user artifacts: the macOS DMG and the Windows portable EXE. Extra Tauri-generated installer/archive assets are pruned from the GitHub release.
+## Release Contract
 
-## Manual Desktop Smoke
+- Releases run only for an existing `vMAJOR.MINOR.PATCH` tag or an explicit manual dispatch naming that tag. A push to `main` never publishes.
+- The tag must match `package.json`, `src-tauri/Cargo.toml`, and `src-tauri/tauri.conf.json` exactly.
+- Repository variables `EVB_INSTALLER_URL` and `EVB_INSTALLER_SHA256` must identify an operator-approved Enigma Virtual Box installer. The protected `release` environment must provide `APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`, `APPLE_ID`, `APPLE_PASSWORD`, and `APPLE_TEAM_ID`.
+- Windows produces one unsigned `brainbox-portable.exe`; macOS produces one signed, notarized, and stapled Apple Silicon `.dmg`. Each platform also produces a SHA-256 manifest.
+- Packaging fails on a missing or hash-mismatched EVB installer, missing or implausibly small portable executable, missing or duplicate DMG, failed notarization, or checksum mismatch.
+- Publishing creates a draft only after both platform jobs pass, verifies all four expected assets, then publishes once. Published tags and assets are immutable; fix forward with a new version.
+- The Windows portable build is intentionally unsigned. SmartScreen and antivirus warnings are expected and must be disclosed in the release notes.
 
-- Run the Windows portable EXE on a clean Windows machine.
-- Launch with no existing `brainbox.sqlite`.
-- Create one passwordless vault and one password-protected vault.
-- Capture a note and a URL.
-- Search for both captured items and open the result from the correct vault.
-- Export sync data with a sync file passphrase, confirm vault names, item titles, content, summaries, covers, and device name are not plaintext in `brainbox.sync`.
-- Import the sync file into a clean profile and confirm items restore.
-- Close and reopen; confirm vault list, search, tray behavior, and update check do not regress.
+## Update Posture
 
-## Signing And Update Gates
+The app only checks the latest published GitHub release and reports its version. Download, replacement, and install commands are disabled; users download releases manually.
 
-- Windows code-signing certificate available and configured.
-- macOS signing/notarization credentials available before advertising macOS as production-ready.
-- GitHub release contains only the macOS DMG and Windows portable EXE.
-- Portable updater behavior tested against a published release asset.
-- macOS DMG updater behavior tested against a published release asset.
-- Update failure path tested with a missing or unavailable asset.
+Do not restore automatic installation until the official Tauri updater is configured with a committed public key, protected signing key, native updater bundles and `.sig` files for both platforms, atomic complete-release publication, signature-rejection tests, and a previous-version upgrade/persistence smoke test.
 
-## Security Posture
+## Packaged-App Smoke
 
-- New sync exports require a sync file passphrase and write an encrypted sync-file envelope. Legacy plaintext sync files remain importable for migration.
-- Standalone capture files are not exported by encrypted sync because they live outside the sync JSON envelope.
-- Keep the README educational/security warning until a dedicated security review covers key storage, key rotation, backup/recovery, and platform keychain integration.
+- Run the unsigned portable executable on a clean Windows machine and install the notarized DMG on a clean Apple Silicon Mac.
+- Launch with no existing `brainbox.sqlite`; create passwordless and protected vaults, capture a note and URL, search, export/import an encrypted backup, restart, and confirm persistence.
+- Install over the previous public version and confirm existing vaults, settings, tray behavior, protocol handling, and search still work.
+- Disconnect networking and confirm the core capture/search workflow remains usable; reconnect and verify update checks fail safely when GitHub or the expected release is unavailable.
 
-## Retained Code Decisions
-
-- The unused screenshot capture helper module was deleted. Current capture support is the modal, hotkey, local HTTP bridge, and Windows protocol handler.
-- `src-tauri/src/lib.rs` now delegates app-data paths and sync command wrappers to smaller modules; keep moving future command groups out before adding major backend features.
+If packaging or publishing fails, leave any draft unpublished and keep the previous release available. Never replace assets on an already published tag.

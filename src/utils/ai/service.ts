@@ -22,8 +22,19 @@ import {
   AnthropicProvider,
   GoogleProvider,
 } from './providers';
+import { invoke } from '@tauri-apps/api/core';
 
 const SETTINGS_KEY = 'brainbox-ai-settings';
+
+export function settingsForStorage(settings: AISettings): AISettings {
+  const providers = Object.fromEntries(
+    Object.entries(settings.providers).map(([type, provider]) => {
+      const { apiKey: _secret, ...nonSecret } = provider;
+      return [type, nonSecret];
+    })
+  ) as AISettings['providers'];
+  return { ...settings, providers };
+}
 
 class AIService {
   private settings: AISettings;
@@ -32,6 +43,7 @@ class AIService {
   constructor() {
     this.settings = this.loadSettings();
     this.initializeProviders();
+    void this.loadSecureApiKeys();
   }
 
   private loadSettings(): AISettings {
@@ -41,7 +53,7 @@ class AIService {
         const parsed = JSON.parse(saved);
         // Merge with defaults to handle new providers
         const defaults = getDefaultSettings();
-        return {
+        const merged = {
           ...defaults,
           ...parsed,
           providers: {
@@ -49,6 +61,10 @@ class AIService {
             ...parsed.providers,
           },
         };
+        // Migrate legacy plaintext keys into memory for this session, then scrub
+        // them from browser storage. Secure persistence is handled by Rust.
+        this.persistNonSecretSettings(merged);
+        return merged;
       }
     } catch (error) {
       console.error('Failed to load AI settings:', error);
@@ -68,10 +84,41 @@ class AIService {
   }
 
   private saveSettings(): void {
+    this.persistNonSecretSettings(this.settings);
+  }
+
+  private persistNonSecretSettings(settings: AISettings): void {
     try {
-      localStorage.setItem(SETTINGS_KEY, JSON.stringify(this.settings));
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify(settingsForStorage(settings)));
     } catch (error) {
       console.error('Failed to save AI settings:', error);
+    }
+  }
+
+  private async loadSecureApiKeys(): Promise<void> {
+    const cloudProviders: ProviderType[] = ['openrouter', 'openai', 'anthropic', 'google'];
+    await Promise.all(cloudProviders.map(async (type) => {
+      try {
+        const apiKey = await invoke<string | null>('get_ai_secret', { provider: type });
+        const legacyApiKey = this.settings.providers[type].apiKey?.trim();
+        const resolvedApiKey = apiKey || legacyApiKey;
+        if (!resolvedApiKey) return;
+        if (!apiKey && legacyApiKey) {
+          await invoke('set_ai_secret', { provider: type, secret: legacyApiKey });
+        }
+        this.settings.providers[type] = { ...this.settings.providers[type], apiKey: resolvedApiKey };
+        const provider = this.providers.get(type);
+        if (provider && 'updateSettings' in provider) {
+          (provider as OllamaProvider).updateSettings(this.settings.providers[type]);
+        }
+      } catch (error) {
+        console.warn(`Secure credentials unavailable for ${type}:`, error);
+      }
+    }));
+    try {
+      window.dispatchEvent(new CustomEvent('ai-settings-changed'));
+    } catch {
+      // Tests and non-window runtimes do not need the notification.
     }
   }
 
@@ -122,6 +169,14 @@ class AIService {
     }
 
     this.saveSettings();
+    if (Object.prototype.hasOwnProperty.call(settings, 'apiKey')) {
+      void invoke('set_ai_secret', {
+        provider: type,
+        secret: settings.apiKey?.trim() || null,
+      }).catch((error) => {
+        console.warn(`Could not persist ${type} API key securely; it will remain session-only:`, error);
+      });
+    }
   }
 
   setActiveProvider(type: ProviderType): void {

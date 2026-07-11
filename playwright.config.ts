@@ -1,5 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
 
+const port = process.env.BRAINBOX_E2E_PORT ?? '17341';
+
 /**
  * @see https://playwright.dev/docs/test-configuration
  */
@@ -23,7 +25,7 @@ export default defineConfig({
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
   use: {
     /* Base URL to use in actions like `await page.goto('/')`. */
-    baseURL: 'http://127.0.0.1:17340',
+    baseURL: `http://127.0.0.1:${port}`,
 
     /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
     trace: 'on-first-retry',
@@ -51,9 +53,10 @@ export default defineConfig({
 
   /* Run your local dev server before starting the tests */
   webServer: {
-    command: 'pnpm run dev -- --host 127.0.0.1',
-    url: 'http://127.0.0.1:17340',
-    reuseExistingServer: !process.env.CI,
+    command: `pnpm run dev -- --host 127.0.0.1 --port ${port}`,
+    url: `http://127.0.0.1:${port}`,
+    // Never silently test a different workspace's dev server on the same port.
+    reuseExistingServer: false,
     timeout: 60 * 1000,
   },
 });

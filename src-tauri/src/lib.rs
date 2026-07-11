@@ -2,6 +2,7 @@
 mod network_commands;
 mod paths;
 mod search;
+mod secret_commands;
 mod sync;
 mod sync_commands;
 mod updater;
@@ -15,9 +16,6 @@ use tauri::Manager;
 use tauri::Runtime;
 
 // Only import what's actually used
-#[cfg(target_os = "windows")]
-use urlencoding;
-
 use tauri::State;
 
 // Store the current hotkey in memory
@@ -212,7 +210,6 @@ fn create_app_builder() -> tauri::Builder<tauri::Wry> {
                 }
             }
         })
-        .plugin(tauri_plugin_shell::init())
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
                 .with_shortcut("Alt+Shift+B")
@@ -263,15 +260,24 @@ fn create_app_builder() -> tauri::Builder<tauri::Wry> {
                 }
             }
         })
-        .plugin(tauri_plugin_shell::init())
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
                 .with_shortcut("Alt+Shift+B")
                 .expect("Failed to register shortcut")
                 .build(),
         )
-    // Note: Single instance plugin disabled on Windows due to null pointer bug
-    // Users can run multiple instances, but protocol handling will still work
+        .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
+            for arg in args {
+                if arg.starts_with("brainbox://capture?") {
+                    handle_protocol_url(app, &arg);
+                    if let Some(window) = app.get_webview_window("main") {
+                        let _ = window.show();
+                        let _ = window.set_focus();
+                    }
+                    break;
+                }
+            }
+        }))
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -420,7 +426,7 @@ pub fn run() {
 
                 if has_protocol_url {
                     // Process the URL immediately; if the window isn't ready yet, it will be queued
-                    handle_protocol_url(&app.handle(), &protocol_url);
+                    handle_protocol_url(app.handle(), &protocol_url);
                 }
             }
 
@@ -551,13 +557,13 @@ pub fn run() {
             network_commands::ollama_list_models,
             network_commands::ollama_generate,
             network_commands::ollama_generate_stream,
+            secret_commands::get_ai_secret,
+            secret_commands::set_ai_secret,
             quit_app,
-            // Auto-updater commands (custom GitHub releases implementation)
+            // Update checks are read-only; installation remains manual until
+            // signed Tauri updater artifacts are configured.
             updater::get_current_version,
             updater::check_for_updates,
-            updater::download_update,
-            updater::apply_update,
-            updater::install_update,
             #[cfg(target_os = "windows")]
             register_brainbox_protocol,
         ])

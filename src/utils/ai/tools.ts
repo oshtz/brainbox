@@ -273,10 +273,7 @@ export const BRAINY_TOOLS: ToolDefinition[] = [
 /**
  * Tools that require user confirmation before execution
  */
-export const DESTRUCTIVE_TOOLS = new Set([
-  'delete_item',
-  'delete_vault',
-]);
+export const DESTRUCTIVE_TOOLS = new Set(['delete_item', 'delete_vault']);
 
 /**
  * Tools that modify data (for UI indication)
@@ -289,7 +286,6 @@ export const WRITE_TOOLS = new Set([
   'update_item_content',
   'move_item',
   'delete_item',
-  'summarize_item',
 ]);
 
 /**
