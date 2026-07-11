@@ -49,8 +49,8 @@ jobs:
             throw "Tag $env:RELEASE_TAG does not match package version v$packageVersion"
           }
           git describe --tags --exact-match | Out-Null
-          gh release view $env:RELEASE_TAG *> $null
-          if ($LASTEXITCODE -eq 0) {
+          $existingRelease = gh release list --limit 100 --json tagName | ConvertFrom-Json | Where-Object { $_.tagName -eq $env:RELEASE_TAG }
+          if ($existingRelease) {
             throw "Release $env:RELEASE_TAG already exists; published releases are immutable"
           }
         env:
