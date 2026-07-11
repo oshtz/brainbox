@@ -2,7 +2,6 @@ import React, { ReactElement } from 'react';
 import { render, RenderOptions } from '@testing-library/react';
 import { ThemeProvider } from '../contexts/ThemeContext';
 import { ToastProvider } from '../contexts/ToastContext';
-import { SearchProvider } from '../components/Search';
 import { HotkeyProvider } from '../contexts/HotkeyContext';
 import { ConfirmProvider } from '../contexts/ConfirmContext';
 
@@ -12,11 +11,9 @@ const AllTheProviders = ({ children }: { children: React.ReactNode }) => {
     <HotkeyProvider>
       <ThemeProvider>
         <ToastProvider>
-          <SearchProvider>
-            <ConfirmProvider>
-              {children}
-            </ConfirmProvider>
-          </SearchProvider>
+          <ConfirmProvider>
+            {children}
+          </ConfirmProvider>
         </ToastProvider>
       </ThemeProvider>
     </HotkeyProvider>

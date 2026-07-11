@@ -682,3 +682,11 @@
     display: none;
   }
 }
+.brainyFullPage {
+  width: 100%;
+  height: calc(100vh - var(--app-header-height, 56px) - var(--space-xl));
+  min-height: 520px;
+  overflow: hidden;
+  border-radius: var(--border-radius-lg);
+  background: var(--ui-panel-bg);
+}

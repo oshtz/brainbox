@@ -39,6 +39,16 @@ function Get-PnpmLaunch {
   }
 }
 
+function Stop-ProcessTree {
+  param([int]$ProcessId)
+
+  $children = Get-CimInstance Win32_Process -Filter "ParentProcessId = $ProcessId" -ErrorAction SilentlyContinue
+  foreach ($child in $children) {
+    Stop-ProcessTree -ProcessId $child.ProcessId
+  }
+  Stop-Process -Id $ProcessId -Force -ErrorAction SilentlyContinue
+}
+
 function Wait-ForUrl {
   param(
     [string]$Url,
@@ -79,7 +89,7 @@ try {
     -RedirectStandardError $devErr `
     -PassThru
 
-  Wait-ForUrl 'http://127.0.0.1:17340'
+  Wait-ForUrl 'http://127.0.0.1:17341'
 
   $exeCandidates = @(
     (Join-Path $repoRoot 'src-tauri\target\debug\brainbox.exe'),
@@ -102,7 +112,6 @@ try {
     -PassThru
 
   $dbPath = Join-Path $smokeDir 'brainbox.sqlite'
-  $indexPath = Join-Path $smokeDir 'search_index'
   $deadline = (Get-Date).AddSeconds(25)
 
   while ((Get-Date) -lt $deadline) {
@@ -110,8 +119,8 @@ try {
       throw "brainbox exited during smoke launch with code $($process.ExitCode)"
     }
 
-    if ((Test-Path $dbPath) -and (Test-Path $indexPath)) {
-      Write-Host "Tauri smoke passed: app launched and initialized an isolated profile at $smokeDir"
+    if (Test-Path $dbPath) {
+      Write-Host "Tauri smoke passed: app launched with an isolated database and RAM-only search at $smokeDir"
       exit 0
     }
 
@@ -122,11 +131,11 @@ try {
 } finally {
   if ($process -and -not $process.HasExited) {
     Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
-    $process.WaitForExit(5000)
+    $process.WaitForExit(5000) | Out-Null
   }
   if ($devServer -and -not $devServer.HasExited) {
-    Stop-Process -Id $devServer.Id -Force -ErrorAction SilentlyContinue
-    $devServer.WaitForExit(5000)
+    Stop-ProcessTree -ProcessId $devServer.Id
+    $devServer.WaitForExit(5000) | Out-Null
   }
 
   Remove-Item Env:\BRAINBOX_DATA_DIR -ErrorAction SilentlyContinue

@@ -1,4 +1,117 @@
+use std::io::Read;
+use std::net::{IpAddr, ToSocketAddrs};
+use std::time::Duration;
 use tauri::Emitter;
+
+const MAX_HTML_BYTES: u64 = 2 * 1024 * 1024;
+const MAX_TRANSCRIPT_BYTES: u64 = 4 * 1024 * 1024;
+
+fn is_private_address(ip: IpAddr) -> bool {
+    match ip {
+        IpAddr::V4(ip) => {
+            ip.is_private()
+                || ip.is_loopback()
+                || ip.is_link_local()
+                || ip.is_broadcast()
+                || ip.is_documentation()
+                || ip.is_unspecified()
+                || ip.is_multicast()
+        }
+        IpAddr::V6(ip) => {
+            if ip.is_loopback() || ip.is_unspecified() || ip.is_multicast() {
+                return true;
+            }
+            if let Some(ipv4) = ip.to_ipv4() {
+                return is_private_address(IpAddr::V4(ipv4));
+            }
+            let first = ip.segments()[0];
+            (first & 0xfe00) == 0xfc00 // unique-local fc00::/7
+                || (first & 0xffc0) == 0xfe80 // link-local fe80::/10
+        }
+    }
+}
+
+fn validate_public_url(url: &reqwest::Url) -> Result<(), String> {
+    if !matches!(url.scheme(), "http" | "https") {
+        return Err("Only http and https URLs are allowed".into());
+    }
+    if !url.username().is_empty() || url.password().is_some() {
+        return Err("URLs containing credentials are not allowed".into());
+    }
+    let host = url
+        .host_str()
+        .ok_or_else(|| "URL has no host".to_string())?;
+    let normalized_host = host.trim_start_matches('[').trim_end_matches(']');
+    if normalized_host.eq_ignore_ascii_case("localhost") || normalized_host.ends_with(".localhost")
+    {
+        return Err("Local network URLs are not allowed".into());
+    }
+    if normalized_host
+        .parse::<IpAddr>()
+        .is_ok_and(is_private_address)
+    {
+        return Err("Local or private network URLs are not allowed".into());
+    }
+    let port = url
+        .port_or_known_default()
+        .ok_or_else(|| "URL has no valid port".to_string())?;
+    let addresses: Vec<_> = (host, port)
+        .to_socket_addrs()
+        .map_err(|_| "Could not resolve URL host".to_string())?
+        .collect();
+    if addresses.is_empty() || addresses.iter().any(|addr| is_private_address(addr.ip())) {
+        return Err("Local or private network URLs are not allowed".into());
+    }
+    Ok(())
+}
+
+fn public_client() -> Result<reqwest::blocking::Client, String> {
+    reqwest::blocking::Client::builder()
+        .connect_timeout(Duration::from_secs(5))
+        .timeout(Duration::from_secs(20))
+        .redirect(reqwest::redirect::Policy::custom(|attempt| {
+            if attempt.previous().len() >= 5 {
+                return attempt.error("too many redirects");
+            }
+            match validate_public_url(attempt.url()) {
+                Ok(()) => attempt.follow(),
+                Err(_) => attempt.error("redirected to a disallowed URL"),
+            }
+        }))
+        .build()
+        .map_err(|e| e.to_string())
+}
+
+fn read_limited(response: reqwest::blocking::Response, limit: u64) -> Result<String, String> {
+    if response
+        .content_length()
+        .is_some_and(|length| length > limit)
+    {
+        return Err("Response is too large".into());
+    }
+    let mut bytes = Vec::new();
+    response
+        .take(limit + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|e| e.to_string())?;
+    if bytes.len() as u64 > limit {
+        return Err("Response is too large".into());
+    }
+    Ok(String::from_utf8_lossy(&bytes).into_owned())
+}
+
+fn public_get(
+    client: &reqwest::blocking::Client,
+    url: &reqwest::Url,
+) -> Result<reqwest::blocking::Response, String> {
+    validate_public_url(url)?;
+    client
+        .get(url.clone())
+        .send()
+        .map_err(|e| e.to_string())?
+        .error_for_status()
+        .map_err(|e| e.to_string())
+}
 
 #[derive(serde::Serialize)]
 pub struct UrlMetadata {
@@ -13,24 +126,24 @@ pub struct UrlMetadata {
 #[tauri::command]
 pub fn fetch_url_metadata(url: String) -> Result<UrlMetadata, String> {
     use regex::Regex;
-    use reqwest::blocking::Client;
     use reqwest::header::{ACCEPT, ACCEPT_LANGUAGE, USER_AGENT};
 
-    let client = Client::builder()
-        .redirect(reqwest::redirect::Policy::limited(10))
-        .build()
-        .map_err(|e| e.to_string())?;
+    let parsed = reqwest::Url::parse(&url).map_err(|_| "Invalid URL".to_string())?;
+    validate_public_url(&parsed)?;
+    let client = public_client()?;
 
     let resp = client
-        .get(&url)
+        .get(parsed)
         .header(USER_AGENT, "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36")
         .header(ACCEPT, "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8")
         .header(ACCEPT_LANGUAGE, "en-US,en;q=0.9")
         .send()
+        .map_err(|e| e.to_string())?
+        .error_for_status()
         .map_err(|e| e.to_string())?;
 
     let final_url = resp.url().to_string();
-    let text = resp.text().map_err(|e| e.to_string())?;
+    let text = read_limited(resp, MAX_HTML_BYTES)?;
 
     // Simple regex-based extraction to avoid heavy dependencies
     let re_meta = |name: &str| -> Regex {
@@ -91,13 +204,10 @@ pub fn fetch_url_metadata(url: String) -> Result<UrlMetadata, String> {
 // Extract readable text from a web page (best-effort)
 #[tauri::command]
 pub fn fetch_url_text(url: String) -> Result<String, String> {
-    use reqwest::blocking::Client;
-    let client = Client::builder()
-        .redirect(reqwest::redirect::Policy::limited(10))
-        .build()
-        .map_err(|e| e.to_string())?;
-    let resp = client.get(&url).send().map_err(|e| e.to_string())?;
-    let html = resp.text().map_err(|e| e.to_string())?;
+    let parsed = reqwest::Url::parse(&url).map_err(|_| "Invalid URL".to_string())?;
+    let client = public_client()?;
+    let resp = public_get(&client, &parsed)?;
+    let html = read_limited(resp, MAX_HTML_BYTES)?;
     let document = scraper::Html::parse_document(&html);
     let selector = scraper::Selector::parse("body").unwrap();
     let mut out = String::new();
@@ -117,22 +227,23 @@ pub fn fetch_url_text(url: String) -> Result<String, String> {
 #[tauri::command]
 pub fn fetch_youtube_transcript(url: String) -> Result<Option<String>, String> {
     use regex::Regex;
-    use reqwest::blocking::Client;
     let u = match reqwest::Url::parse(&url) {
         Ok(u) => u,
         Err(_) => return Ok(None),
     };
     let host = u.host_str().unwrap_or("");
-    if !host.contains("youtube.com") && !host.contains("youtu.be") {
+    let host = host.to_ascii_lowercase();
+    let is_youtube = host == "youtube.com"
+        || host.ends_with(".youtube.com")
+        || host == "youtu.be"
+        || host.ends_with(".youtu.be");
+    if !is_youtube {
         return Ok(None);
     }
 
-    let client = Client::builder()
-        .redirect(reqwest::redirect::Policy::limited(10))
-        .build()
-        .map_err(|e| e.to_string())?;
-    let resp = client.get(u.clone()).send().map_err(|e| e.to_string())?;
-    let page = resp.text().map_err(|e| e.to_string())?;
+    let client = public_client()?;
+    let resp = public_get(&client, &u)?;
+    let page = read_limited(resp, MAX_HTML_BYTES)?;
     // Find captionTracks JSON array
     let re = Regex::new(r#""captionTracks"\s*:\s*(\[[^\]]+\])"#).map_err(|e| e.to_string())?;
     let caps = match re.captures(&page) {
@@ -153,11 +264,13 @@ pub fn fetch_youtube_transcript(url: String) -> Result<Option<String>, String> {
         None => return Ok(None),
     };
     let base_url = base.replace("\\u0026", "&");
-    let tr_resp = client.get(&base_url).send().map_err(|e| e.to_string())?;
-    let xml = tr_resp.text().map_err(|e| e.to_string())?;
+    let caption_url =
+        reqwest::Url::parse(&base_url).map_err(|_| "Invalid transcript URL".to_string())?;
+    let tr_resp = public_get(&client, &caption_url)?;
+    let xml = read_limited(tr_resp, MAX_TRANSCRIPT_BYTES)?;
     // Parse XML transcript: collect <text> nodes
     let mut reader = quick_xml::Reader::from_str(&xml);
-    reader.trim_text(true);
+    reader.config_mut().trim_text(true);
     let mut buf = Vec::new();
     let mut acc = String::new();
     loop {
@@ -165,7 +278,10 @@ pub fn fetch_youtube_transcript(url: String) -> Result<Option<String>, String> {
         match reader.read_event_into(&mut buf) {
             Ok(Event::Eof) => break,
             Ok(Event::Text(t)) => {
-                let txt = t.unescape().unwrap_or_default().to_string();
+                let decoded = t.decode().unwrap_or_default();
+                let txt = quick_xml::escape::unescape(decoded.as_ref())
+                    .map(|value| value.into_owned())
+                    .unwrap_or_else(|_| decoded.into_owned());
                 if !txt.trim().is_empty() {
                     acc.push_str(&txt);
                     acc.push('\n');
@@ -180,6 +296,35 @@ pub fn fetch_youtube_transcript(url: String) -> Result<Option<String>, String> {
         Ok(None)
     } else {
         Ok(Some(acc))
+    }
+}
+
+#[cfg(test)]
+mod public_url_tests {
+    use super::*;
+
+    #[test]
+    fn rejects_non_http_and_url_credentials() {
+        assert!(validate_public_url(&reqwest::Url::parse("file:///tmp/a").unwrap()).is_err());
+        assert!(validate_public_url(
+            &reqwest::Url::parse("https://user:pass@example.com").unwrap()
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn rejects_loopback_and_private_addresses() {
+        for url in [
+            "http://127.0.0.1/admin",
+            "http://10.0.0.1/",
+            "http://169.254.169.254/latest/meta-data/",
+            "http://[::1]/",
+        ] {
+            assert!(
+                validate_public_url(&reqwest::Url::parse(url).unwrap()).is_err(),
+                "{url}"
+            );
+        }
     }
 }
 

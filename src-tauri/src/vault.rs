@@ -5,7 +5,6 @@ use chacha20poly1305::{
     aead::{Aead, KeyInit},
     Key, XChaCha20Poly1305, XNonce,
 };
-use chrono;
 use rand::{rngs::OsRng, RngCore};
 use rusqlite::{params, Connection, Result};
 use serde::{Deserialize, Serialize};
@@ -679,30 +678,54 @@ impl VaultItem {
         Ok(())
     }
 
-    pub fn move_to_vault(conn: &Connection, item_id: i64, target_vault_id: i64) -> Result<()> {
+    pub fn move_to_vault(
+        conn: &Connection,
+        item_id: i64,
+        target_vault_id: i64,
+        source_key: &[u8; 32],
+        target_key: &[u8; 32],
+    ) -> Result<()> {
         let now = chrono::Utc::now().to_rfc3339();
-        // Get original vault_id to update its updated_at
-        let source_vault_id: Option<i64> = conn
-            .query_row(
-                "SELECT vault_id FROM vault_items WHERE id = ?1",
-                [item_id],
-                |row| row.get(0),
-            )
-            .ok();
-        conn.execute(
-            "UPDATE vault_items SET vault_id = ?1, sort_order = NULL, updated_at = ?2 WHERE id = ?3",
-            rusqlite::params![target_vault_id, now, item_id],
+        let (source_vault_id, encrypted): (i64, Vec<u8>) = conn.query_row(
+            "SELECT vault_id, content FROM vault_items WHERE id = ?1",
+            [item_id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
         )?;
-        // Update both source and target vault's updated_at
-        if let Some(vid) = source_vault_id {
-            conn.execute(
-                "UPDATE vaults SET updated_at = ?1 WHERE id = ?2",
-                params![now, vid],
-            )?;
+        conn.query_row(
+            "SELECT 1 FROM vaults WHERE id = ?1 AND deleted_at IS NULL",
+            [target_vault_id],
+            |_| Ok(()),
+        )?;
+
+        if source_vault_id == target_vault_id {
+            return Ok(());
         }
+
+        if encrypted.len() < 24 {
+            return Err(rusqlite::Error::InvalidQuery);
+        }
+        let source_cipher = XChaCha20Poly1305::new(Key::from_slice(source_key));
+        let plaintext = source_cipher
+            .decrypt(XNonce::from_slice(&encrypted[..24]), &encrypted[24..])
+            .map_err(|_| rusqlite::Error::InvalidQuery)?;
+
+        let target_cipher = XChaCha20Poly1305::new(Key::from_slice(target_key));
+        let mut nonce = [0u8; 24];
+        OsRng.fill_bytes(&mut nonce);
+        let mut reencrypted = nonce.to_vec();
+        reencrypted.extend(
+            target_cipher
+                .encrypt(XNonce::from_slice(&nonce), plaintext.as_ref())
+                .map_err(|_| rusqlite::Error::InvalidQuery)?,
+        );
+
         conn.execute(
-            "UPDATE vaults SET updated_at = ?1 WHERE id = ?2",
-            params![now, target_vault_id],
+            "UPDATE vault_items SET vault_id = ?1, content = ?2, sort_order = NULL, updated_at = ?3 WHERE id = ?4 AND vault_id = ?5",
+            rusqlite::params![target_vault_id, reencrypted, now, item_id, source_vault_id],
+        )?;
+        conn.execute(
+            "UPDATE vaults SET updated_at = ?1 WHERE id IN (?2, ?3)",
+            params![now, source_vault_id, target_vault_id],
         )?;
         Ok(())
     }

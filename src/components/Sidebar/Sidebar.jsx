@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import {
-  FolderIcon,
-  MagnifyingGlassIcon,
   BookOpenIcon,
   Cog6ToothIcon,
   SunIcon,
@@ -16,16 +14,12 @@ import styles from './Sidebar.module.css';
 import { useTheme } from '../../contexts/ThemeContext';
 
 const Sidebar = ({
-  title = 'Knowledge',
-  onExploreClick,
-  onKnowledgeClick,
+  title = 'Library',
+  onLibraryClick,
   onSettingsClick,
   onBrainyClick,
-  onCreateVault,
   onCreateNote,
-  showVaultButton = false,
-  showNoteButton = true,
-  currentView = 'vaults',
+  currentView = 'library',
   isBrainyOpen = false,
   brainyMode = 'sidebar'
 }) => {
@@ -46,7 +40,7 @@ const Sidebar = ({
     }
   }, []);
   const isBrainyFull = brainyMode === 'full';
-  const brainyActive = isBrainyFull ? currentView === 'connections' : isBrainyOpen;
+  const brainyActive = isBrainyFull ? currentView === 'brainy' : isBrainyOpen;
 
   useEffect(() => {
     if (!appWindow) {
@@ -114,7 +108,7 @@ const Sidebar = ({
 
   const handleBrainyNav = () => {
     if (isBrainyFull) {
-      onKnowledgeClick && onKnowledgeClick('connections');
+      onBrainyClick && onBrainyClick();
       return;
     }
     onBrainyClick && onBrainyClick();
@@ -122,32 +116,12 @@ const Sidebar = ({
 
   const navItems = [
     {
-      id: 'vaults',
-      label: 'Knowledge',
-      shortLabel: 'Vaults',
-      icon: FolderIcon,
-      active: currentView === 'vaults',
-      onClick: () => onKnowledgeClick && onKnowledgeClick('vaults'),
-      testId: 'nav-vaults',
-      ariaLabel: 'View knowledge vaults',
-    },
-    {
-      id: 'search',
-      label: 'Explore',
-      shortLabel: 'Search',
-      icon: MagnifyingGlassIcon,
-      active: currentView === 'search',
-      onClick: onExploreClick,
-      testId: 'nav-search',
-      ariaLabel: 'Explore and search',
-    },
-    {
       id: 'library',
       label: 'Library',
       shortLabel: 'Library',
       icon: BookOpenIcon,
       active: currentView === 'library',
-      onClick: () => onKnowledgeClick && onKnowledgeClick('library'),
+      onClick: onLibraryClick,
       testId: 'nav-library',
       ariaLabel: 'Open library',
     },
@@ -212,7 +186,7 @@ const Sidebar = ({
       </nav>
 
       <div className={styles.actions} data-tauri-drag-region="false" data-nodrag>
-        {showNoteButton && (
+        {currentView === 'library' && (
           <button
             type="button"
             className={styles.primaryButton}
@@ -223,20 +197,6 @@ const Sidebar = ({
           >
             <PlusIcon className={styles.actionIcon} aria-hidden="true" />
             <span>New note</span>
-          </button>
-        )}
-
-        {showVaultButton && (
-          <button
-            type="button"
-            className={styles.secondaryButton}
-            onClick={onCreateVault}
-            data-testid="create-vault-button"
-            data-nodrag
-            data-tauri-drag-region="false"
-          >
-            <PlusIcon className={styles.actionIcon} aria-hidden="true" />
-            <span>New vault</span>
           </button>
         )}
 

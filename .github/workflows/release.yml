@@ -2,450 +2,336 @@ name: Release
 
 on:
   push:
-    branches: [ main ]
+    tags: ['v*']
   workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing version tag to release (for example v1.2.3)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
 
 jobs:
-  release:
-    permissions:
-      contents: write
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - platform: 'macos-14'  # Native Apple Silicon runner
-            args: '--target aarch64-apple-darwin'
-          - platform: 'windows-latest'
-            args: ''
-
-    runs-on: ${{ matrix.platform }}
+  validate:
+    runs-on: windows-latest
+    timeout-minutes: 45
     steps:
-      - name: Checkout repository
+      - name: Checkout tagged source
         uses: actions/checkout@v6
-
-      - name: Rust setup
-        uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ matrix.platform == 'macos-14' && 'aarch64-apple-darwin' || '' }}
+          ref: ${{ env.RELEASE_TAG }}
 
-      - name: Rust cache
-        uses: swatinem/rust-cache@v2
-        with:
-          workspaces: './src-tauri -> target'
+      - name: Validate tag and aligned versions
+        shell: pwsh
+        run: |
+          if ($env:RELEASE_TAG -notmatch '^v\d+\.\d+\.\d+$') {
+            throw "Release tag must be vMAJOR.MINOR.PATCH, got $env:RELEASE_TAG"
+          }
 
-      - name: Install pnpm
+          $packageVersion = (Get-Content package.json | ConvertFrom-Json).version
+          $cargoVersion = [regex]::Match((Get-Content src-tauri/Cargo.toml -Raw), '(?m)^version = "([^"]+)"').Groups[1].Value
+          $tauriVersion = (Get-Content src-tauri/tauri.conf.json | ConvertFrom-Json).version
+          foreach ($entry in @{ package = $packageVersion; cargo = $cargoVersion; tauri = $tauriVersion }.GetEnumerator()) {
+            if ($entry.Value -ne $packageVersion) {
+              throw "$($entry.Key) version $($entry.Value) does not match package version $packageVersion"
+            }
+          }
+          if ($env:RELEASE_TAG -ne "v$packageVersion") {
+            throw "Tag $env:RELEASE_TAG does not match package version v$packageVersion"
+          }
+          git describe --tags --exact-match | Out-Null
+          gh release view $env:RELEASE_TAG *> $null
+          if ($LASTEXITCODE -eq 0) {
+            throw "Release $env:RELEASE_TAG already exists; published releases are immutable"
+          }
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Setup pnpm
         uses: pnpm/action-setup@v6
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
           node-version: '24'
-          cache: 'pnpm'
+          cache: pnpm
 
-      - name: Install frontend dependencies
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache Rust build
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+
+      - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Debug build environment
-        run: |
-          echo "Node version: $(node --version)"
-          echo "pnpm version: $(pnpm --version)"
-          echo "Tauri CLI version: $(pnpm tauri --version)"
-          echo "Rust version: $(rustc --version)"
-          echo "Platform: ${{ matrix.platform }}"
-          echo "Args: ${{ matrix.args }}"
+      - name: Install Playwright browser
+        run: pnpm exec playwright install chromium
 
-      - name: Verify icon files (macOS only)
-        if: matrix.platform == 'macos-14'
+      - name: Validate frontend and browser behavior
         run: |
-          echo "Checking icon files..."
-          ls -la src-tauri/icons/
-          if [ -f "src-tauri/icons/icon.icns" ]; then
-            echo "✓ icon.icns found"
-            file src-tauri/icons/icon.icns
-          else
-            echo "✗ icon.icns missing"
-            exit 1
-          fi
+          pnpm run build
+          pnpm run test:run
+          pnpm run test:e2e
 
-      - name: Build the app (macOS)
-        if: matrix.platform == 'macos-14'
-        uses: tauri-apps/tauri-action@v0.6.2
+      - name: Validate Rust
+        run: |
+          cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check
+          cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --all-features -- -D warnings
+          cargo test --manifest-path src-tauri/Cargo.toml
+
+      - name: Validate native desktop behavior
+        run: |
+          pnpm run test:tauri:qa
+          pnpm run smoke:tauri
+
+      - name: Audit JavaScript dependencies
+        run: pnpm audit
+
+      - name: Audit Rust dependencies
+        run: |
+          cargo install cargo-audit --locked
+          cargo audit --file src-tauri/Cargo.lock
+
+  package-windows:
+    needs: validate
+    runs-on: windows-latest
+    timeout-minutes: 45
+    environment: release
+    steps:
+      - name: Checkout tagged source
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: pnpm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Download and verify Enigma Virtual Box
+        shell: pwsh
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Apple code signing and notarization (macOS only)
+          EVB_INSTALLER_URL: ${{ vars.EVB_INSTALLER_URL }}
+          EVB_INSTALLER_SHA256: ${{ vars.EVB_INSTALLER_SHA256 }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:EVB_INSTALLER_URL) -or [string]::IsNullOrWhiteSpace($env:EVB_INSTALLER_SHA256)) {
+            throw 'EVB_INSTALLER_URL and EVB_INSTALLER_SHA256 repository variables are required'
+          }
+
+          $installer = Join-Path $env:RUNNER_TEMP 'enigmavb-setup.exe'
+          Invoke-WebRequest -Uri $env:EVB_INSTALLER_URL -OutFile $installer -UseBasicParsing -TimeoutSec 120
+          $actualHash = (Get-FileHash $installer -Algorithm SHA256).Hash
+          if ($actualHash -ne $env:EVB_INSTALLER_SHA256.Trim()) {
+            throw "EVB installer hash mismatch: expected $env:EVB_INSTALLER_SHA256, got $actualHash"
+          }
+          "EVB_INSTALLER=$installer" | Out-File $env:GITHUB_ENV -Append
+
+      - name: Install Enigma Virtual Box
+        shell: pwsh
+        run: |
+          $process = Start-Process -FilePath $env:EVB_INSTALLER -ArgumentList '/VERYSILENT','/NORESTART' -WindowStyle Hidden -Wait -PassThru
+          if ($process.ExitCode -ne 0) { throw "EVB installer exited with code $($process.ExitCode)" }
+
+          $console = @(
+            "${env:ProgramFiles(x86)}\Enigma Virtual Box\enigmavbconsole.exe",
+            "$env:ProgramFiles\Enigma Virtual Box\enigmavbconsole.exe"
+          ) | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if (-not $console) { throw 'enigmavbconsole.exe was not installed' }
+          "EVB_CONSOLE=$console" | Out-File $env:GITHUB_ENV -Append
+
+      - name: Build Windows application
+        run: pnpm tauri build --no-bundle --ci
+
+      - name: Build and verify portable executable
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force release-assets | Out-Null
+          $inputExe = Resolve-Path 'src-tauri\target\release\brainbox.exe'
+          $webviewDll = Get-ChildItem 'src-tauri\target' -Filter 'WebView2Loader.dll' -Recurse -File | Select-Object -First 1
+          if (-not $webviewDll) { throw 'WebView2Loader.dll is missing from the Tauri build' }
+
+          $staging = Join-Path $env:RUNNER_TEMP 'brainbox-evb-staging'
+          New-Item -ItemType Directory -Force $staging | Out-Null
+          Copy-Item $webviewDll.FullName $staging
+          $project = Join-Path $env:RUNNER_TEMP 'brainbox.evb'
+          $portable = Join-Path $PWD 'release-assets\brainbox-portable.exe'
+
+          pnpm exec enigmavirtualbox generate $staging --input $inputExe --output $portable --project-name $project
+          if ($LASTEXITCODE -ne 0) { throw 'Failed to generate the EVB project' }
+          & $env:EVB_CONSOLE $project
+          if ($LASTEXITCODE -ne 0) { throw 'EVB packaging failed' }
+          if (-not (Test-Path $portable)) { throw 'brainbox-portable.exe was not created' }
+          if ((Get-Item $portable).Length -lt 5MB) { throw 'brainbox-portable.exe is unexpectedly small' }
+
+          $signature = Get-AuthenticodeSignature $portable
+          Write-Host "Windows portable signature status: $($signature.Status) (unsigned is expected)"
+          $hash = (Get-FileHash $portable -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  brainbox-portable.exe" | Set-Content release-assets\SHA256SUMS-windows.txt
+
+      - name: Upload Windows release assets
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-windows
+          path: release-assets/*
+          if-no-files-found: error
+          retention-days: 7
+
+  package-macos:
+    needs: validate
+    runs-on: macos-14
+    timeout-minutes: 60
+    environment: release
+    steps:
+      - name: Checkout tagged source
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: pnpm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin
+
+      - name: Cache Rust build
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Import Apple signing certificate
+        env:
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: |
+          test -n "$APPLE_CERTIFICATE" || { echo 'APPLE_CERTIFICATE is required' >&2; exit 1; }
+          test -n "$APPLE_CERTIFICATE_PASSWORD" || { echo 'APPLE_CERTIFICATE_PASSWORD is required' >&2; exit 1; }
+          KEYCHAIN_PATH="$RUNNER_TEMP/brainbox-build.keychain-db"
+          KEYCHAIN_PASSWORD=$(openssl rand -hex 24)
+          echo "$APPLE_CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/brainbox-signing.p12"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$RUNNER_TEMP/brainbox-signing.p12" -k "$KEYCHAIN_PATH" -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security list-keychains -d user -s "$KEYCHAIN_PATH"
+          security find-identity -v -p codesigning "$KEYCHAIN_PATH"
+          echo "KEYCHAIN_PATH=$KEYCHAIN_PATH" >> "$GITHUB_ENV"
+
+      - name: Build signed and notarized DMG
+        env:
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-        with:
-          tagName: v__VERSION__
-          releaseName: 'brainbox v__VERSION__'
-          releaseBody: 'Download the macOS DMG or Windows portable EXE.'
-          releaseDraft: false
-          prerelease: false
-          args: ${{ matrix.args }}
-
-      - name: Build the app (Windows)
-        if: matrix.platform == 'windows-latest'
-        uses: tauri-apps/tauri-action@v0.6.2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tagName: v__VERSION__
-          releaseName: 'brainbox v__VERSION__'
-          releaseBody: 'Download the macOS DMG or Windows portable EXE.'
-          releaseDraft: false
-          prerelease: false
-          args: ${{ matrix.args }}
-
-      - name: Fix macOS app bundle (macOS only)
-        if: matrix.platform == 'macos-14'
         run: |
-          TARGET_DIR="src-tauri/target/aarch64-apple-darwin/release"
-          BUNDLE_DIR="$TARGET_DIR/bundle/macos/brainbox.app"
-          
-          if [ -d "$BUNDLE_DIR" ]; then
-            echo "Fixing app bundle permissions and attributes..."
-            
-            # Fix permissions
-            chmod -R 755 "$BUNDLE_DIR"
-            chmod +x "$BUNDLE_DIR/Contents/MacOS/brainbox"
-            
-            # Remove quarantine attributes that might cause "damaged" errors
-            xattr -cr "$BUNDLE_DIR" || echo "No extended attributes to clear"
-            
-            # Ensure proper bundle structure
-            if [ ! -f "$BUNDLE_DIR/Contents/Info.plist" ]; then
-              echo "Warning: Info.plist missing"
-            fi
-            
-            echo "App bundle fixed"
-          else
-            echo "No app bundle found to fix"
-          fi
+          for value in APPLE_SIGNING_IDENTITY APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID; do
+            test -n "${!value}" || { echo "$value is required" >&2; exit 1; }
+          done
+          pnpm tauri build --target aarch64-apple-darwin --bundles dmg --ci
 
-      - name: Verify build artifacts (macOS only)
-        if: matrix.platform == 'macos-14'
+      - name: Verify and stage macOS artifact
         run: |
-          echo "Verifying ARM64 build artifacts..."
-          TARGET_DIR="src-tauri/target/aarch64-apple-darwin/release"
-          EXPECTED_ARCH="arm64"
-          
-          if [ -f "$TARGET_DIR/brainbox" ]; then
-            echo "✓ Binary found"
-            file "$TARGET_DIR/brainbox"
-            otool -L "$TARGET_DIR/brainbox" | head -10
-          else
-            echo "✗ Binary not found in $TARGET_DIR"
-            ls -la src-tauri/target/*/release/ || true
-          fi
-          
-          # Check for app bundle
-          BUNDLE_DIR="$TARGET_DIR/bundle/macos/brainbox.app"
-          if [ -d "$BUNDLE_DIR" ]; then
-            echo "✓ App bundle found"
-            echo "Bundle structure:"
-            find "$BUNDLE_DIR" -type f | head -20
-            
-            # Check Info.plist
-            if [ -f "$BUNDLE_DIR/Contents/Info.plist" ]; then
-              echo "✓ Info.plist found"
-              echo "Info.plist contents:"
-              cat "$BUNDLE_DIR/Contents/Info.plist"
-            else
-              echo "✗ Info.plist missing"
-            fi
-            
-            # Check for icon files
-            echo "Icon files in bundle:"
-            find "$BUNDLE_DIR" -name "*.icns" -o -name "*.png" | head -10
-            
-            # Check app signature status
-            echo "Checking code signature:"
-            codesign -dv "$BUNDLE_DIR" 2>&1 || echo "App is unsigned (expected)"
-            
-            # Verify binary architecture
-            echo "Checking binary architecture:"
-            BINARY_PATH="$BUNDLE_DIR/Contents/MacOS/brainbox"
-            if [ -f "$BINARY_PATH" ]; then
-              file "$BINARY_PATH"
-              lipo -info "$BINARY_PATH" 2>/dev/null || echo "Not a fat binary (single architecture)"
-              
-              # Check if architecture matches expected
-              if file "$BINARY_PATH" | grep -q "$EXPECTED_ARCH"; then
-                echo "✓ Native $EXPECTED_ARCH binary confirmed"
-              else
-                echo "✗ WARNING: Binary is not $EXPECTED_ARCH!"
-                echo "Architecture mismatch detected"
-              fi
-            else
-              echo "✗ Binary not found at expected path"
-            fi
-            
-          else
-            echo "✗ App bundle not found"
-            echo "Available files in target:"
-            find "$TARGET_DIR" -name "*.app" -o -name "*.dmg" | head -10
-          fi
+          APP="src-tauri/target/aarch64-apple-darwin/release/bundle/macos/brainbox.app"
+          test -d "$APP" || { echo 'Signed app bundle is missing' >&2; exit 1; }
+          codesign --verify --deep --strict --verbose=2 "$APP"
+          spctl --assess --type execute --verbose=2 "$APP"
 
-      - name: Remove extra macOS release assets (macOS only)
-        if: matrix.platform == 'macos-14' && github.ref == 'refs/heads/main'
-        run: |
-          version=$(node -p "require('./package.json').version")
-          tag="v$version"
-          assets=$(gh release view "$tag" --json assets --jq '.assets[].name | select(endswith(".app.tar.gz") or test("^release-checksums-macos-.*\\.txt$"))')
+          dmg_count=$(find src-tauri/target/aarch64-apple-darwin/release/bundle/dmg -maxdepth 1 -type f -name '*.dmg' | wc -l | tr -d ' ')
+          test "$dmg_count" -eq 1 || { echo "Expected one DMG, found $dmg_count" >&2; exit 1; }
+          dmg=$(find src-tauri/target/aarch64-apple-darwin/release/bundle/dmg -maxdepth 1 -type f -name '*.dmg')
+          xcrun stapler validate "$dmg"
 
-          if [ -z "$assets" ]; then
-            echo "No extra macOS release assets found to remove."
-          else
-            while IFS= read -r asset; do
-              [ -z "$asset" ] && continue
-              echo "Removing extra release asset: $asset"
-              gh release delete-asset "$tag" "$asset" --yes
-            done <<< "$assets"
-          fi
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          mkdir release-assets
+          cp "$dmg" release-assets/
+          (cd release-assets && shasum -a 256 "$(basename "$dmg")" > SHA256SUMS-macos.txt)
 
-      - name: Cache EVB installer (Windows only)
-        if: matrix.platform == 'windows-latest'
-        id: cache-evb
-        uses: actions/cache@v5
-        with:
-          path: ${{ runner.temp }}/enigmavb_setup.exe
-          key: evb-installer-v10.80
-
-      - name: Download EVB installer (Windows only)
-        if: matrix.platform == 'windows-latest' && steps.cache-evb.outputs.cache-hit != 'true'
-        shell: pwsh
-        run: |
-          # Download EVB installer with multiple fallback sources
-          $evbUrls = @(
-            "https://www.enigmaprotector.com/assets/files/enigmavb.exe",
-            "https://enigmaprotector.com/assets/files/enigmavb.exe",
-            "https://web.archive.org/web/2024/https://www.enigmaprotector.com/assets/files/enigmavb.exe",
-            "https://web.archive.org/web/20231201000000*/https://www.enigmaprotector.com/assets/files/enigmavb.exe"
-          )
-          $evbInstaller = Join-Path $env:RUNNER_TEMP "enigmavb_setup.exe"
-          Remove-Item -Path $evbInstaller -Force -ErrorAction SilentlyContinue
-
-          $downloaded = $false
-          foreach ($evbUrl in $evbUrls) {
-            Write-Host "Trying: $evbUrl"
-            for ($attempt = 1; $attempt -le 3; $attempt++) {
-              try {
-                # Use Invoke-WebRequest with browser-like headers
-                $headers = @{
-                  "User-Agent" = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-                  "Accept" = "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"
-                  "Accept-Language" = "en-US,en;q=0.9"
-                  "Referer" = "https://www.enigmaprotector.com/en/downloads.html"
-                }
-                Invoke-WebRequest -Uri $evbUrl -OutFile $evbInstaller -UseBasicParsing -Headers $headers -MaximumRedirection 10 -TimeoutSec 120
-
-                if ((Test-Path $evbInstaller) -and (Get-Item $evbInstaller).Length -gt 1MB) {
-                  $downloaded = $true
-                  Write-Host "Downloaded successfully from $evbUrl"
-                  break
-                }
-              } catch {
-                Write-Host "Attempt $attempt failed: $_"
-              }
-              Start-Sleep -Seconds 5
-            }
-            if ($downloaded) { break }
-          }
-
-          if (-not $downloaded) {
-            # Final fallback: try using curl with different options
-            Write-Host "Trying curl as final fallback..."
-            $curlUrls = @(
-              "https://www.enigmaprotector.com/assets/files/enigmavb.exe"
-            )
-            foreach ($url in $curlUrls) {
-              try {
-                curl.exe -L -o $evbInstaller -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" -H "Referer: https://www.enigmaprotector.com/en/downloads.html" --retry 3 --retry-delay 5 $url
-                if ((Test-Path $evbInstaller) -and (Get-Item $evbInstaller).Length -gt 1MB) {
-                  $downloaded = $true
-                  Write-Host "Downloaded successfully using curl from $url"
-                  break
-                }
-              } catch {
-                Write-Host "Curl attempt failed: $_"
-              }
-            }
-          }
-
-          if (-not $downloaded) {
-            Write-Host "::error::Failed to download EVB installer from all sources."
-            Write-Host "::error::The enigmaprotector.com site may be blocking CI downloads."
-            Write-Host "::error::Portable exe will be skipped for this build."
-            # Create a marker file to indicate download failure
-            "DOWNLOAD_FAILED" | Out-File -FilePath (Join-Path $env:RUNNER_TEMP "evb_download_failed.txt")
-          }
-
-      - name: Install Enigma Virtual Box (Windows only)
-        if: matrix.platform == 'windows-latest'
-        shell: pwsh
-        run: |
-          $evbInstaller = Join-Path $env:RUNNER_TEMP "enigmavb_setup.exe"
-          $failMarker = Join-Path $env:RUNNER_TEMP "evb_download_failed.txt"
-          
-          # Check if download failed
-          if (Test-Path $failMarker) {
-            Write-Host "::warning::EVB download failed previously. Skipping portable exe creation."
-            "SKIP_PORTABLE" | Out-File -FilePath (Join-Path $env:RUNNER_TEMP "skip_portable.txt")
-            exit 0
-          }
-          
-          # Verify installer exists
-          if (-not (Test-Path $evbInstaller)) {
-            Write-Host "::warning::EVB installer not found. Skipping portable exe creation."
-            "SKIP_PORTABLE" | Out-File -FilePath (Join-Path $env:RUNNER_TEMP "skip_portable.txt")
-            exit 0
-          }
-
-          # Install silently
-          $process = Start-Process -FilePath $evbInstaller -ArgumentList "/VERYSILENT","/NORESTART" -Wait -PassThru
-          if ($process.ExitCode -ne 0) {
-            Write-Host "::warning::EVB installer failed with exit code $($process.ExitCode). Skipping portable exe creation."
-            "SKIP_PORTABLE" | Out-File -FilePath (Join-Path $env:RUNNER_TEMP "skip_portable.txt")
-            exit 0
-          }
-
-          # Verify
-          if (Test-Path "C:\Program Files (x86)\Enigma Virtual Box\enigmavbconsole.exe") {
-            Write-Host "EVB installed successfully"
-          } else {
-            Write-Host "::warning::EVB installation verification failed. Skipping portable exe creation."
-            "SKIP_PORTABLE" | Out-File -FilePath (Join-Path $env:RUNNER_TEMP "skip_portable.txt")
-          }
-
-      - name: Create portable exe (Windows only)
-        if: matrix.platform == 'windows-latest'
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = "Stop"
-
-          # Check if we should skip portable exe creation
-          $skipMarker = Join-Path $env:RUNNER_TEMP "skip_portable.txt"
-          if (Test-Path $skipMarker) {
-            Write-Host "::warning::Skipping portable exe creation due to EVB issues."
-            exit 0
-          }
-
-          try {
-          $inputExe = Resolve-Path "src-tauri\target\release\brainbox.exe"
-          $outputExe = Join-Path $PWD "src-tauri\target\release\brainbox-portable.exe"
-          $webviewDll = Get-ChildItem -Path "src-tauri\target" -Filter "WebView2Loader.dll" -Recurse | Select-Object -First 1
-          if (-not $webviewDll) {
-            throw "WebView2Loader.dll not found under src-tauri\\target"
-          }
-          $webviewDllPath = $webviewDll.FullName
-
-          # Use enigmavirtualbox to generate a compatible EVB project file
-          $evbStaging = Join-Path $PWD "evb-staging"
-          New-Item -ItemType Directory -Force -Path $evbStaging | Out-Null
-          Copy-Item -Path $webviewDllPath -Destination $evbStaging -Force
-          $evbProject = Join-Path $PWD "brainbox.evb"
-          pnpm --package=@insco/enigma-virtualbox dlx enigmavirtualbox generate $evbStaging --input $inputExe --output $outputExe --project-name $evbProject
-          if ($LASTEXITCODE -ne 0) {
-            throw "enigmavirtualbox generate failed"
-          }
-          $evbConsole = "C:\Program Files (x86)\Enigma Virtual Box\enigmavbconsole.exe"
-          if (-not (Test-Path $evbConsole)) {
-            throw "enigmavbconsole.exe not found at $evbConsole"
-          }
-          & $evbConsole $evbProject
-          if ($LASTEXITCODE -ne 0) {
-            throw "enigmavbconsole failed"
-          }
-
-          # Verify output
-          if (Test-Path $outputExe) {
-            $size = [math]::Round((Get-Item $outputExe).Length / 1MB, 2)
-            Write-Host "Portable exe created: $size MB"
-          } else {
-            throw "Failed to create portable exe"
-          }
-          } catch {
-            Write-Host "::warning::Portable exe creation failed: $_"
-            "SKIP_PORTABLE" | Out-File -FilePath $skipMarker
-            exit 0
-          }
-
-      - name: Upload portable exe artifact (Windows only)
-        if: matrix.platform == 'windows-latest'
+      - name: Upload macOS release assets
         uses: actions/upload-artifact@v7
         with:
-          name: brainbox-portable
-          path: src-tauri/target/release/brainbox-portable.exe
-          if-no-files-found: ignore
+          name: release-macos
+          path: release-assets/*
+          if-no-files-found: error
+          retention-days: 7
 
-      - name: Upload portable exe to release (Windows only)
-        if: matrix.platform == 'windows-latest' && github.ref == 'refs/heads/main'
-        shell: pwsh
+      - name: Delete temporary keychain
+        if: always()
+        run: security delete-keychain "$KEYCHAIN_PATH" || true
+
+  publish:
+    needs: [package-windows, package-macos]
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: write
+    steps:
+      - name: Download release assets
+        uses: actions/download-artifact@v7
+        with:
+          pattern: release-*
+          path: release-assets
+          merge-multiple: true
+
+      - name: Verify complete artifact set
         run: |
-          $portableExe = "src-tauri/target/release/brainbox-portable.exe"
-          
-          # Check if portable exe exists
-          if (-not (Test-Path $portableExe)) {
-            Write-Host "::warning::Portable exe not found. Skipping upload to release."
-            exit 0
-          }
-          
-          $version = (Get-Content package.json | ConvertFrom-Json).version
-          $tag = "v$version"
-          
-          # Wait for release to be created by tauri-action
-          $maxAttempts = 30
-          $attempt = 0
-          $releaseFound = $false
-          
-          while ($attempt -lt $maxAttempts -and -not $releaseFound) {
-            $attempt++
-            Write-Host "Checking for release $tag (attempt $attempt/$maxAttempts)..."
-            
-            try {
-              $release = gh release view $tag --json id 2>$null
-              if ($release) {
-                $releaseFound = $true
-                Write-Host "Release $tag found!"
-              }
-            } catch {
-              Write-Host "Release not found yet, waiting..."
-            }
-            
-            if (-not $releaseFound) {
-              Start-Sleep -Seconds 10
-            }
-          }
-          
-          if ($releaseFound) {
-            Write-Host "Uploading portable exe to release $tag..."
-            gh release upload $tag $portableExe --clobber
-            Write-Host "Portable exe uploaded successfully!"
-          } else {
-            Write-Host "Warning: Release $tag not found after $maxAttempts attempts. Portable exe not uploaded to release."
-          }
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          mapfile -t portables < <(find release-assets -maxdepth 1 -type f -name 'brainbox-portable.exe')
+          mapfile -t dmgs < <(find release-assets -maxdepth 1 -type f -name '*.dmg')
+          test "${#portables[@]}" -eq 1 || { echo "Expected one portable EXE, found ${#portables[@]}" >&2; exit 1; }
+          test "${#dmgs[@]}" -eq 1 || { echo "Expected one DMG, found ${#dmgs[@]}" >&2; exit 1; }
+          test -f release-assets/SHA256SUMS-windows.txt
+          test -f release-assets/SHA256SUMS-macos.txt
+          test "$(find release-assets -maxdepth 1 -type f | wc -l)" -eq 4
+          (cd release-assets && sha256sum --check SHA256SUMS-windows.txt && sha256sum --check SHA256SUMS-macos.txt)
 
-      - name: Remove extra Windows release assets (Windows only)
-        if: matrix.platform == 'windows-latest' && github.ref == 'refs/heads/main'
-        shell: pwsh
+      - name: Create complete draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$RELEASE_TAG" release-assets/* --draft --verify-tag --generate-notes --title "brainbox $RELEASE_TAG"
+
+      - name: Verify draft assets and publish
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          $version = (Get-Content package.json | ConvertFrom-Json).version
-          $tag = "v$version"
-
-          $assets = gh release view $tag --json assets --jq '.assets[].name'
-          foreach ($asset in $assets) {
-            if ($asset -match '\.msi$' -or $asset -match 'setup\.exe$' -or $asset -match '^release-checksums-windows-.*\.txt$') {
-              Write-Host "Removing extra release asset: $asset"
-              gh release delete-asset $tag $asset --yes
-            }
-          }
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          mapfile -t expected < <(find release-assets -maxdepth 1 -type f -printf '%f\n' | sort)
+          mapfile -t actual < <(gh release view "$RELEASE_TAG" --json assets --jq '.assets[].name' | sort)
+          test "${expected[*]}" = "${actual[*]}" || { echo 'Draft release asset set is incomplete' >&2; exit 1; }
+          gh release edit "$RELEASE_TAG" --draft=false

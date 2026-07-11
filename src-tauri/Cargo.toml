@@ -17,12 +17,11 @@ name = "brainboxcore"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
-tauri-build = { version = "2.0.0-rc.15", features = [] } # Use specific RC version
+tauri-build = { version = "2.6.3", features = [] }
 
 [dependencies]
 # Enable image features for tray/icon APIs used from JS (png/ico)
-tauri = { version = "2.0.0-rc.15", features = ["image-png", "image-ico", "tray-icon"] } # Enable tray support + image features
-tauri-plugin-shell = "2.0.0-rc.15" # Use specific RC version for shell plugin
+tauri = { version = "2.11.5", features = ["image-png", "image-ico", "tray-icon"] }
 
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
@@ -43,14 +42,13 @@ uuid = { version = "1.6", features = ["v4"] }
 # Cross-platform dependencies
 whoami = "1.4"
 dirs = "5"
-tauri-plugin-global-shortcut = "2.0.0-rc.15"
-tauri-plugin-single-instance = "2.2.0"
+tauri-plugin-global-shortcut = "2.3.2"
+tauri-plugin-single-instance = "2.4.2"
 tiny_http = "0.12"
-reqwest = { version = "0.11", features = ["blocking", "json", "rustls-tls", "stream"] }
-futures-util = "0.3"
+reqwest = { version = "0.13", default-features = false, features = ["blocking", "json", "rustls"] }
 regex = "1"
 scraper = "0.18"
-quick-xml = { version = "0.31", features = ["serialize"] }
+quick-xml = { version = "0.41", features = ["serialize"] }
 
 # Windows-specific dependencies
 [target.'cfg(windows)'.dependencies]
@@ -61,6 +59,10 @@ windows = { version = "0.56", features = [
     "Win32_System_ProcessStatus"
 ] }
 winreg = "0.50"
+keyring = { version = "3.6", features = ["windows-native"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+keyring = { version = "3.6", features = ["apple-native"] }
 
 [features]
 # This feature is used for production builds or when `devPath` points to the filesystem

@@ -36,6 +36,12 @@ export const AISettings: React.FC = () => {
     setTestResult('');
   }, [activeProvider]);
 
+  useEffect(() => {
+    const refresh = () => setProviderSettings(aiService.getProviderSettings(activeProvider));
+    window.addEventListener('ai-settings-changed', refresh);
+    return () => window.removeEventListener('ai-settings-changed', refresh);
+  }, [activeProvider]);
+
   const handleProviderChange = (type: ProviderType) => {
     setActiveProvider(type);
     aiService.setActiveProvider(type);
@@ -147,6 +153,9 @@ export const AISettings: React.FC = () => {
                 placeholder={`Enter your ${config.name} API key`}
                 className={styles.input}
               />
+              <span className={styles.modeHint}>
+                Stored in the operating system credential vault; never in browser storage.
+              </span>
             </div>
           )}
 

@@ -7,11 +7,6 @@ use tantivy::query::QueryParser;
 use tantivy::schema::{Field, Schema, Value, STORED, TEXT};
 use tantivy::{IndexReader, ReloadPolicy, TantivyDocument};
 
-#[cfg(target_os = "macos")]
-use std::thread;
-#[cfg(target_os = "macos")]
-use std::time::Duration;
-
 use serde::{Deserialize, Serialize};
 
 // Search result item
@@ -86,9 +81,11 @@ mod tests {
 
             assert_eq!(result.vault_id, Some(42));
             assert_eq!(result.metadata.path.as_deref(), Some("vault/42/item/7"));
+            assert!(
+                !index_path.exists(),
+                "decrypted search tokens must not be persisted"
+            );
         }
-
-        let _ = fs::remove_dir_all(index_path);
     }
 }
 
@@ -133,32 +130,12 @@ impl SearchService {
 
         let schema = schema_builder.build();
 
-        eprintln!("brainbox: Creating index directory if needed...");
-
-        // Create index directory if it doesn't exist
-        if !index_path.exists() {
-            fs::create_dir_all(index_path)?;
+        // Decrypted content must never be persisted. Remove legacy plaintext indexes and
+        // keep the replacement index in memory for the current process only.
+        if index_path.exists() {
+            fs::remove_dir_all(index_path)?;
         }
-
-        // Create or open the index with macOS-specific timeout protection
-        let index = {
-            #[cfg(target_os = "macos")]
-            {
-                eprintln!(
-                    "brainbox: Opening/creating search index with timeout protection (macOS)..."
-                );
-                Self::create_index_with_timeout(index_path, schema.clone())?
-            }
-
-            #[cfg(not(target_os = "macos"))]
-            {
-                eprintln!("brainbox: Opening/creating search index...");
-                tantivy::Index::open_or_create(
-                    tantivy::directory::MmapDirectory::open(index_path)?,
-                    schema.clone(),
-                )?
-            }
-        };
+        let index = tantivy::Index::create_in_ram(schema);
 
         // Create the fields structure for easy access
         let fields = SearchFields {
@@ -198,57 +175,6 @@ impl SearchService {
         })
     }
 
-    // Helper method to create index with timeout protection and fallback (macOS-specific)
-    #[cfg(target_os = "macos")]
-    fn create_index_with_timeout(
-        index_path: &Path,
-        schema: Schema,
-    ) -> Result<tantivy::Index, tantivy::TantivyError> {
-        use std::sync::mpsc;
-
-        let (tx, rx) = mpsc::channel();
-        let index_path = index_path.to_path_buf();
-        let schema_clone = schema.clone();
-
-        // Spawn a thread to create the index
-        thread::spawn(move || {
-            // First, try with MmapDirectory
-            let result = match tantivy::directory::MmapDirectory::open(&index_path) {
-                Ok(dir) => tantivy::Index::open_or_create(dir, schema_clone),
-                Err(e) => {
-                    eprintln!("brainbox: Failed to open MmapDirectory: {}", e);
-                    Err(tantivy::TantivyError::from(e))
-                }
-            };
-            let _ = tx.send(result);
-        });
-
-        // Wait for result with timeout
-        match rx.recv_timeout(Duration::from_secs(10)) {
-            Ok(Ok(index)) => {
-                eprintln!("brainbox: Successfully created index with MmapDirectory");
-                Ok(index)
-            }
-            Ok(Err(e)) => {
-                eprintln!("brainbox: MmapDirectory failed: {}", e);
-                Self::create_fallback_index(schema)
-            }
-            Err(_) => {
-                eprintln!(
-                    "brainbox: Index creation timed out after 10 seconds, trying fallback..."
-                );
-                Self::create_fallback_index(schema)
-            }
-        }
-    }
-
-    // Fallback to RAMDirectory when MmapDirectory fails (macOS-specific)
-    #[cfg(target_os = "macos")]
-    fn create_fallback_index(schema: Schema) -> Result<tantivy::Index, tantivy::TantivyError> {
-        eprintln!("brainbox: Falling back to RAMDirectory (search index will not persist between sessions)");
-        Ok(tantivy::Index::create_in_ram(schema))
-    }
-
     // Method to attempt index recovery by clearing corrupted data
     #[allow(dead_code)]
     pub fn recover_index(index_path: &Path) -> Result<(), std::io::Error> {
@@ -260,14 +186,11 @@ impl SearchService {
             eprintln!("brainbox: Removed corrupted index directory");
         }
 
-        // Recreate the directory
-        std::fs::create_dir_all(index_path)?;
-        eprintln!("brainbox: Recreated index directory");
-
         Ok(())
     }
 
     // Add or update a document in the index
+    #[allow(clippy::too_many_arguments)] // Stable Tauri command/document schema boundary.
     pub fn index_document(
         &self,
         id: &str,
@@ -438,11 +361,9 @@ pub fn init_search_service(index_path: &Path) -> Result<(), tantivy::TantivyErro
 #[allow(dead_code)]
 pub fn get_search_service() -> Option<Arc<SearchService>> {
     let service_ref = SEARCH_SERVICE.lock().unwrap();
-    if let Some(service) = &*service_ref {
-        Some(Arc::new(service.clone()))
-    } else {
-        None
-    }
+    (*service_ref)
+        .as_ref()
+        .map(|service| Arc::new(service.clone()))
 }
 
 // Tauri command for searching
@@ -457,6 +378,7 @@ pub fn search(query: String, limit: usize) -> Result<Vec<SearchResult>, String> 
 
 // Tauri command to index a document
 #[tauri::command]
+#[allow(clippy::too_many_arguments)] // Arguments are the public renderer IPC contract.
 pub fn index_document(
     id: String,
     title: String,
