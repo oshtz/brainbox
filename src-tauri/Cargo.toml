@@ -31,7 +31,7 @@ urlencoding = "2"
 rusqlite = { version = "0.31", features = ["bundled", "limits"] } # Bundled for easy setup, limits for safety
 tantivy = "0.22"
 chacha20poly1305 = { version = "0.10", features = ["alloc"] } # Using XChaCha20 variant
-rand = "0.8"
+rand = "0.10"
 chrono = { version = "0.4", features = ["serde"] } # Timestamps
 thiserror = "1.0" # Error handling
 lazy_static = "1.4.0" # For singleton patterns
