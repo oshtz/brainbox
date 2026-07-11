@@ -148,20 +148,36 @@ jobs:
           }
 
           $installer = Join-Path $env:RUNNER_TEMP 'enigmavb-setup.exe'
-          Invoke-WebRequest -Uri $env:EVB_INSTALLER_URL -OutFile $installer -UseBasicParsing -TimeoutSec 120
-          if ((Get-Item $installer).Length -lt 1MB) { throw 'EVB installer is unexpectedly small' }
-
-          $actualHash = (Get-FileHash $installer -Algorithm SHA256).Hash
-          Write-Host "Downloaded EVB installer SHA-256: $actualHash"
-
-          $signature = Get-AuthenticodeSignature $installer
-          if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Thumbprint -ne $env:EVB_INSTALLER_SIGNER_THUMBPRINT.Trim()) {
-            throw "EVB installer Authenticode validation failed: $($signature.Status)"
+          $headers = @{
+            'User-Agent' = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/138 Safari/537.36'
+            Referer = 'https://www.enigmaprotector.com/en/downloads.html'
           }
+          $verified = $false
+          for ($attempt = 1; $attempt -le 5; $attempt++) {
+            try {
+              Remove-Item $installer -Force -ErrorAction SilentlyContinue
+              Invoke-WebRequest -Uri $env:EVB_INSTALLER_URL -OutFile $installer -Headers $headers -UseBasicParsing -TimeoutSec 120
+              if ((Get-Item $installer).Length -lt 1MB) { throw 'EVB installer is unexpectedly small' }
 
-          if ((Get-Item $installer).VersionInfo.ProductName.Trim() -ne 'Enigma Virtual Box') {
-            throw 'Downloaded installer is not Enigma Virtual Box'
+              $signature = Get-AuthenticodeSignature $installer
+              if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Thumbprint -ne $env:EVB_INSTALLER_SIGNER_THUMBPRINT.Trim()) {
+                throw "EVB installer Authenticode validation failed: $($signature.Status)"
+              }
+              if ((Get-Item $installer).VersionInfo.ProductName.Trim() -ne 'Enigma Virtual Box') {
+                throw 'Downloaded installer is not Enigma Virtual Box'
+              }
+
+              $actualHash = (Get-FileHash $installer -Algorithm SHA256).Hash
+              Write-Host "Downloaded EVB installer SHA-256: $actualHash"
+              $verified = $true
+              break
+            } catch {
+              if ($attempt -eq 5) { throw "EVB installer validation failed after $attempt attempts: $($_.Exception.Message)" }
+              Write-Warning "EVB installer attempt $attempt failed validation; retrying the same official URL"
+              Start-Sleep -Seconds 5
+            }
           }
+          if (-not $verified) { throw 'EVB installer validation failed' }
           "EVB_INSTALLER=$installer" | Out-File $env:GITHUB_ENV -Append
 
       - name: Install Enigma Virtual Box
