@@ -286,6 +286,14 @@ test('native Library and Settings share the same content frame at desktop size',
   });
   expect(scrollOwnership).toEqual({ main: 'hidden', content: 'auto' });
 
+  const libraryScroll = page.getByTestId('library-scroll-area');
+  expect(await libraryScroll.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true);
+  const idleScrollbar = await libraryScroll.evaluate((element) => getComputedStyle(element).getPropertyValue('scrollbar-color'));
+  await libraryScroll.hover();
+  await expect.poll(() => libraryScroll.evaluate((element) => getComputedStyle(element).getPropertyValue('scrollbar-color'))).not.toBe(idleScrollbar);
+  await page.getByTestId('library-search-input').hover();
+  await expect.poll(() => libraryScroll.evaluate((element) => getComputedStyle(element).getPropertyValue('scrollbar-color'))).toBe(idleScrollbar);
+
   const card = page.getByTestId('masonry-card').first();
   const smallerCards = page.getByRole('button', { name: 'Show smaller cards' });
   const largerCards = page.getByRole('button', { name: 'Show larger cards' });

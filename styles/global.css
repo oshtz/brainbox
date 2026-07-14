@@ -87,8 +87,12 @@ select:not([multiple]) {
 /* Custom scrollbars that match the design system */
 * {
   scrollbar-width: thin; /* Firefox */
-  scrollbar-color: var(--scrollbar-thumb) transparent;
+  scrollbar-color: transparent transparent;
   -ms-overflow-style: auto;
+}
+
+*:hover {
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
 }
 
 *::-webkit-scrollbar {
@@ -97,18 +101,26 @@ select:not([multiple]) {
 }
 
 *::-webkit-scrollbar-track {
-  background: var(--scrollbar-track);
+  background: transparent;
   border-radius: var(--border-radius-lg);
 }
 
 *::-webkit-scrollbar-thumb {
-  background: var(--scrollbar-thumb);
+  background: transparent;
   border-radius: var(--border-radius-lg);
   border: 2px solid transparent;
   background-clip: padding-box;
 }
 
-*::-webkit-scrollbar-thumb:hover {
+*:hover::-webkit-scrollbar-track {
+  background: var(--scrollbar-track);
+}
+
+*:hover::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+}
+
+*:hover::-webkit-scrollbar-thumb:hover {
   background: var(--scrollbar-thumb-hover);
 }
 

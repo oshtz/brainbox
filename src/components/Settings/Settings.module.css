@@ -148,11 +148,6 @@
     padding: 6px 4px 10px;
     overflow-x: auto;
     background: var(--ui-main-background);
-    scrollbar-width: none;
-  }
-
-  .navWrap::-webkit-scrollbar {
-    display: none;
   }
 
   .tabNav {

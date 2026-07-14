@@ -200,11 +200,6 @@
   gap: 10px;
   overflow-x: auto;
   padding-left: 172px;
-  scrollbar-width: none;
-}
-
-.vaultFilterRow::-webkit-scrollbar {
-  display: none;
 }
 
 .vaultFilterChip {
