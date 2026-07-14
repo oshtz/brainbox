@@ -186,7 +186,7 @@ function App() {
     listen('capture-hotkey-pressed', () => openCapture()).then((unlisten) => unlisteners.push(unlisten));
     listen('vaults-changed', fetchVaults).then((unlisten) => unlisteners.push(unlisten));
     listen<CaptureFromProtocolPayload>('capture-from-protocol', ({ payload }) => {
-      openCapture({ title: payload?.title || '', url: payload?.url || '' });
+      openCapture({ title: payload?.title || '', url: payload?.url || '', selection: payload?.selection || '' });
     }).then((unlisten) => unlisteners.push(unlisten));
     listen<string>('tauri://protocol', ({ payload }) => {
       if (!payload?.startsWith('brainbox://capture?')) return;
@@ -293,7 +293,9 @@ function App() {
         vaults={vaultProps}
         initialVaultId={selectedVaultId === 'all' ? '' : selectedVaultId}
         initialTitle={protocolCapture?.title || ''}
-        initialContent={protocolCapture?.url || ''}
+        initialContent={protocolCapture?.selection
+          ? `${protocolCapture.selection}${protocolCapture.url ? `\n\nSource: ${protocolCapture.url}` : ''}`
+          : protocolCapture?.url || ''}
       />
     </>
   );

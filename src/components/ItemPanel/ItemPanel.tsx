@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { XMarkIcon, EllipsisVerticalIcon } from '@heroicons/react/24/outline';
 import styles from './ItemPanel.module.css';
 import { generateMeshGradientDataURL } from '../../utils/meshGradient';
-import { getYouTubeId, youtubeEmbedUrl, isUrl as looksLikeUrl } from '../../utils/urlPreview';
+import { getYouTubeId, youtubeEmbedUrl, isUrl as looksLikeUrl, splitSourcedNote } from '../../utils/urlPreview';
 import { aiService } from '../../utils/ai';
 import { invoke } from '@tauri-apps/api/core';
 import { useVaultPassword } from '../../contexts/VaultPasswordContext';
@@ -180,6 +180,7 @@ const ItemPanel: React.FC<Props> = ({ item, vaults, currentVaultId, onClose, onR
 
   const isConflict = title?.includes('[Conflict]');
   const contentIsUrl = looksLikeUrl(contentEdit);
+  const sourcedNote = splitSourcedNote(contentEdit);
   const contentDirty = contentEdit !== lastSavedContent;
   const host = (() => { try { return new URL(contentEdit).hostname.replace(/^www\./, ''); } catch { return ''; } })();
   const youtubeId = isUrl ? getYouTubeId(contentEdit) : null;
@@ -362,9 +363,14 @@ const ItemPanel: React.FC<Props> = ({ item, vaults, currentVaultId, onClose, onR
               placeholder={'Write your note...'}
             />
           ) : (
-            <button type="button" className={`${styles.contentDisplay} ${contentEdit ? '' : styles.contentDisplayEmpty}`} aria-label={contentIsUrl ? 'Edit URL' : 'Edit content'} onClick={() => setEditingContent(true)}>
-              {contentEdit || (contentIsUrl ? 'Add URL' : 'Add content')}
-            </button>
+            <>
+              <button type="button" className={`${styles.contentDisplay} ${contentEdit ? '' : styles.contentDisplayEmpty}`} aria-label={contentIsUrl ? 'Edit URL' : 'Edit content'} onClick={() => setEditingContent(true)}>
+                {sourcedNote.body || (contentIsUrl ? 'Add URL' : 'Add content')}
+              </button>
+              {sourcedNote.sourceUrl && (
+                <a className={styles.sourceLink} href={sourcedNote.sourceUrl} onClick={(e) => { e.preventDefault(); window.open(sourcedNote.sourceUrl!, '_blank'); }}>Open source ↗</a>
+              )}
+            </>
           )}
         </section>
 

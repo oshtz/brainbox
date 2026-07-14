@@ -45,7 +45,7 @@ function TabButton({ tab, isActive, onClick }) {
 
 const BOOKMARKLET_PROTOCOL = `javascript:(function(){try{var u=encodeURIComponent(location.href),t=encodeURIComponent(document.title),p='brainbox://capture?url='+u+'&title='+t;location.href=p;setTimeout(function(){try{window.stop();}catch(e){}},350);}catch(e){console.log('Bookmarklet error:',e&&e.message?e.message:e);}})();`;
 
-const BOOKMARKLET_LOCALHOST = `javascript:(function(){try{var u=encodeURIComponent(location.href),t=encodeURIComponent(document.title);window.open('http://127.0.0.1:51234/capture?url='+u+'&title='+t,'_blank');}catch(e){console.log('Bookmarklet error:',e&&e.message?e.message:e);}})();`;
+const BOOKMARKLET_LOCALHOST = `javascript:(function(){try{var u=encodeURIComponent(location.href),t=encodeURIComponent(document.title),s=String(window.getSelection()).trim(),x='';if(s){if(s.length>2000){s=s.slice(0,2000)+'\\n\\n[Selection truncated]';}x='&selection='+encodeURIComponent(s);}window.open('http://127.0.0.1:51234/capture?url='+u+'&title='+t+x,'_blank');}catch(e){console.log('Bookmarklet error:',e&&e.message?e.message:e);}})();`;
 
 function CaptureSettings() {
   const { hotkey, setHotkey } = useHotkey();
@@ -228,7 +228,7 @@ function CaptureSettings() {
           <div style={bookmarkletPanelStyle}>
             <span style={subtleLabelStyle}>Bookmarklet</span>
             <p style={bodyTextStyle}>
-              Drag a button to your bookmarks bar to capture the page you are viewing. The localhost version keeps your current tab in place.
+              Drag the button to your bookmarks bar. Select text before using it to capture a sourced note, or use it without a selection to save the page.
             </p>
             <div style={bookmarkletButtonsStyle}>
               <button

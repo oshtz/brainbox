@@ -266,6 +266,64 @@ test('native first capture creates one Inbox, recalls offline, and persists acro
   }
 });
 
+test('native localhost bookmarklet captures selected text as a sourced note', async ({}, testInfo) => {
+  let page = app!.page;
+  await resizeNativeWindow(page, 1115, 768);
+  await page.getByTestId('library-search-input').fill('');
+
+  const selectedText = 'Bookmarklet constellation passage stays searchable across relaunch';
+  const sourceUrl = 'http://127.0.0.1:17341/';
+  const sourceBrowser = await chromium.launch();
+  try {
+    const sourcePage = await sourceBrowser.newPage();
+    await sourcePage.goto(sourceUrl);
+    await sourcePage.evaluate((text) => {
+      document.title = 'Bookmarklet selection source';
+      const passage = document.createElement('p');
+      passage.textContent = text;
+      document.body.appendChild(passage);
+      const range = document.createRange();
+      range.selectNodeContents(passage);
+      const selection = window.getSelection();
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+    }, selectedText);
+
+    const bookmarklet = (await fsp.readFile(path.join(repoRoot, 'examples', 'bookmarklet-direct.js'), 'utf8'))
+      .trim()
+      .replace(/^javascript:/, '');
+    await sourcePage.evaluate(bookmarklet);
+
+    await expect(page.getByTestId('capture-modal')).toBeVisible();
+    await expect(page.getByTestId('capture-title-input')).toHaveValue('Bookmarklet selection source');
+    await expect(page.getByTestId('capture-content-input')).toHaveValue(`${selectedText}\n\nSource: ${sourceUrl}`);
+    await expect(page.getByTestId('capture-vault-select')).toHaveValue('1');
+    await page.getByTestId('capture-content-input').press('Control+Enter');
+  } finally {
+    await sourceBrowser.close();
+  }
+
+  const capturedCard = page.getByTestId('masonry-card').filter({ hasText: selectedText });
+  await expect(capturedCard).toBeVisible();
+  await expect(capturedCard).not.toContainText(sourceUrl);
+  await capturedCard.getByRole('button', { name: /Open item/ }).click();
+  await expect(page.getByRole('link', { name: 'Open source ↗' })).toHaveAttribute('href', sourceUrl);
+  await expect(page.getByRole('button', { name: 'Edit content' })).not.toContainText('Source:');
+  await page.getByRole('button', { name: 'Close item details' }).click();
+
+  await page.getByTestId('library-search-input').fill('constellation bookmarklet');
+  await expect(capturedCard).toBeVisible();
+  await testInfo.attach('native-bookmarklet-selection', {
+    body: await page.screenshot(),
+    contentType: 'image/png',
+  });
+
+  app = await relaunchNativeApp(app!);
+  page = app.page;
+  await page.getByTestId('library-search-input').fill('constellation bookmarklet');
+  await expect(page.getByTestId('masonry-card').filter({ hasText: selectedText })).toBeVisible();
+});
+
 test('native Library and Settings share the same content frame at desktop size', async ({}, testInfo) => {
   const page = app!.page;
   await resizeNativeWindow(page, 1115, 768);

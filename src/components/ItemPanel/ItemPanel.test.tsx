@@ -90,4 +90,28 @@ describe('ItemPanel', () => {
     expect(screen.getByText('Second item')).toBeInTheDocument();
     expect(screen.queryByText('Summary for the first item.')).not.toBeInTheDocument();
   });
+
+  it('presents a sourced note without hiding its editable source line', () => {
+    const content = 'Selected passage from the page.\n\nSource: https://example.com/article';
+    render(
+      <ItemPanel
+        item={{ id: '9', title: 'Clipped passage', content, metadata: { item_type: 'note' } }}
+        vaults={[{ id: '1', title: 'Inbox' }]}
+        currentVaultId="1"
+        onClose={vi.fn()}
+        onRename={vi.fn()}
+        onMove={vi.fn()}
+        onUpdateImage={vi.fn()}
+        onDelete={vi.fn()}
+      />
+    );
+
+    const contentButton = screen.getByRole('button', { name: 'Edit content' });
+    expect(contentButton).toHaveTextContent('Selected passage from the page.');
+    expect(contentButton).not.toHaveTextContent('Source:');
+    expect(screen.getByRole('link', { name: 'Open source ↗' })).toHaveAttribute('href', 'https://example.com/article');
+
+    fireEvent.click(contentButton);
+    expect(screen.getByRole('textbox', { name: 'Content' })).toHaveValue(content);
+  });
 });

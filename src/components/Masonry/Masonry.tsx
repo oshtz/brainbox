@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { useTransition, a } from "@react-spring/web";
 import { PlayIcon, ArrowUpIcon, ArrowDownIcon, TrashIcon, EllipsisVerticalIcon, PlusIcon } from "@heroicons/react/24/solid";
 import "./Masonry.css";
-import { faviconForUrl } from "../../utils/urlPreview";
+import { faviconForUrl, splitSourcedNote } from "../../utils/urlPreview";
 
 export interface MasonryItem {
   id: string | number;
@@ -203,9 +203,10 @@ const Masonry: React.FC<MasonryProps> = ({ data, onCardClick, onCopyItem, onDele
         const hasImage = Boolean(item.image) && (isUrl || !preferSummary);
         const previewImage = isUrl && !failedPreviewIds.has(String(item.id)) ? item?.metadata?.preview_image || item.image : '';
         const cardHasMedia = isUrl ? Boolean(previewImage) : hasImage;
+        const noteContent = typeof item.content === 'string' ? splitSourcedNote(item.content).body.trim() : '';
         const noteExcerpt = preferSummary && item.summary
           ? item.summary.trim()
-          : typeof item.content === 'string' ? item.content.trim() : '';
+          : noteContent;
         const linkDescription = preferSummary && item.summary
           ? item.summary.trim()
           : item?.metadata?.preview_description;

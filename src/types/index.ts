@@ -49,6 +49,7 @@ export interface CaptureData {
 export interface ProtocolCapture {
   title: string;
   url: string;
+  selection?: string;
 }
 
 export interface SearchResult {
@@ -153,4 +154,5 @@ export interface BackendSearchResult {
 export interface CaptureFromProtocolPayload {
   title?: string;
   url?: string;
+  selection?: string;
 }

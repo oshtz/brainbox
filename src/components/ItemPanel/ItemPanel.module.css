@@ -335,6 +335,18 @@
 .contentDisplay:hover { color: var(--color-text-primary); }
 .contentDisplayEmpty { color: var(--color-text-tertiary); font-style: italic; }
 
+.sourceLink {
+  width: fit-content;
+  color: var(--color-text-secondary);
+  font-size: 0.78rem;
+  font-weight: var(--font-weight-medium);
+}
+
+.sourceLink:hover {
+  color: var(--color-text-primary);
+  text-decoration: none;
+}
+
 .contentInput {
   width: 100%;
   min-width: 0;
@@ -508,6 +520,7 @@
 .iconButton:focus-visible,
 .titleDisplay:focus-visible,
 .contentDisplay:focus-visible,
+.sourceLink:focus-visible,
 .summaryButton:focus-visible,
 .menuItem:focus-visible,
 .menuItemDanger:focus-visible,

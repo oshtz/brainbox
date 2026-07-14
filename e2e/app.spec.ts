@@ -36,7 +36,7 @@ const populatedFixture = {
         id: 101,
         vault_id: 1,
         title: 'Tauri smoke path checklist with launch, capture, search, and shutdown',
-        content: 'Create a desktop smoke path that launches the packaged app, creates a vault item, verifies search hydration, and shuts down cleanly.',
+        content: 'Create a desktop smoke path that launches the packaged app, creates a vault item, verifies search hydration, and shuts down cleanly.\n\nSource: https://example.com/native-capture',
         image: null,
         summary: 'Desktop smoke path tracks launch, capture, search, and shutdown verification.',
         created_at: '2026-06-03T09:00:00Z',
@@ -228,6 +228,7 @@ test.describe('brainbox populated workspace fixture', () => {
     await expect(page.getByRole('button', { name: /^Open item / })).toHaveCount(6);
     await expect(page.getByRole('button', { name: /Open item Tauri smoke path checklist/ })).toBeVisible();
     await expect(page.getByRole('button', { name: /Open item Release readiness reference/ })).toBeVisible();
+    await expect(page.locator('[data-testid="masonry-card"][data-item-id="101"]')).not.toContainText('example.com/native-capture');
 
     const rediscover = page.getByTestId('rediscover-shelf');
     await expect(rediscover).toBeVisible();
@@ -246,12 +247,15 @@ test.describe('brainbox populated workspace fixture', () => {
 
     await expect(page.getByTestId('item-panel')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Edit item title' })).toContainText('Tauri smoke path checklist');
+    await expect(page.getByRole('link', { name: 'Open source ↗' })).toHaveAttribute('href', 'https://example.com/native-capture');
+    await expect(page.getByRole('button', { name: 'Edit content' })).not.toContainText('Source:');
     await page.getByRole('button', { name: 'Edit item title' }).click();
     await expect(page.getByRole('textbox', { name: 'Item title' })).toHaveValue(/^Tauri smoke path checklist/);
     await page.getByRole('textbox', { name: 'Item title' }).press('Escape');
     await expect(page.getByText('Desktop smoke path tracks launch')).toBeVisible();
     await page.getByRole('button', { name: 'Edit content' }).click();
     await expect(page.getByRole('textbox', { name: 'Content' })).toHaveValue(/^Create a desktop smoke path/);
+    await expect(page.getByRole('textbox', { name: 'Content' })).toHaveValue(/Source: https:\/\/example.com\/native-capture$/);
     await page.getByRole('textbox', { name: 'Content' }).press('Tab');
     await expect(page.getByRole('heading', { name: 'AI summary' })).toBeVisible();
     await expect(page.getByText('Ollama · setup needed')).toBeVisible();
