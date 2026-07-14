@@ -197,6 +197,9 @@ test.describe('brainbox app shell', () => {
     await expect(page.getByTestId('create-vault-modal')).toBeVisible();
     await expect(page.getByTestId('vault-name-input')).toBeVisible();
 
+    await page.getByText('Password protection').click();
+    await expect(page.getByTestId('vault-password-input')).toBeVisible();
+
     await page.getByTestId('create-vault-submit').click();
     await expect(page.getByTestId('create-vault-modal')).toBeVisible();
   });
