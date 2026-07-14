@@ -305,6 +305,7 @@ test.describe('brainbox populated workspace fixture', () => {
     await expect(page.getByRole('button', { name: 'Edit item title' })).toContainText('Release readiness reference');
     await expect(page.getByTestId('item-panel-scroll')).toHaveCSS('overflow-y', 'auto');
     await expect(page.getByTestId('item-panel-scroll')).toHaveCSS('scrollbar-width', 'thin');
+    await expect(page.getByTestId('item-panel-scroll')).toHaveCSS('mask-image', /linear-gradient/);
     await expect(page.getByRole('button', { name: 'Edit URL' })).toHaveCSS('white-space', 'nowrap');
   });
 
@@ -349,6 +350,7 @@ test.describe('brainbox populated workspace fixture', () => {
     await page.setViewportSize({ width: 1200, height: 620 });
 
     const libraryScroll = page.getByTestId('library-scroll-area');
+    await expect(libraryScroll).toHaveCSS('mask-image', /linear-gradient/);
     const search = page.getByTestId('library-search-input');
     const searchTop = await search.evaluate((element) => element.getBoundingClientRect().top);
     await libraryScroll.evaluate((element) => { element.scrollTop = element.scrollHeight; });
@@ -374,6 +376,7 @@ test.describe('brainbox populated workspace fixture', () => {
     const settingsTitle = page.getByRole('heading', { name: 'Settings' });
     const captureTab = page.getByRole('tab', { name: /Capture/ });
     const panel = page.getByRole('tabpanel');
+    await expect(panel).toHaveCSS('mask-image', /linear-gradient/);
     const fixedTops = await Promise.all([
       settingsTitle.evaluate((element) => element.getBoundingClientRect().top),
       captureTab.evaluate((element) => element.getBoundingClientRect().top),
