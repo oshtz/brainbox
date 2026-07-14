@@ -14,6 +14,7 @@ import { useTheme } from '../../contexts/ThemeContext';
 
 const Sidebar = ({
   title = 'Library',
+  backgroundJobCount = 0,
   onLibraryClick,
   onSettingsClick,
   onCreateNote,
@@ -161,6 +162,12 @@ const Sidebar = ({
       </nav>
 
       <div className={styles.actions} data-tauri-drag-region="false" data-nodrag>
+        {backgroundJobCount > 0 && (
+          <div className={styles.jobIndicator} role="status" data-testid="background-jobs">
+            <span className={styles.jobDot} aria-hidden="true" />
+            <span className={styles.jobLabel}>{backgroundJobCount === 1 ? 'Summarizing' : `${backgroundJobCount} summaries`}</span>
+          </div>
+        )}
         {currentView === 'library' && (
           <button
             type="button"

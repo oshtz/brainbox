@@ -338,6 +338,26 @@ test.describe('brainbox populated workspace fixture', () => {
     await dialog.getByRole('button', { name: 'Cancel' }).click();
   });
 
+  test('navigates cards by keyboard and restores the Library position', async ({ page }) => {
+    await page.setViewportSize({ width: 1200, height: 620 });
+    const scroll = page.getByTestId('library-scroll-area');
+    await scroll.evaluate((element) => { element.scrollTop = element.scrollHeight; });
+    await expect.poll(() => scroll.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+
+    const cards = page.locator('.masonry-card-bg[data-masonry-focusable]');
+    await cards.nth(4).focus();
+    await page.keyboard.press('ArrowRight');
+    await expect(cards.nth(5)).toBeFocused();
+    const scrollTop = await scroll.evaluate((element) => element.scrollTop);
+
+    await page.keyboard.press('Enter');
+    await expect(page.getByTestId('item-panel')).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.getByTestId('item-panel')).toHaveCount(0);
+    await expect(cards.nth(5)).toBeFocused();
+    await expect.poll(() => scroll.evaluate((element, expected) => Math.abs(element.scrollTop - expected), scrollTop)).toBeLessThanOrEqual(1);
+  });
+
   test('renders notes without images as readable text cards', async ({ page }) => {
     await expect(page.locator('[data-item-id="101"] .masonry-note-preview')).toBeVisible();
     await expect(page.locator('[data-item-id="101"] .masonry-note-text')).toContainText('Create a desktop smoke path');
@@ -407,6 +427,11 @@ test.describe('brainbox populated workspace fixture', () => {
     expect(Math.abs(metrics.leftInset)).toBeLessThanOrEqual(2);
     expect(Math.abs(metrics.rightInset)).toBeLessThanOrEqual(2);
     expect(Math.abs(metrics.topInset)).toBeLessThanOrEqual(2);
+
+    await expect.poll(() => page.locator('[data-item-id="201"]').evaluate((element) => {
+      const box = element.getBoundingClientRect();
+      return Math.abs(box.width / box.height - 4 / 3);
+    })).toBeLessThan(0.03);
 
     const supportsHover = await page.evaluate(() => matchMedia('(hover: hover) and (pointer: fine)').matches);
     const body = card.locator('.mlp-body');

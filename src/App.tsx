@@ -48,6 +48,8 @@ function App() {
   const [isBrainyOpen, setIsBrainyOpen] = useState(false);
   const [brainyMode, setBrainyMode] = useState<'sidebar' | 'full'>(aiService.getBrainyMode());
   const [libraryRefreshToken, setLibraryRefreshToken] = useState(0);
+  // ponytail: jobs survive in-app navigation, not restarts; move them to Rust if restart recovery becomes necessary.
+  const [summarizingItemIds, setSummarizingItemIds] = useState<Set<string>>(() => new Set());
   const inboxCreationRef = useRef<Promise<Vault> | null>(null);
 
   const fetchVaults = async () => {
@@ -203,6 +205,7 @@ function App() {
       <div className={styles.app} data-testid="app">
         <Sidebar
           title={title}
+          backgroundJobCount={summarizingItemIds.size}
           currentView={currentView}
           onLibraryClick={() => navigate('library')}
           onSettingsClick={() => navigate('settings')}
@@ -243,6 +246,12 @@ function App() {
                   onCreateNote={() => { void openCapture(); }}
                   onCreateVault={() => setIsCreateVaultOpen(true)}
                   onOpenBrainy={openBrainy}
+                  summarizingItemIds={summarizingItemIds}
+                  onSummarizingChange={(id, busy) => setSummarizingItemIds((current) => {
+                    const next = new Set(current);
+                    busy ? next.add(id) : next.delete(id);
+                    return next;
+                  })}
                   refreshToken={libraryRefreshToken}
                 />
               )}

@@ -39,6 +39,8 @@ interface Props {
   onCreateNote: () => void;
   onCreateVault: () => void;
   onOpenBrainy: () => void;
+  summarizingItemIds: ReadonlySet<string>;
+  onSummarizingChange: (id: string, busy: boolean) => void;
   refreshToken?: number;
 }
 
@@ -50,6 +52,8 @@ const Library: React.FC<Props> = ({
   onCreateNote,
   onCreateVault,
   onOpenBrainy,
+  summarizingItemIds,
+  onSummarizingChange,
   refreshToken = 0,
 }) => {
   const { getVaultKey } = useVaultPassword();
@@ -58,7 +62,6 @@ const Library: React.FC<Props> = ({
   const [loading, setLoading] = useState(false);
   const [items, setItems] = useState<LibraryItem[]>([]);
   const [selectedItem, setSelectedItem] = useState<LibraryItem | null>(null);
-  const [summarizingItemIds, setSummarizingItemIds] = useState<Set<string>>(() => new Set());
   const [typeFilter, setTypeFilter] = useState<'all' | 'note' | 'url'>('all');
   const [query, setQuery] = useState('');
   const [sortBy, setSortBy] = useState<'updated' | 'created'>('updated');
@@ -73,6 +76,41 @@ const Library: React.FC<Props> = ({
   const [rediscoverPrevious, setRediscoverPrevious] = useState<LibraryItem[]>([]);
   const [rediscoverAnimating, setRediscoverAnimating] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
+  const scrollAreaRef = useRef<HTMLDivElement>(null);
+  const rememberedScrollTopRef = useRef(0);
+  const triggerItemIdRef = useRef<string | null>(null);
+
+  const openItem = (item: LibraryItem) => {
+    if (!selectedItem) rememberedScrollTopRef.current = scrollAreaRef.current?.scrollTop || 0;
+    triggerItemIdRef.current = item.id;
+    setSelectedItem(item);
+  };
+
+  const closeItem = () => {
+    const itemId = triggerItemIdRef.current;
+    setSelectedItem(null);
+    window.requestAnimationFrame(() => {
+      if (scrollAreaRef.current) scrollAreaRef.current.scrollTop = rememberedScrollTopRef.current;
+      if (!itemId) return;
+      scrollAreaRef.current
+        ?.querySelector<HTMLElement>(`[data-item-id="${CSS.escape(itemId)}"] .masonry-card-bg`)
+        ?.focus({ preventScroll: true });
+    });
+  };
+
+  useEffect(() => {
+    if (!selectedItem) return;
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || event.defaultPrevented) return;
+      const target = event.target as HTMLElement | null;
+      if (target?.matches('input, textarea, select, [contenteditable="true"]')) return;
+      if (document.querySelector('[role="dialog"], [role="menu"]')) return;
+      event.preventDefault();
+      closeItem();
+    };
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
+  }, [selectedItem]);
 
   useEffect(() => {
     if (vaults.length === 0) {
@@ -295,7 +333,7 @@ const Library: React.FC<Props> = ({
         )}
       </div>
 
-      <div className={styles.scrollArea} data-testid="library-scroll-area">
+      <div ref={scrollAreaRef} className={styles.scrollArea} data-testid="library-scroll-area">
       {rediscovered.length > 0 && (
         <section
           className={`${styles.rediscover} ${rediscoverHiding ? styles.rediscoverHiding : ''}`}
@@ -330,7 +368,7 @@ const Library: React.FC<Props> = ({
               const image = item.metadata.preview_image || item.image;
               const excerpt = item.metadata.preview_description || item.summary || item.content;
               return (
-                <button key={item.id} type="button" className={styles.rediscoverCard} onClick={() => setSelectedItem(item)}>
+                <button key={item.id} type="button" className={styles.rediscoverCard} onClick={() => openItem(item)}>
                   {image && <img src={image} alt="" />}
                   <span className={styles.rediscoverCardBody}>
                     <small>{item.metadata.item_type === 'url' ? 'Link' : 'Note'} · {item.updatedAt.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</small>
@@ -377,9 +415,7 @@ const Library: React.FC<Props> = ({
           preferSummary={Boolean(query.trim())}
           selectedId={selectedItem?.id}
           actionsMode="menu"
-          onCardClick={(item) => {
-            setSelectedItem(item as LibraryItem);
-          }}
+          onCardClick={(item) => openItem(item as LibraryItem)}
           onOpenExternal={(item) => {
             const url = item.metadata?.url || item.content;
             if (url) window.open(url, '_blank');
@@ -417,10 +453,10 @@ const Library: React.FC<Props> = ({
         <ItemPanel
           item={selectedItem}
           relatedItems={related}
-          onSelectRelated={(item) => setSelectedItem(item as LibraryItem)}
+          onSelectRelated={(item) => openItem(item as LibraryItem)}
           currentVaultId={selectedItem.vault_id}
           vaults={vaults}
-          onClose={() => setSelectedItem(null)}
+          onClose={closeItem}
           onUpdateContent={async (id, content) => {
             const url = /^https?:\/\/[^\s]+$/.test(content.trim());
             const update = (item: LibraryItem) => item.id === String(id) ? {
@@ -436,11 +472,7 @@ const Library: React.FC<Props> = ({
             setSelectedItem((current) => current?.id === String(id) ? { ...current, summary } : current);
           }}
           summarizing={summarizingItemIds.has(selectedItem.id)}
-          onSummarizingChange={(id, busy) => setSummarizingItemIds((current) => {
-            const next = new Set(current);
-            busy ? next.add(id) : next.delete(id);
-            return next;
-          })}
+          onSummarizingChange={onSummarizingChange}
           onRename={async (id, title) => {
             try {
               await invoke('update_vault_item_title', { itemId: Number(id), title });

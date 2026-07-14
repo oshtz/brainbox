@@ -48,6 +48,7 @@ type MenuState = { item: MasonryItem; x: number; y: number; returnFocus: HTMLEle
 
 const Masonry: React.FC<MasonryProps> = ({ data, onCardClick, onCopyItem, onDeleteItem, onOpenExternal, onMoveItem, alwaysShowOverlay = false, actionsMode = 'buttons', selectedId = null, preferSummary = false, columnAdjustment = 0 }) => {
   const [menu, setMenu] = useState<MenuState | null>(null);
+  const [failedPreviewIds, setFailedPreviewIds] = useState<Set<string>>(() => new Set());
   const menuRef = useRef<HTMLDivElement>(null);
   // Track measured overlay heights for URL previews keyed by item id
   const [measuredHeights, setMeasuredHeights] = useState<Record<string, number>>({});
@@ -98,6 +99,7 @@ const Masonry: React.FC<MasonryProps> = ({ data, onCardClick, onCopyItem, onDele
         const imageH = hasImage ? Math.round(colWidth * 9 / 16) : 0;
         return textBase + imageH;
       }
+      if (child.image && !preferSummary) return Math.round(colWidth * 3 / 4);
       // fallback for notes
       return Math.max(148, Math.min(360, child.height || 220));
     };
@@ -116,7 +118,7 @@ const Masonry: React.FC<MasonryProps> = ({ data, onCardClick, onCopyItem, onDele
       };
     });
     return [heights, gridItems];
-  }, [columns, data, width, measuredHeights]);
+  }, [columns, data, width, measuredHeights, preferSummary]);
 
   const transitions = useTransition(
     gridItems,
@@ -133,6 +135,25 @@ const Masonry: React.FC<MasonryProps> = ({ data, onCardClick, onCopyItem, onDele
 
   const openMenu = (item: MasonryItem, x: number, y: number, returnFocus: HTMLElement) => {
     setMenu({ item, x, y, returnFocus });
+  };
+
+  const moveCardFocus = (event: React.KeyboardEvent<HTMLElement>) => {
+    if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) return false;
+    const cards = Array.from(ref.current?.querySelectorAll<HTMLElement>('[data-masonry-focusable]') || []);
+    const current = cards.indexOf(event.currentTarget);
+    if (current < 0) return false;
+    const next = event.key === 'ArrowLeft'
+      ? current - 1
+      : event.key === 'ArrowRight'
+        ? current + 1
+        : event.key === 'ArrowUp'
+          ? current - columns
+          : current + columns;
+    event.preventDefault();
+    event.stopPropagation();
+    if (next < 0 || next >= cards.length) return true;
+    cards[next].focus();
+    return true;
   };
 
   useLayoutEffect(() => {
@@ -180,7 +201,7 @@ const Masonry: React.FC<MasonryProps> = ({ data, onCardClick, onCopyItem, onDele
         const isUrl = item?.metadata?.item_type === 'url';
         const isYoutube = item?.metadata?.provider === 'youtube';
         const hasImage = Boolean(item.image) && (isUrl || !preferSummary);
-        const previewImage = isUrl ? item?.metadata?.preview_image || item.image : '';
+        const previewImage = isUrl && !failedPreviewIds.has(String(item.id)) ? item?.metadata?.preview_image || item.image : '';
         const cardHasMedia = isUrl ? Boolean(previewImage) : hasImage;
         const noteExcerpt = preferSummary && item.summary
           ? item.summary.trim()
@@ -207,6 +228,8 @@ const Masonry: React.FC<MasonryProps> = ({ data, onCardClick, onCopyItem, onDele
             <button
               type="button"
               className="masonry-add-card"
+              data-masonry-focusable
+              onKeyDown={moveCardFocus}
               onClick={(e) => {
                 e.stopPropagation();
                 onCardClick?.(item);
@@ -224,6 +247,7 @@ const Masonry: React.FC<MasonryProps> = ({ data, onCardClick, onCopyItem, onDele
                 onCardClick?.(item);
               }}
               onKeyDown={e => {
+                if (moveCardFocus(e)) return;
                 if (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) {
                   e.preventDefault();
                   e.stopPropagation();
@@ -232,10 +256,12 @@ const Masonry: React.FC<MasonryProps> = ({ data, onCardClick, onCopyItem, onDele
                   return;
                 }
                 if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
                   e.stopPropagation();
                   onCardClick?.(item);
                 }
               }}
+              data-masonry-focusable
               tabIndex={0}
               role="button"
               aria-label={`Open item ${item.title || item.id}`}
@@ -295,12 +321,18 @@ const Masonry: React.FC<MasonryProps> = ({ data, onCardClick, onCopyItem, onDele
               >
                 {previewImage && (
                   <div className="mlp-media">
-                    <img src={previewImage} alt="" />
+                    <img
+                      src={previewImage}
+                      alt=""
+                      loading="lazy"
+                      draggable={false}
+                      onError={() => setFailedPreviewIds((current) => new Set(current).add(String(item.id)))}
+                    />
                   </div>
                 )}
                 <div className="mlp-body">
                   <div className="mlp-host">
-                    {(() => { const fav = faviconForUrl(item?.metadata?.url); return fav ? <img src={fav} alt="" /> : null; })()}
+                    {(() => { const fav = faviconForUrl(item?.metadata?.url); return fav ? <img src={fav} alt="" onError={(event) => event.currentTarget.remove()} /> : null; })()}
                     <span>{(() => { try { return new URL(item?.metadata?.url || '').hostname; } catch { return 'link'; } })()}</span>
                   </div>
                   <div className="mlp-title" title={item.title || item?.metadata?.preview_title || item?.metadata?.url}>{item.title || item?.metadata?.preview_title || item?.metadata?.url}</div>
