@@ -4,6 +4,7 @@ export interface MasonryItem {
   height: number;
   image: string;
   title?: string;
+  summary?: string;
   [key: string]: unknown;
 }
 export interface MasonryProps {
@@ -16,6 +17,7 @@ export interface MasonryProps {
   alwaysShowOverlay?: boolean;
   actionsMode?: 'buttons' | 'menu';
   selectedId?: string | number | null;
+  preferSummary?: boolean;
 }
 declare const Masonry: React.FC<MasonryProps>;
 export default Masonry;

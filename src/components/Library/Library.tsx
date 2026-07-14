@@ -242,6 +242,7 @@ const Library: React.FC<Props> = ({
       ) : (
         <Masonry
           data={visibleItems}
+          preferSummary={Boolean(query.trim())}
           selectedId={selectedItem?.id}
           actionsMode="menu"
           onCardClick={(item) => {

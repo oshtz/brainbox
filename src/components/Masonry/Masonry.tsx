@@ -11,6 +11,7 @@ export interface MasonryItem {
   image: string;
   title?: string;
   content?: string;
+  summary?: string;
   // Optional metadata hints used by the grid
   metadata?: {
     item_type?: string;
@@ -39,11 +40,12 @@ export interface MasonryProps {
   alwaysShowOverlay?: boolean;
   actionsMode?: 'buttons' | 'menu';
   selectedId?: string | number | null;
+  preferSummary?: boolean;
 }
 
 type MenuState = { item: MasonryItem; x: number; y: number; returnFocus: HTMLElement };
 
-const Masonry: React.FC<MasonryProps> = ({ data, onCardClick, onCopyItem, onDeleteItem, onOpenExternal, onMoveItem, alwaysShowOverlay = false, actionsMode = 'buttons', selectedId = null }) => {
+const Masonry: React.FC<MasonryProps> = ({ data, onCardClick, onCopyItem, onDeleteItem, onOpenExternal, onMoveItem, alwaysShowOverlay = false, actionsMode = 'buttons', selectedId = null, preferSummary = false }) => {
   const [columns, setColumns] = useState<number>(2);
   const [menu, setMenu] = useState<MenuState | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -194,8 +196,13 @@ const Masonry: React.FC<MasonryProps> = ({ data, onCardClick, onCopyItem, onDele
       {transitions((style, item) => {
         const isSelected = selectedId != null && String(selectedId) === String(item.id);
         const isAddCard = item?.metadata?.item_type === 'add';
-        const hasImage = Boolean(item.image);
-        const noteExcerpt = typeof item.content === 'string' ? item.content.trim() : '';
+        const hasImage = Boolean(item.image) && (item?.metadata?.item_type === 'url' || !preferSummary);
+        const noteExcerpt = preferSummary && item.summary
+          ? item.summary.trim()
+          : typeof item.content === 'string' ? item.content.trim() : '';
+        const linkDescription = preferSummary && item.summary
+          ? item.summary.trim()
+          : item?.metadata?.preview_description;
         return (
         <a.div
           key={item.id}
@@ -318,8 +325,8 @@ const Masonry: React.FC<MasonryProps> = ({ data, onCardClick, onCopyItem, onDele
                   </div>
                 )}
                 <div className="mlp-title" title={item.title || item?.metadata?.preview_title || item?.metadata?.url}>{item.title || item?.metadata?.preview_title || item?.metadata?.url}</div>
-                {item?.metadata?.preview_description && (
-                  <div className="mlp-desc" title={item.metadata.preview_description}>{item.metadata.preview_description}</div>
+                {linkDescription && (
+                  <div className="mlp-desc" title={linkDescription}>{linkDescription}</div>
                 )}
               </div>
             )}

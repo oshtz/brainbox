@@ -266,6 +266,11 @@ test.describe('brainbox populated workspace fixture', () => {
     await expect(page.getByTestId('masonry-card')).toHaveCount(2);
     await expect(page.getByText('Compact card density QA')).toBeVisible();
 
+    await page.getByTestId('library-search-input').fill('rollback');
+    await expect(page.locator('[data-item-id="102"]')).toBeVisible();
+    await expect(page.locator('[data-item-id="102"] .mlp-desc')).toContainText('rollback checks');
+    await expect(page.locator('[data-item-id="101"]')).toHaveCount(0);
+
     await page.getByTestId('library-search-input').fill('');
     await page.getByLabel('Filter by vault').selectOption('1');
     await expect(page.getByTestId('masonry-card')).toHaveCount(3);

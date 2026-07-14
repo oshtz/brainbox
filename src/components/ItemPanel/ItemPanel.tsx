@@ -134,7 +134,7 @@ const ItemPanel: React.FC<Props> = ({ item, vaults, currentVaultId, onClose, onR
       } catch {}
     }
     const content = body ? `Content:\n${body}` : '';
-    return `${header}${urlLine}${content}${extra}\n\nTask: Provide a concise, helpful summary in plain text.\n- 3 to 6 short bullet-style lines without markdown\n- Clear, neutral tone\n- Include key facts and any actionable items`;
+    return `${header}${urlLine}${content}${extra}\n\nTask: Write a concise, retrieval-friendly brief in plain text.\n- Start with one direct sentence explaining what this is and why it matters.\n- Add 2 to 4 short lines with concrete facts, decisions, dates, names, or actions.\n- End with "Topics: ..." and 5 to 8 concise entities, aliases, or useful search synonyms.\n- Preserve source-specific terminology; do not repeat the title or URL, and avoid generic filler.\n- If the source lacks enough evidence, say so rather than inventing details.\n- Do not number or bullet the output.`;
   };
 
   async function handleSummarize(_manual = true) {
