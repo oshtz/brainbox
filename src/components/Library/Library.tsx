@@ -253,9 +253,12 @@ const Library: React.FC<Props> = ({
         <div className={styles.libraryInner}>
       <div className={styles.commandArea}>
         <header className={styles.heading}>
-          <div>
-            <h1>Library</h1>
-            <p>{selectedVault ? selectedVault.title : 'Your private collection of notes, links, and ideas.'}</p>
+          <div className={styles.headingCopy}>
+            <img className={styles.headingIcon} src="/BBX-Icon.svg" alt="" aria-hidden="true" draggable={false} />
+            <div>
+              <h1>Library</h1>
+              <p>{selectedVault ? selectedVault.title : 'Your private collection of notes, links, and ideas.'}</p>
+            </div>
           </div>
           <div className={styles.headingActions}>
             {items.length > 0 && (

@@ -218,6 +218,21 @@
   margin-bottom: clamp(22px, 2.5vw, 32px);
 }
 
+.headingCopy {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.headingIcon {
+  display: block;
+  width: auto;
+  height: 44px;
+  flex: 0 0 auto;
+  pointer-events: none;
+}
+
 .heading h1,
 .empty h2 {
   margin: 0;
@@ -480,6 +495,10 @@
 
   .heading h1 {
     font-size: clamp(2.3rem, 12vw, 3.4rem);
+  }
+
+  .headingIcon {
+    height: 40px;
   }
 
   .filterRow {
