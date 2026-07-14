@@ -50,17 +50,6 @@ const Masonry: React.FC<MasonryProps> = ({ data, onCardClick, onCopyItem, onDele
   const [menu, setMenu] = useState<MenuState | null>(null);
   const [failedPreviewIds, setFailedPreviewIds] = useState<Set<string>>(() => new Set());
   const menuRef = useRef<HTMLDivElement>(null);
-  // Track measured overlay heights for URL previews keyed by item id
-  const [measuredHeights, setMeasuredHeights] = useState<Record<string, number>>({});
-  const observersRef = useRef<Map<string, ResizeObserver>>(new Map());
-
-  // Disconnect observers on unmount
-  useEffect(() => {
-    return () => {
-      observersRef.current.forEach((ro) => ro.disconnect());
-      observersRef.current.clear();
-    };
-  }, []);
 
   const ref = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState<number>(0);
@@ -87,17 +76,10 @@ const Masonry: React.FC<MasonryProps> = ({ data, onCardClick, onCopyItem, onDele
         return 216;
       }
       if (child?.metadata?.item_type === 'url') {
-        // Prefer measured height if available so cards expand with content
-        const key = String(child.id);
-        const measured = measuredHeights[key];
-        if (typeof measured === 'number' && measured > 0) {
-          return Math.ceil(measured);
-        }
-        // Fallback heuristic if not yet measured
         const hasImage = Boolean(child?.metadata?.preview_image || child.image);
         const textBase = child?.metadata?.preview_description ? 132 : 94;
         const imageH = hasImage ? Math.round(colWidth * 9 / 16) : 0;
-        return textBase + imageH;
+        return hasImage ? imageH : textBase;
       }
       if (child.image && !preferSummary) return Math.round(colWidth * 3 / 4);
       // fallback for notes
@@ -118,7 +100,7 @@ const Masonry: React.FC<MasonryProps> = ({ data, onCardClick, onCopyItem, onDele
       };
     });
     return [heights, gridItems];
-  }, [columns, data, width, measuredHeights, preferSummary]);
+  }, [columns, data, width, preferSummary]);
 
   const transitions = useTransition(
     gridItems,
@@ -290,35 +272,6 @@ const Masonry: React.FC<MasonryProps> = ({ data, onCardClick, onCopyItem, onDele
             {!isAddCard && item?.metadata?.item_type === 'url' && item?.metadata?.provider !== 'youtube' && (
               <div
                 className={`masonry-link-preview${previewImage ? ' has-media' : ''}`}
-                ref={(el) => {
-                  const key = String(item.id);
-                  // Clean up any previous observer for this id
-                  const prev = observersRef.current.get(key);
-                  if (prev) {
-                    prev.disconnect();
-                    observersRef.current.delete(key);
-                  }
-                  if (el) {
-                    // Measure immediately
-                    const measure = () => {
-                      const rect = el.getBoundingClientRect();
-                      if (rect.height > 0) {
-                        setMeasuredHeights((m) => {
-                          const curr = m[key];
-                          const next = rect.height;
-                          // Avoid unnecessary renders
-                          if (typeof curr === 'number' && Math.abs(curr - next) < 0.5) return m;
-                          return { ...m, [key]: next };
-                        });
-                      }
-                    };
-                    measure();
-                    // Observe size changes due to content/wrapping
-                    const ro = new ResizeObserver(() => measure());
-                    ro.observe(el);
-                    observersRef.current.set(key, ro);
-                  }
-                }}
               >
                 {previewImage && (
                   <div className="mlp-media">

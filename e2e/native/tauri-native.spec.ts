@@ -258,7 +258,9 @@ test('native first capture creates one Inbox, recalls offline, and persists acro
     page = app.page;
     await page.context().setOffline(true);
     await expect(page.getByTestId('app')).toBeVisible();
-    await expect(page.getByLabel('Filter by vault').getByRole('option', { name: 'Inbox' })).toHaveCount(1);
+    await page.getByLabel('Filter by vault').click();
+    await expect(page.getByRole('menuitemradio', { name: 'Inbox' })).toBeVisible();
+    await page.keyboard.press('Escape');
     await page.getByTestId('library-search-input').fill('atlas offline');
     await expect(page.getByTestId('masonry-card').filter({ hasText: 'Offline capture cedar atlas recall persists' })).toBeVisible();
   } finally {
@@ -320,6 +322,7 @@ test('native localhost bookmarklet captures selected text as a sourced note', as
 
   app = await relaunchNativeApp(app!);
   page = app.page;
+  await expect.poll(() => page.getByTestId('masonry-card').count(), { timeout: 15_000 }).toBeGreaterThan(0);
   await page.getByTestId('library-search-input').fill('constellation bookmarklet');
   await expect(page.getByTestId('masonry-card').filter({ hasText: selectedText })).toBeVisible();
 });
@@ -327,15 +330,22 @@ test('native localhost bookmarklet captures selected text as a sourced note', as
 test('native Library and Settings share the same content frame at desktop size', async ({}, testInfo) => {
   const page = app!.page;
   await resizeNativeWindow(page, 1115, 768);
+  await page.getByTestId('library-search-input').fill('');
   expect(['#202020', '#eeeeee']).toContain(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--color-primary').trim()));
   expect(Math.round((await visibleBox(page.getByTestId('app-navigation'))).y)).toBeLessThanOrEqual(1);
 
-  const selectChrome = await page.getByLabel('Filter by vault').evaluate((element) => {
-    const style = getComputedStyle(element);
-    return { paddingRight: parseFloat(style.paddingRight), backgroundPositionX: style.backgroundPositionX };
-  });
-  expect(selectChrome.paddingRight).toBeGreaterThanOrEqual(36);
-  expect(selectChrome.backgroundPositionX).toContain('12px');
+  const toolbarHeights = await Promise.all([
+    page.getByRole('group', { name: 'Type filter' }),
+    page.getByLabel('Filter by vault'),
+    page.getByLabel('Sort order'),
+    page.getByRole('group', { name: 'Card size' }),
+  ].map((control) => control.evaluate((element) => element.getBoundingClientRect().height)));
+  expect(Math.max(...toolbarHeights) - Math.min(...toolbarHeights)).toBeLessThanOrEqual(1);
+
+  await page.getByLabel('Sort order').click();
+  await expect(page.getByRole('menu', { name: 'Sort order options' })).toBeVisible();
+  await expect(page.getByRole('menuitemradio', { name: 'Recently created' })).toBeVisible();
+  await page.keyboard.press('Escape');
 
   const scrollOwnership = await page.evaluate(() => {
     const main = document.querySelector('[data-testid="library-main"]') as HTMLElement;
@@ -345,12 +355,14 @@ test('native Library and Settings share the same content frame at desktop size',
   expect(scrollOwnership).toEqual({ main: 'hidden', content: 'auto' });
 
   const libraryScroll = page.getByTestId('library-scroll-area');
+  await resizeNativeWindow(page, 780, 360);
   expect(await libraryScroll.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true);
   const idleScrollbar = await libraryScroll.evaluate((element) => getComputedStyle(element).getPropertyValue('scrollbar-color'));
   await libraryScroll.hover();
   await expect.poll(() => libraryScroll.evaluate((element) => getComputedStyle(element).getPropertyValue('scrollbar-color'))).not.toBe(idleScrollbar);
   await page.getByTestId('library-search-input').hover();
   await expect.poll(() => libraryScroll.evaluate((element) => getComputedStyle(element).getPropertyValue('scrollbar-color'))).toBe(idleScrollbar);
+  await resizeNativeWindow(page, 1115, 768);
 
   const card = page.getByTestId('masonry-card').first();
   const smallerCards = page.getByRole('button', { name: 'Show smaller cards' });
@@ -358,19 +370,22 @@ test('native Library and Settings share the same content frame at desktop size',
   const zoomOut = await smallerCards.isEnabled();
   const widthBeforeZoom = await card.evaluate((element) => element.getBoundingClientRect().width);
   await (zoomOut ? smallerCards : largerCards).click();
-  await expect.poll(() => card.evaluate((element) => Math.abs(element.getBoundingClientRect().width - widthBeforeZoom))).toBeGreaterThan(20);
+  await expect.poll(() => card.evaluate(
+    (element, before) => Math.abs(element.getBoundingClientRect().width - before),
+    widthBeforeZoom,
+  )).toBeGreaterThan(20);
   await (zoomOut ? largerCards : smallerCards).click();
 
   const sections: Array<{ name: string; open: () => Promise<void>; locator: ReturnType<Page['locator']> }> = [
     {
       name: 'Library',
       open: async () => page.getByTestId('nav-library').click(),
-      locator: page.getByTestId('library-section'),
+      locator: page.getByRole('heading', { name: 'Library', exact: true }).locator('xpath=ancestor::header[1]'),
     },
     {
       name: 'Settings',
       open: async () => page.getByTestId('nav-settings').click(),
-      locator: page.getByTestId('settings-section'),
+      locator: page.getByRole('heading', { name: 'Settings', exact: true }).locator('xpath=ancestor::header[1]'),
     },
   ];
 
@@ -396,6 +411,7 @@ test('native Library and Settings share the same content frame at desktop size',
 
   const settingsTitle = page.getByRole('heading', { name: 'Settings' });
   const captureTab = page.getByRole('tab', { name: /Capture/ });
+  await captureTab.click();
   const settingsPanel = page.getByRole('tabpanel');
   const fixedTops = await Promise.all([
     settingsTitle.evaluate((element) => element.getBoundingClientRect().top),
@@ -416,7 +432,7 @@ test('native Brainy drawer opens and remains usable in a narrow Tauri window', a
   await page.getByTestId('library-brainy-button').click();
   await expect(page.getByTestId('brainy-chat')).toBeVisible();
   await expect(page.getByText('What should we work on?')).toBeVisible();
-  await expect(page.getByPlaceholder('Configure AI provider in Settings first')).toBeVisible();
+  await expect(page.getByPlaceholder(/Ask brainy|Configure AI provider in Settings first/)).toBeVisible();
   await expect(page.getByRole('button', { name: 'List all my vaults' })).toBeVisible();
   await page.waitForTimeout(250);
 
@@ -426,18 +442,25 @@ test('native Brainy drawer opens and remains usable in a narrow Tauri window', a
   });
 });
 
-test('native Settings tabs fit in a narrow Tauri window', async ({}, testInfo) => {
+test('native Settings selector replaces tabs in a narrow Tauri window', async ({}, testInfo) => {
   const page = app!.page;
   await resizeNativeWindow(page, 430, 820);
 
   await page.getByTestId('nav-settings').click();
   await expect(page.getByTestId('settings-section')).toBeVisible();
-  await expect(page.getByRole('tab', { name: /Capture/ })).toBeVisible();
-  await expect(page.getByRole('tab', { name: /Appearance/ })).toBeVisible();
-  await expect(page.getByRole('tab', { name: /Data/ })).toBeVisible();
-  await expect(page.getByRole('tab', { name: /Updates/ })).toBeVisible();
-  await expect(page.getByRole('tab', { name: /Sync/ })).toHaveCount(0);
+  await expect(page.getByRole('tablist', { name: 'Settings sections' })).toBeHidden();
+  const sectionSelect = page.getByLabel('Settings section', { exact: true });
+  await expect(sectionSelect).toBeVisible();
+  await expect(sectionSelect).toHaveValue('general');
+  expect(await sectionSelect.locator('option').allTextContents()).toEqual([
+    'General',
+    'Capture',
+    'AI',
+    'Privacy & Data',
+  ]);
+  await sectionSelect.selectOption('capture');
   await expect(page.getByText('Capture tools')).toBeVisible();
+  expect(await page.getByTestId('settings-section').evaluate((element) => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(1);
 
   await testInfo.attach('native-settings-narrow', {
     body: await page.screenshot(),
@@ -471,7 +494,9 @@ test('native wrong-password attempt keeps a protected vault locked', async () =>
 
   await expect(page.getByRole('dialog', { name: 'Unlock vault' })).toHaveCount(0);
   await expect(page.getByTestId('library-section')).toBeVisible();
-  await expect(page.getByLabel('Filter by vault').getByRole('option', { name: 'Protected QA Vault' })).toHaveCount(1);
+  await page.getByLabel('Filter by vault').click();
+  await expect(page.getByRole('menuitemradio', { name: 'Protected QA Vault' })).toBeVisible();
+  await page.keyboard.press('Escape');
   await expect(page.getByText('Protected QA secret')).toHaveCount(0);
   await expect(page.getByTestId('masonry-card').filter({ hasText: 'Offline capture cedar atlas recall persists' })).toBeVisible();
   await expect(page.getByText('0 items')).toHaveCount(0);
