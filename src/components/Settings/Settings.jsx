@@ -5,6 +5,7 @@ import { useHotkey } from '../../contexts/HotkeyContext';
 import { KeyManagement } from '../KeyManagement';
 import { ExportImport } from '../ExportImport';
 import { AISettings } from '../AISettings';
+import { FolderSync } from '../FolderSync/FolderSync';
 import {
   LinkIcon,
   SwatchIcon,
@@ -315,10 +316,23 @@ function SecuritySettings() {
 function BackupSettings() {
   return (
     <SettingCard
-      title="Data & backup"
-      description="Create or restore a manual encrypted backup. Automatic sync is unavailable while its safety model is being rebuilt."
+      id="backup-settings"
+      title="Backups & restore"
+      description="Create or restore a manual encrypted point-in-time backup."
     >
       <ExportImport />
+    </SettingCard>
+  );
+}
+
+function SyncSettings({ onDataChange }) {
+  return (
+    <SettingCard
+      id="sync-settings"
+      title="Sync between devices"
+      description="Use an encrypted local folder with Syncthing or your existing cloud-drive app."
+    >
+      <FolderSync onDataChange={onDataChange} />
     </SettingCard>
   );
 }
@@ -336,7 +350,7 @@ function AISettingsPanel() {
   );
 }
 
-const Settings = ({ scrollToSection, onScrollComplete }) => {
+const Settings = ({ scrollToSection, onScrollComplete, onSyncDataChange }) => {
   const [activeTab, setActiveTab] = useState('capture');
 
   // Map scrollToSection values to tab IDs
@@ -382,7 +396,7 @@ const Settings = ({ scrollToSection, onScrollComplete }) => {
       case 'security':
         return <SecuritySettings />;
       case 'data':
-        return <BackupSettings />;
+        return <><SyncSettings onDataChange={onSyncDataChange} /><BackupSettings /></>;
       case 'ai':
         return <AISettingsPanel />;
       case 'updates':

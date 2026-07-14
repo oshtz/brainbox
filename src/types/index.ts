@@ -1,6 +1,7 @@
 // Core application types
 export interface Vault {
   id: string;
+  uuid?: string;
   title: string;
   name?: string;
   color?: string;
@@ -117,6 +118,7 @@ export type RequiredFields<T, K extends keyof T> = T & Required<Pick<T, K>>;
 export interface BackendVault {
   id: number;
   name: string;
+  uuid?: string | null;
   cover_image?: string | null;
   has_password?: boolean;
   created_at?: string;

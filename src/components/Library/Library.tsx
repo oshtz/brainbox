@@ -439,6 +439,7 @@ const Library: React.FC<Props> = ({
             if (!id || !await confirmDialog({ title: 'Delete item?', message: 'This will remove the item from your vault.', confirmLabel: 'Delete' })) return;
             try {
               await invoke('delete_vault_item', { itemId: Number(id) });
+              window.dispatchEvent(new Event('brainbox:data-changed'));
               setItems((current) => current.filter((candidate) => candidate.id !== id));
               showSuccess('Item deleted.');
             } catch (error) {
@@ -479,6 +480,7 @@ const Library: React.FC<Props> = ({
           onRename={async (id, title) => {
             try {
               await invoke('update_vault_item_title', { itemId: Number(id), title });
+              window.dispatchEvent(new Event('brainbox:data-changed'));
               setItems((current) => current.map((item) => item.id === String(id) ? { ...item, title } : item));
               setSelectedItem((current) => current?.id === String(id) ? { ...current, title } : current);
             } catch { showError('Failed to rename item.'); }
@@ -493,6 +495,7 @@ const Library: React.FC<Props> = ({
                 getVaultKey(targetVault.id, targetVault.title, targetVault.has_password),
               ]);
               await invoke('move_vault_item', { itemId: Number(id), targetVaultId: Number(targetVaultId), sourceKey, targetKey });
+              window.dispatchEvent(new Event('brainbox:data-changed'));
               setItems((current) => current.map((item) => item.id === String(id) ? { ...item, vault_id: targetVaultId } : item));
               setSelectedItem((current) => current?.id === String(id) ? { ...current, vault_id: targetVaultId } : current);
             } catch { showError('Failed to move item.'); }
@@ -500,6 +503,7 @@ const Library: React.FC<Props> = ({
           onUpdateImage={async (id, image) => {
             try {
               await invoke('update_vault_item_image', { itemId: Number(id), image });
+              window.dispatchEvent(new Event('brainbox:data-changed'));
               setItems((current) => current.map((item) => item.id === String(id) ? { ...item, image: image || item.image } : item));
               setSelectedItem((current) => current?.id === String(id) ? { ...current, image: image || current.image } : current);
             } catch { showError('Failed to update image.'); }
@@ -508,6 +512,7 @@ const Library: React.FC<Props> = ({
             if (!await confirmDialog({ title: 'Delete item?', message: 'This will remove the item from your vault.', confirmLabel: 'Delete' })) return;
             try {
               await invoke('delete_vault_item', { itemId: Number(id) });
+              window.dispatchEvent(new Event('brainbox:data-changed'));
               setItems((current) => current.filter((item) => item.id !== String(id)));
               setSelectedItem(null);
               showSuccess('Item deleted.');

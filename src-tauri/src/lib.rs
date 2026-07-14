@@ -319,6 +319,7 @@ fn create_app_builder() -> tauri::Builder<tauri::Wry> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     create_app_builder()
+        .plugin(tauri_plugin_dialog::init())
         .plugin(
             tauri_plugin_window_state::Builder::default()
                 .with_state_flags(
@@ -570,21 +571,13 @@ pub fn run() {
             vault_commands::import_vaults,
             vault_commands::get_vault_item,
             // Sync commands
-            sync_commands::sync_export_vaults,
-            sync_commands::sync_import_vaults,
-            sync_commands::get_sync_status,
-            sync_commands::get_sync_preview,
-            sync_commands::get_locked_vaults_for_sync,
-            sync_commands::get_sync_settings,
-            sync_commands::set_sync_setting,
-            sync_commands::set_sync_folder,
-            sync_commands::purge_deleted_items,
-            sync_commands::auto_purge_if_enabled,
-            sync_commands::is_sync_on_close_enabled,
-            sync_commands::set_sync_on_close,
-            sync_commands::is_check_sync_on_startup_enabled,
-            sync_commands::set_check_sync_on_startup,
-            sync_commands::set_device_name,
+            sync_commands::inspect_folder_sync,
+            sync_commands::configure_folder_sync,
+            sync_commands::run_folder_sync,
+            sync_commands::get_folder_sync_status,
+            sync_commands::unlock_folder_sync,
+            sync_commands::set_folder_sync_device_name,
+            sync_commands::disconnect_folder_sync,
             get_hostname,
             network_commands::fetch_url_metadata,
             // Scraping helpers

@@ -111,6 +111,7 @@ const ItemPanel: React.FC<Props> = ({ item, vaults, currentVaultId, onClose, onR
       const vault = vaults.find(v => v.id === currentVaultId);
       const key = await getVaultKey(currentVaultId, vault?.title, vault?.has_password);
       await invoke('update_vault_item_content', { itemId: Number(item?.id), content: newText, key });
+      window.dispatchEvent(new Event('brainbox:data-changed'));
       if (onUpdateContent) { try { await onUpdateContent(String(item?.id), newText); } catch {} }
       setLastSavedContent(newText);
     } finally {
@@ -166,7 +167,10 @@ const ItemPanel: React.FC<Props> = ({ item, vaults, currentVaultId, onClose, onR
       })).trim();
       if (!nextSummary) throw new Error('The AI provider returned an empty summary.');
       if (activeItemIdRef.current === itemId) setSummary(nextSummary);
-      try { await invoke('update_vault_item_summary', { itemId: Number(itemId), summary: nextSummary }); } catch {}
+      try {
+        await invoke('update_vault_item_summary', { itemId: Number(itemId), summary: nextSummary });
+        window.dispatchEvent(new Event('brainbox:data-changed'));
+      } catch {}
       try { if (onUpdateSummary) await onUpdateSummary(itemId, nextSummary); } catch {}
       if (activeItemIdRef.current !== itemId) showSuccess(`Summary ready for "${itemTitle}".`);
     } catch (e) {

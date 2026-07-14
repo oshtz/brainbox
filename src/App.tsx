@@ -24,8 +24,17 @@ import styles from './App.module.css';
 
 type AppView = 'library' | 'brainy' | 'settings';
 
+type FolderSyncResult = {
+  state: string;
+  data_changed: boolean;
+  vaults_needing_password: Array<{ uuid: string; name: string }>;
+};
+
+type FolderSyncStatus = { state: string };
+
 const transformVault = (vault: BackendVault): Vault => ({
   id: String(vault.id),
+  uuid: vault.uuid || undefined,
   title: vault.name || '',
   has_password: vault.has_password,
   created_at: vault.created_at,
@@ -35,7 +44,7 @@ const transformVault = (vault: BackendVault): Vault => ({
 const errorMessage = (error: unknown) => error instanceof Error ? error.message : String(error);
 
 function App() {
-  const { getVaultKey, setVaultPassword } = useVaultPassword();
+  const { getVaultKey, getVaultPasswords, setVaultPassword } = useVaultPassword();
   const { showError, showSuccess } = useToast();
   const [currentView, setCurrentView] = useState<AppView>('library');
   const [vaults, setVaults] = useState<Vault[]>([]);
@@ -51,6 +60,7 @@ function App() {
   // ponytail: jobs survive in-app navigation, not restarts; move them to Rust if restart recovery becomes necessary.
   const [summarizingItemIds, setSummarizingItemIds] = useState<Set<string>>(() => new Set());
   const inboxCreationRef = useRef<Promise<Vault> | null>(null);
+  const folderSyncInFlightRef = useRef(false);
 
   const fetchVaults = async () => {
     setIsLoadingVaults(true);
@@ -171,6 +181,68 @@ function App() {
   }, []);
 
   useEffect(() => {
+    if (!isTauriRuntime()) return;
+    let cancelled = false;
+    let debounceTimer: ReturnType<typeof setTimeout> | undefined;
+    const unlisteners: Array<() => void> = [];
+
+    const runFolderSync = async () => {
+      if (cancelled || folderSyncInFlightRef.current) return;
+      folderSyncInFlightRef.current = true;
+      try {
+        const status = await invoke<FolderSyncStatus>('get_folder_sync_status');
+        if (!['changes_waiting', 'up_to_date'].includes(status.state)) return;
+        const backendVaults = await invoke<BackendVault[]>('list_vaults');
+        const cached = getVaultPasswords();
+        const passwordsByVaultUuid: Record<string, string> = {};
+        for (const vault of backendVaults) {
+          const password = cached.get(String(vault.id));
+          if (vault.uuid && password !== undefined) passwordsByVaultUuid[vault.uuid] = password;
+        }
+        const result = await invoke<FolderSyncResult>('run_folder_sync', { passwordsByVaultUuid });
+        window.dispatchEvent(new CustomEvent('brainbox:folder-sync-result', { detail: result }));
+        if (result.data_changed) {
+          await fetchVaults();
+          setLibraryRefreshToken((token) => token + 1);
+          await Promise.all([
+            emit('vaults-changed'),
+            emit('items-changed', { type: 'sync' }),
+          ]);
+        }
+      } catch (error) {
+        console.warn('Folder sync paused:', error);
+      } finally {
+        folderSyncInFlightRef.current = false;
+      }
+    };
+
+    const scheduleFolderSync = () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => { void runFolderSync(); }, 2000);
+    };
+    const startupTimer = setTimeout(() => { void runFolderSync(); }, 1200);
+    const interval = setInterval(() => { void runFolderSync(); }, 30_000);
+    window.addEventListener('focus', runFolderSync);
+    window.addEventListener('brainbox:data-changed', scheduleFolderSync);
+    const rememberUnlisten = (unlisten: () => void) => {
+      if (cancelled) unlisten();
+      else unlisteners.push(unlisten);
+    };
+    listen('items-changed', scheduleFolderSync).then(rememberUnlisten);
+    listen('vaults-changed', scheduleFolderSync).then(rememberUnlisten);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(startupTimer);
+      if (debounceTimer) clearTimeout(debounceTimer);
+      clearInterval(interval);
+      window.removeEventListener('focus', runFolderSync);
+      window.removeEventListener('brainbox:data-changed', scheduleFolderSync);
+      unlisteners.forEach((unlisten) => unlisten());
+    };
+  }, [getVaultPasswords]);
+
+  useEffect(() => {
     const handler = (event: Event) => {
       const mode = (event as CustomEvent).detail as 'sidebar' | 'full' | undefined;
       setBrainyMode(mode || aiService.getBrainyMode());
@@ -219,6 +291,10 @@ function App() {
                 <Settings
                   scrollToSection={settingsTarget}
                   onScrollComplete={() => setSettingsTarget(null)}
+                  onSyncDataChange={() => {
+                    fetchVaults();
+                    setLibraryRefreshToken((token) => token + 1);
+                  }}
                 />
               ) : currentView === 'brainy' ? (
                 <div className={styles.brainyFullPage}>
@@ -234,6 +310,7 @@ function App() {
                     onDataChange={() => {
                       fetchVaults();
                       setLibraryRefreshToken((token) => token + 1);
+                      window.dispatchEvent(new Event('brainbox:data-changed'));
                     }}
                   />
                 </div>
@@ -271,6 +348,7 @@ function App() {
                 onDataChange={() => {
                   fetchVaults();
                   setLibraryRefreshToken((token) => token + 1);
+                  window.dispatchEvent(new Event('brainbox:data-changed'));
                 }}
               />
             </aside>
