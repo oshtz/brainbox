@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useMemo, useRef } from "react";
+import React, { useState, useEffect, useLayoutEffect, useMemo, useRef } from "react";
+import { createPortal } from "react-dom";
 import { useTransition, a } from "@react-spring/web";
 import { PlayIcon, ArrowUpIcon, ArrowDownIcon, TrashIcon, EllipsisVerticalIcon, PlusIcon } from "@heroicons/react/24/solid";
 import "./Masonry.css";
@@ -31,16 +32,21 @@ interface GridItem extends MasonryItem {
 export interface MasonryProps {
   data: MasonryItem[];
   onCardClick?: (item: MasonryItem) => void;
+  onCopyItem?: (item: MasonryItem) => Promise<void> | void;
   onDeleteItem?: (item: MasonryItem) => void;
+  onOpenExternal?: (item: MasonryItem) => void;
   onMoveItem?: (item: MasonryItem, direction: "up" | "down") => void;
   alwaysShowOverlay?: boolean;
   actionsMode?: 'buttons' | 'menu';
   selectedId?: string | number | null;
 }
 
-const Masonry: React.FC<MasonryProps> = ({ data, onCardClick, onDeleteItem, onMoveItem, alwaysShowOverlay = false, actionsMode = 'buttons', selectedId = null }) => {
+type MenuState = { item: MasonryItem; x: number; y: number; returnFocus: HTMLElement };
+
+const Masonry: React.FC<MasonryProps> = ({ data, onCardClick, onCopyItem, onDeleteItem, onOpenExternal, onMoveItem, alwaysShowOverlay = false, actionsMode = 'buttons', selectedId = null }) => {
   const [columns, setColumns] = useState<number>(2);
-  const [openMenuFor, setOpenMenuFor] = useState<string | number | null>(null);
+  const [menu, setMenu] = useState<MenuState | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   // Track measured overlay heights for URL previews keyed by item id
   const [measuredHeights, setMeasuredHeights] = useState<Record<string, number>>({});
   const observersRef = useRef<Map<string, ResizeObserver>>(new Map());
@@ -142,7 +148,48 @@ const Masonry: React.FC<MasonryProps> = ({ data, onCardClick, onDeleteItem, onMo
     }
   );
 
+  const openMenu = (item: MasonryItem, x: number, y: number, returnFocus: HTMLElement) => {
+    setMenu({ item, x, y, returnFocus });
+  };
+
+  useLayoutEffect(() => {
+    if (!menu || !menuRef.current) return;
+    const rect = menuRef.current.getBoundingClientRect();
+    const x = Math.max(8, Math.min(menu.x, window.innerWidth - rect.width - 8));
+    const y = Math.max(8, Math.min(menu.y, window.innerHeight - rect.height - 8));
+    if (x !== menu.x || y !== menu.y) setMenu((current) => current ? { ...current, x, y } : null);
+  }, [menu]);
+
+  useEffect(() => {
+    if (!menu) return;
+    const close = () => setMenu(null);
+    const frame = requestAnimationFrame(() => {
+      menuRef.current?.querySelector<HTMLButtonElement>('[role="menuitem"]')?.focus({ preventScroll: true });
+      window.addEventListener('scroll', close, true);
+    });
+    const onPointerDown = (event: PointerEvent) => {
+      if (!menuRef.current?.contains(event.target as Node)) close();
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      close();
+      menu.returnFocus.focus();
+    };
+    window.addEventListener('pointerdown', onPointerDown);
+    window.addEventListener('resize', close);
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener('pointerdown', onPointerDown);
+      window.removeEventListener('scroll', close, true);
+      window.removeEventListener('resize', close);
+      window.removeEventListener('keydown', onKeyDown);
+    };
+  }, [menu]);
+
   return (
+    <>
     <div ref={ref} className="masonry" style={{ height: Math.max(...heights, 0) + 16 }}>
       {transitions((style, item) => {
         const isSelected = selectedId != null && String(selectedId) === String(item.id);
@@ -156,6 +203,12 @@ const Masonry: React.FC<MasonryProps> = ({ data, onCardClick, onDeleteItem, onMo
           className={`masonry-card${isSelected ? ' is-selected' : ''}${isAddCard ? ' is-add-card' : ''}${!hasImage ? ' no-media' : ''}`}
           data-testid="masonry-card"
           data-item-id={String(item.id)}
+          onContextMenu={(event) => {
+            if (isAddCard) return;
+            event.preventDefault();
+            event.stopPropagation();
+            openMenu(item, event.clientX, event.clientY, event.currentTarget as HTMLElement);
+          }}
         >
           {isAddCard ? (
             <button
@@ -178,6 +231,13 @@ const Masonry: React.FC<MasonryProps> = ({ data, onCardClick, onDeleteItem, onMo
                 onCardClick?.(item);
               }}
               onKeyDown={e => {
+                if (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  openMenu(item, rect.left + 16, rect.top + 16, e.currentTarget);
+                  return;
+                }
                 if (e.key === 'Enter' || e.key === ' ') {
                   e.stopPropagation();
                   onCardClick?.(item);
@@ -304,56 +364,25 @@ const Masonry: React.FC<MasonryProps> = ({ data, onCardClick, onDeleteItem, onMo
               </div>
             ) : !isAddCard ? (
               <>
-                {(onMoveItem || onDeleteItem) && (
+                {(onCardClick || onCopyItem || onMoveItem || onDeleteItem) && (
                   <div className="masonry-card-menuWrap">
                     <button
                       className="masonry-card-menuBtn"
-                      aria-haspopup="true"
-                      aria-expanded={openMenuFor === item.id}
+                      aria-haspopup="menu"
+                      aria-expanded={menu?.item.id === item.id}
                       aria-label="Card actions"
+                      onPointerDown={(e) => e.stopPropagation()}
                       onClick={(e) => {
                         e.stopPropagation();
-                        setOpenMenuFor(prev => prev === item.id ? null : item.id);
+                        if (menu?.item.id === item.id) {
+                          setMenu(null);
+                          return;
+                        }
+                        const rect = e.currentTarget.getBoundingClientRect();
+                        openMenu(item, rect.right - 200, rect.bottom + 6, e.currentTarget);
                       }}
                       style={{ touchAction: 'manipulation' }}
                     ><EllipsisVerticalIcon className="masonry-menu-icon" /></button>
-                    {openMenuFor === item.id && (
-                      <div className="masonry-card-menu" role="menu" onClick={(e) => e.stopPropagation()}>
-                        {onMoveItem && (
-                          <>
-                            <button
-                              className="masonry-card-menuItem"
-                              role="menuitem"
-                              onClick={() => {
-                                setOpenMenuFor(null);
-                                onMoveItem(item, 'up');
-                              }}
-                              style={{ touchAction: 'manipulation' }}
-                            >Move up</button>
-                            <button
-                              className="masonry-card-menuItem"
-                              role="menuitem"
-                              onClick={() => {
-                                setOpenMenuFor(null);
-                                onMoveItem(item, 'down');
-                              }}
-                              style={{ touchAction: 'manipulation' }}
-                            >Move down</button>
-                          </>
-                        )}
-                        {onDeleteItem && (
-                          <button
-                            className="masonry-card-menuItem danger"
-                            role="menuitem"
-                            onClick={() => {
-                              setOpenMenuFor(null);
-                              onDeleteItem(item);
-                            }}
-                            style={{ touchAction: 'manipulation' }}
-                          >Delete</button>
-                        )}
-                      </div>
-                    )}
                   </div>
                 )}
               </>
@@ -362,6 +391,48 @@ const Masonry: React.FC<MasonryProps> = ({ data, onCardClick, onDeleteItem, onMo
         </a.div>
       )})}
     </div>
+    {menu && createPortal(
+      <div
+        ref={menuRef}
+        className="masonry-card-menu"
+        role="menu"
+        aria-label="Item actions"
+        style={{ left: menu.x, top: menu.y }}
+        onClick={(event) => event.stopPropagation()}
+      >
+        {onCardClick && (
+          <button className="masonry-card-menuItem" role="menuitem" onClick={() => { setMenu(null); onCardClick(menu.item); }}>
+            Open details
+          </button>
+        )}
+        {menu.item.metadata?.item_type === 'url' && onOpenExternal && (
+          <button className="masonry-card-menuItem" role="menuitem" onClick={() => { setMenu(null); onOpenExternal(menu.item); }}>
+            Open link
+          </button>
+        )}
+        {onCopyItem && (
+          <button className="masonry-card-menuItem" role="menuitem" onClick={() => { setMenu(null); void onCopyItem(menu.item); }}>
+            {menu.item.metadata?.item_type === 'url' ? 'Copy link' : 'Copy content'}
+          </button>
+        )}
+        {onMoveItem && (
+          <>
+            <button className="masonry-card-menuItem" role="menuitem" onClick={() => { setMenu(null); onMoveItem(menu.item, 'up'); }}>Move up</button>
+            <button className="masonry-card-menuItem" role="menuitem" onClick={() => { setMenu(null); onMoveItem(menu.item, 'down'); }}>Move down</button>
+          </>
+        )}
+        {onDeleteItem && (
+          <>
+            <div className="masonry-card-menuDivider" />
+            <button className="masonry-card-menuItem danger" role="menuitem" onClick={() => { setMenu(null); onDeleteItem(menu.item); }}>
+              Delete item
+            </button>
+          </>
+        )}
+      </div>,
+      document.body
+    )}
+    </>
   );
 };
 

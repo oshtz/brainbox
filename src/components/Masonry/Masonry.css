@@ -396,24 +396,27 @@
 }
 
 .masonry-card-menu {
-  position: absolute;
-  top: calc(100% + 6px);
-  right: 0;
-  min-width: 180px;
+  position: fixed;
+  z-index: 1000;
+  width: 200px;
+  max-width: calc(100vw - 16px);
+  max-height: calc(100vh - 16px);
+  padding: 5px;
   background: var(--ui-popover-bg);
   border: 1px solid var(--ui-muted-border);
   border-radius: var(--border-radius-md);
   box-shadow: var(--shadow-lg);
-  overflow: hidden;
+  overflow-y: auto;
 }
 
 .masonry-card-menuItem {
   display: block;
   width: 100%;
   text-align: left;
-  padding: 8px 10px;
+  padding: 8px 9px;
   background: transparent;
   border: 0;
+  border-radius: 7px;
   color: var(--color-text-primary);
   cursor: pointer;
   font-family: var(--font-family-body);
@@ -423,6 +426,17 @@
 .masonry-card-menuItem:hover { background: var(--color-surface-hover); }
 .masonry-card-menuItem.danger { color: var(--color-danger); }
 .masonry-card-menuItem.danger:hover { background: rgba(220,38,38,0.06); }
+
+.masonry-card-menuItem:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: -2px;
+}
+
+.masonry-card-menuDivider {
+  height: 1px;
+  margin: 5px 4px;
+  background: var(--ui-hairline-border);
+}
 
 [data-theme="dark"] .masonry-card-title,
 [data-theme="dark"] .masonry-link-preview {

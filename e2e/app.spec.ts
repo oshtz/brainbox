@@ -232,6 +232,35 @@ test.describe('brainbox populated workspace fixture', () => {
     await expect(page.getByText('Desktop smoke path tracks launch')).toBeVisible();
   });
 
+  test('opens item actions from every supported trigger', async ({ page }, testInfo) => {
+    const isMobile = testInfo.project.name === 'Mobile Chrome';
+    const noteCard = page.locator('[data-item-id="101"]');
+    if (isMobile) await noteCard.getByRole('button', { name: 'Card actions' }).click();
+    else await noteCard.click({ button: 'right' });
+
+    const menu = page.getByRole('menu', { name: 'Item actions' });
+    await expect(menu).toBeVisible();
+    await expect(menu.getByRole('menuitem', { name: 'Open details' })).toBeFocused();
+    await expect(menu.getByRole('menuitem', { name: 'Copy content' })).toBeVisible();
+    await expect(menu.getByRole('menuitem', { name: 'Open link' })).toHaveCount(0);
+    await page.keyboard.press('Escape');
+    await expect(menu).toHaveCount(0);
+
+    const linkCard = page.locator('[data-item-id="102"]');
+    const link = linkCard.getByRole('button', { name: /Open item Release readiness reference/ });
+    if (isMobile) await linkCard.getByRole('button', { name: 'Card actions' }).click();
+    else {
+      await link.focus();
+      await page.keyboard.press('Shift+F10');
+    }
+    await expect(menu.getByRole('menuitem', { name: 'Open link' })).toBeVisible();
+    await expect(menu.getByRole('menuitem', { name: 'Copy link' })).toBeVisible();
+    await menu.getByRole('menuitem', { name: 'Delete item' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Delete item?' });
+    await expect(dialog).toBeVisible();
+    await dialog.getByRole('button', { name: 'Cancel' }).click();
+  });
+
   test('searches and scopes populated data inside the Library', async ({ page }) => {
     await page.getByTestId('library-search-input').fill('compact');
     await expect(page.getByTestId('masonry-card')).toHaveCount(2);

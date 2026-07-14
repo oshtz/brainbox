@@ -247,6 +247,21 @@ const Library: React.FC<Props> = ({
           onCardClick={(item) => {
             if (!isItemBusy || !selectedItem) setSelectedItem(item as LibraryItem);
           }}
+          onOpenExternal={(item) => {
+            const url = item.metadata?.url || item.content;
+            if (url) window.open(url, '_blank');
+          }}
+          onCopyItem={async (item) => {
+            const isUrl = item.metadata?.item_type === 'url';
+            const value = isUrl ? item.metadata?.url || item.content : item.content || item.title;
+            if (!value) return;
+            try {
+              await navigator.clipboard.writeText(value);
+              showSuccess(isUrl ? 'Link copied.' : 'Content copied.');
+            } catch {
+              showError('Failed to copy item.');
+            }
+          }}
           onDeleteItem={async (item) => {
             const id = String(item?.id || '');
             if (!id || !await confirmDialog({ title: 'Delete item?', message: 'This will remove the item from your vault.', confirmLabel: 'Delete' })) return;
