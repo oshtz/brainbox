@@ -87,19 +87,13 @@ async function connectToNativePage(port: number): Promise<{ browser: Browser; pa
   }, { message: 'Timed out connecting Playwright to the Tauri WebView2 page', timeoutMs: 45_000 });
 }
 
-async function startNativeApp(): Promise<NativeApp> {
-  test.skip(process.platform !== 'win32', 'Native Playwright QA currently targets Windows WebView2 CDP.');
-
+async function launchNativeApp(runDir: string, dataDir: string): Promise<NativeApp> {
   const exe = resolveTauriExecutable();
   if (!fs.existsSync(exe)) {
     throw new Error(`Tauri debug executable not found at ${exe}. Run pnpm tauri build --debug --no-bundle --ci first.`);
   }
 
-  const runDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'brainbox-tauri-native-qa-'));
-  const dataDir = path.join(runDir, 'profile');
-  await fsp.mkdir(dataDir, { recursive: true });
   const port = await getAvailablePort();
-
   const child = spawn(exe, {
     cwd: path.dirname(exe),
     env: {
@@ -109,8 +103,8 @@ async function startNativeApp(): Promise<NativeApp> {
     },
   });
 
-  const stdout = fs.createWriteStream(path.join(runDir, 'brainbox.stdout.log'));
-  const stderr = fs.createWriteStream(path.join(runDir, 'brainbox.stderr.log'));
+  const stdout = fs.createWriteStream(path.join(runDir, 'brainbox.stdout.log'), { flags: 'a' });
+  const stderr = fs.createWriteStream(path.join(runDir, 'brainbox.stderr.log'), { flags: 'a' });
   child.stdout.pipe(stdout);
   child.stderr.pipe(stderr);
 
@@ -120,7 +114,16 @@ async function startNativeApp(): Promise<NativeApp> {
   return { browser, dataDir, page, port, process: child, runDir };
 }
 
-async function stopNativeApp(nativeApp: NativeApp | null) {
+async function startNativeApp(): Promise<NativeApp> {
+  test.skip(process.platform !== 'win32', 'Native Playwright QA currently targets Windows WebView2 CDP.');
+
+  const runDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'brainbox-tauri-native-qa-'));
+  const dataDir = path.join(runDir, 'profile');
+  await fsp.mkdir(dataDir, { recursive: true });
+  return launchNativeApp(runDir, dataDir);
+}
+
+async function stopNativeProcess(nativeApp: NativeApp | null) {
   if (!nativeApp) return;
 
   await nativeApp.browser.close().catch(() => {});
@@ -136,6 +139,18 @@ async function stopNativeApp(nativeApp: NativeApp | null) {
       resolve();
     });
   });
+}
+
+async function relaunchNativeApp(nativeApp: NativeApp): Promise<NativeApp> {
+  const { dataDir, runDir } = nativeApp;
+  await stopNativeProcess(nativeApp);
+  return launchNativeApp(runDir, dataDir);
+}
+
+async function stopNativeApp(nativeApp: NativeApp | null) {
+  if (!nativeApp) return;
+
+  await stopNativeProcess(nativeApp);
 
   if (!process.env.BRAINBOX_KEEP_TAURI_QA_DATA) {
     await fsp.rm(nativeApp.runDir, { recursive: true, force: true });
@@ -200,9 +215,85 @@ test.beforeEach(async () => {
   await closeBrainyIfOpen(app!.page);
 });
 
+test('native first capture creates one Inbox, recalls offline, and persists across relaunch', async ({}, testInfo) => {
+  let page = app!.page;
+  await resizeNativeWindow(page, 1115, 768);
+  await expect(page.getByTestId('library-empty-state')).toBeVisible();
+  await expect(page.getByLabel('Filter by vault')).toHaveCount(0);
+
+  await page.context().setOffline(true);
+  expect(await page.evaluate(async () => {
+    try {
+      await fetch('https://example.com/', { cache: 'no-store' });
+      return false;
+    } catch {
+      return true;
+    }
+  })).toBe(true);
+
+  try {
+    await page.getByTestId('floating-capture-button').dblclick();
+    await expect(page.getByTestId('capture-modal')).toBeVisible();
+    const destinations = page.getByTestId('capture-vault-select').getByRole('option');
+    await expect(destinations).toHaveCount(1);
+    await expect(destinations).toHaveText('Inbox');
+
+    await page.getByTestId('capture-content-input').fill('Offline capture cedar atlas recall persists');
+    await page.getByTestId('capture-content-input').press('Control+Enter');
+    await expect(page.getByTestId('capture-modal')).toHaveCount(0);
+
+    const capturedCard = page.getByTestId('masonry-card').filter({ hasText: 'Offline capture cedar atlas recall persists' });
+    await expect(capturedCard.locator('.masonry-note-preview')).toBeVisible();
+    await expect(capturedCard.locator('.masonry-note-title')).toHaveCount(0);
+    await page.getByTestId('library-search-input').fill('atlas offline');
+    await expect(capturedCard).toBeVisible();
+    await expect.poll(() => capturedCard.evaluate((element) => element.getBoundingClientRect().width)).toBeGreaterThanOrEqual(220);
+
+    await testInfo.attach('native-first-capture-offline', {
+      body: await page.screenshot(),
+      contentType: 'image/png',
+    });
+
+    app = await relaunchNativeApp(app!);
+    page = app.page;
+    await page.context().setOffline(true);
+    await expect(page.getByTestId('app')).toBeVisible();
+    await expect(page.getByLabel('Filter by vault').getByRole('option', { name: 'Inbox' })).toHaveCount(1);
+    await page.getByTestId('library-search-input').fill('atlas offline');
+    await expect(page.getByTestId('masonry-card').filter({ hasText: 'Offline capture cedar atlas recall persists' })).toBeVisible();
+  } finally {
+    await app?.page.context().setOffline(false).catch(() => {});
+  }
+});
+
 test('native Library and Settings share the same content frame at desktop size', async ({}, testInfo) => {
   const page = app!.page;
   await resizeNativeWindow(page, 1115, 768);
+  expect(['#202020', '#eeeeee']).toContain(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--color-primary').trim()));
+  expect(Math.round((await visibleBox(page.getByTestId('app-navigation'))).y)).toBeLessThanOrEqual(1);
+
+  const selectChrome = await page.getByLabel('Filter by vault').evaluate((element) => {
+    const style = getComputedStyle(element);
+    return { paddingRight: parseFloat(style.paddingRight), backgroundPositionX: style.backgroundPositionX };
+  });
+  expect(selectChrome.paddingRight).toBeGreaterThanOrEqual(36);
+  expect(selectChrome.backgroundPositionX).toContain('12px');
+
+  const scrollOwnership = await page.evaluate(() => {
+    const main = document.querySelector('[data-testid="library-main"]') as HTMLElement;
+    const scroll = document.querySelector('[data-testid="library-scroll-area"]') as HTMLElement;
+    return { main: getComputedStyle(main).overflowY, content: getComputedStyle(scroll).overflowY };
+  });
+  expect(scrollOwnership).toEqual({ main: 'hidden', content: 'auto' });
+
+  const card = page.getByTestId('masonry-card').first();
+  const smallerCards = page.getByRole('button', { name: 'Show smaller cards' });
+  const largerCards = page.getByRole('button', { name: 'Show larger cards' });
+  const zoomOut = await smallerCards.isEnabled();
+  const widthBeforeZoom = await card.evaluate((element) => element.getBoundingClientRect().width);
+  await (zoomOut ? smallerCards : largerCards).click();
+  await expect.poll(() => card.evaluate((element) => Math.abs(element.getBoundingClientRect().width - widthBeforeZoom))).toBeGreaterThan(20);
+  await (zoomOut ? largerCards : smallerCards).click();
 
   const sections: Array<{ name: string; open: () => Promise<void>; locator: ReturnType<Page['locator']> }> = [
     {
@@ -236,17 +327,32 @@ test('native Library and Settings share the same content frame at desktop size',
   for (const [name, x] of Object.entries(leftEdges)) {
     expect.soft(Math.abs(x - baseline), `${name} left edge (${x}) should align with Library (${baseline})`).toBeLessThanOrEqual(2);
   }
+
+  const settingsTitle = page.getByRole('heading', { name: 'Settings' });
+  const captureTab = page.getByRole('tab', { name: /Capture/ });
+  const settingsPanel = page.getByRole('tabpanel');
+  const fixedTops = await Promise.all([
+    settingsTitle.evaluate((element) => element.getBoundingClientRect().top),
+    captureTab.evaluate((element) => element.getBoundingClientRect().top),
+  ]);
+  await settingsPanel.evaluate((element) => { element.scrollTop = element.scrollHeight; });
+  await expect.poll(() => settingsPanel.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+  expect(Math.abs((await settingsTitle.evaluate((element) => element.getBoundingClientRect().top)) - fixedTops[0])).toBeLessThanOrEqual(1);
+  expect(Math.abs((await captureTab.evaluate((element) => element.getBoundingClientRect().top)) - fixedTops[1])).toBeLessThanOrEqual(1);
 });
 
 test('native Brainy drawer opens and remains usable in a narrow Tauri window', async ({}, testInfo) => {
   const page = app!.page;
   await resizeNativeWindow(page, 430, 820);
 
-  await page.getByTestId('nav-brainy').click();
+  await expect(page.getByTestId('nav-brainy')).toHaveCount(0);
+  await page.getByTestId('nav-library').click();
+  await page.getByTestId('library-brainy-button').click();
   await expect(page.getByTestId('brainy-chat')).toBeVisible();
   await expect(page.getByText('What should we work on?')).toBeVisible();
   await expect(page.getByPlaceholder('Configure AI provider in Settings first')).toBeVisible();
   await expect(page.getByRole('button', { name: 'List all my vaults' })).toBeVisible();
+  await page.waitForTimeout(250);
 
   await testInfo.attach('native-brainy-narrow', {
     body: await page.screenshot(),
@@ -283,11 +389,13 @@ test('native wrong-password attempt keeps a protected vault locked', async () =>
   await page.getByTestId('vault-has-password-checkbox').check();
   await page.getByTestId('vault-password-input').fill('correct-password');
   await page.getByTestId('create-vault-submit').click();
-  await expect(page.getByLabel('Filter by vault').getByRole('option', { name: 'Protected QA Vault' })).toHaveCount(1);
   await page.getByTestId('floating-capture-button').click();
+  await expect(page.getByTestId('capture-vault-select').getByRole('option', { name: 'Protected QA Vault' })).toHaveCount(1);
+  await page.getByText('Title and destination').click();
+  await page.getByTestId('capture-vault-select').selectOption({ label: 'Protected QA Vault' });
   await page.getByTestId('capture-content-input').fill('Protected QA secret');
   await page.getByTestId('capture-submit-button').click();
-  await expect(page.getByTestId('masonry-card').getByText('Protected QA secret')).toBeVisible();
+  await expect(page.getByTestId('masonry-card').filter({ hasText: 'Protected QA secret' })).toBeVisible();
 
   await page.reload();
   await expect(page.getByTestId('app')).toBeVisible();
@@ -299,6 +407,7 @@ test('native wrong-password attempt keeps a protected vault locked', async () =>
   await expect(page.getByTestId('library-section')).toBeVisible();
   await expect(page.getByLabel('Filter by vault').getByRole('option', { name: 'Protected QA Vault' })).toHaveCount(1);
   await expect(page.getByText('Protected QA secret')).toHaveCount(0);
-  await expect(page.getByText('0 items')).toBeVisible();
+  await expect(page.getByTestId('masonry-card').filter({ hasText: 'Offline capture cedar atlas recall persists' })).toBeVisible();
+  await expect(page.getByText('0 items')).toHaveCount(0);
   await expect(page.getByText('What should we work on?')).toHaveCount(0);
 });

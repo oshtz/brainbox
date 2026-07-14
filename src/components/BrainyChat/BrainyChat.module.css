@@ -265,7 +265,7 @@
   padding: 9px 11px;
   border-radius: 14px 14px 4px 14px;
   background: var(--color-accent);
-  color: #fff;
+  color: var(--color-on-primary);
 }
 
 .message.assistant .messageBubble {
@@ -357,14 +357,64 @@
 }
 
 .message.user .inlineCode {
-  border-color: rgba(255, 255, 255, 0.22);
-  background: rgba(255, 255, 255, 0.16);
+  border-color: rgba(127, 127, 127, 0.22);
+  background: rgba(127, 127, 127, 0.16);
+}
+
+.page {
+  background: transparent;
+}
+
+.page .header,
+.page .threadBar {
+  width: min(100%, 980px);
+  margin-inline: auto;
+  background: transparent;
+}
+
+.page .messages,
+.page .suggestions,
+.page .inputArea {
+  width: min(100%, 780px);
+  align-self: center;
+}
+
+.page .messages {
+  padding-inline: 0;
+}
+
+.page .inputArea {
+  border-top: 0;
+  background: transparent;
+}
+
+.page .emptyState {
+  max-width: 560px;
+  margin: clamp(64px, 13vh, 132px) auto auto;
+  justify-items: center;
+  text-align: center;
+}
+
+.page .emptyKicker {
+  padding: 0;
+  background: transparent;
+  color: var(--color-text-secondary);
+}
+
+.page .emptyStateTitle {
+  font-size: clamp(2rem, 4vw, 3.4rem);
+  letter-spacing: -0.055em;
+  line-height: 1;
+}
+
+.page .emptyStateHint {
+  max-width: 520px;
 }
 
 .message.user .markdown pre {
-  border-color: rgba(255, 255, 255, 0.2);
-  background: rgba(255, 255, 255, 0.12);
-  color: #fff;
+  border-color: rgba(127, 127, 127, 0.2);
+  background: rgba(127, 127, 127, 0.12);
+  color: inherit;
 }
 
 .markdown a {
@@ -622,7 +672,7 @@
   border: 0;
   border-radius: 10px;
   background: var(--color-accent);
-  color: #fff;
+  color: var(--color-on-primary);
   cursor: pointer;
   transition:
     filter var(--transition-duration) var(--transition-timing),

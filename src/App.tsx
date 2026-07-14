@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { emit, listen } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
 import Sidebar from './components/Sidebar/Sidebar';
@@ -43,12 +43,12 @@ function App() {
   const [selectedVaultId, setSelectedVaultId] = useState('all');
   const [isCaptureOpen, setIsCaptureOpen] = useState(false);
   const [isCreateVaultOpen, setIsCreateVaultOpen] = useState(false);
-  const [captureAfterVaultCreate, setCaptureAfterVaultCreate] = useState(false);
   const [protocolCapture, setProtocolCapture] = useState<ProtocolCapture | null>(null);
   const [settingsTarget, setSettingsTarget] = useState<string | null>(null);
   const [isBrainyOpen, setIsBrainyOpen] = useState(false);
   const [brainyMode, setBrainyMode] = useState<'sidebar' | 'full'>(aiService.getBrainyMode());
   const [libraryRefreshToken, setLibraryRefreshToken] = useState(0);
+  const inboxCreationRef = useRef<Promise<Vault> | null>(null);
 
   const fetchVaults = async () => {
     setIsLoadingVaults(true);
@@ -62,19 +62,49 @@ function App() {
     } catch (error) {
       console.error('Failed to fetch vaults:', error);
       showError('Failed to fetch vaults.');
-      return [];
+      return null;
     } finally {
       setIsLoadingVaults(false);
     }
   };
 
-  const openCapture = (capture: ProtocolCapture | null = null) => {
+  const createVault = async (name: string, password: string, hasPassword?: boolean) => {
+    const result = await invoke<BackendVault>('create_vault', {
+      name,
+      password,
+      hasPassword,
+    });
+    const vault = transformVault(result);
+    await setVaultPassword(vault.id, password || '');
+    setVaults((current) => current.some(({ id }) => id === vault.id) ? current : [...current, vault]);
+    await emit('vaults-changed');
+    return vault;
+  };
+
+  const openCapture = async (capture: ProtocolCapture | null = null) => {
     setProtocolCapture(capture);
-    if (vaults.length === 0) {
-      setCaptureAfterVaultCreate(true);
-      setIsCreateVaultOpen(true);
+    const availableVaults = isLoadingVaults ? await fetchVaults() : vaults;
+    if (availableVaults === null) {
+      setProtocolCapture(null);
       return;
     }
+
+    if (availableVaults.length === 0) {
+      try {
+        if (!inboxCreationRef.current) {
+          inboxCreationRef.current = createVault('Inbox', '', false)
+            .finally(() => { inboxCreationRef.current = null; });
+        }
+        const inbox = await inboxCreationRef.current;
+        setSelectedVaultId(inbox.id);
+      } catch (error) {
+        console.error('Failed to create Inbox:', error);
+        showError(`Failed to create Inbox: ${errorMessage(error)}`);
+        setProtocolCapture(null);
+        return;
+      }
+    }
+
     setIsCaptureOpen(true);
   };
 
@@ -115,21 +145,7 @@ function App() {
     has_password?: boolean;
   }) => {
     try {
-      const result = await invoke<BackendVault>('create_vault', {
-        name,
-        password,
-        hasPassword: has_password,
-      });
-      const vaultId = String(result.id);
-      await setVaultPassword(vaultId, password || '');
-      const nextVaults = await fetchVaults();
-      await emit('vaults-changed');
-
-      if (captureAfterVaultCreate) {
-        setCaptureAfterVaultCreate(false);
-        setSelectedVaultId(vaultId);
-        if (nextVaults.some((vault) => vault.id === vaultId)) setIsCaptureOpen(true);
-      }
+      await createVault(name, password, has_password);
     } catch (error) {
       showError(`Failed to create vault: ${errorMessage(error)}`);
     }
@@ -188,17 +204,14 @@ function App() {
         <Sidebar
           title={title}
           currentView={currentView}
-          isBrainyOpen={isBrainyOpen}
-          brainyMode={brainyMode}
           onLibraryClick={() => navigate('library')}
           onSettingsClick={() => navigate('settings')}
-          onBrainyClick={openBrainy}
-          onCreateNote={() => openCapture()}
+          onCreateNote={() => { void openCapture(); }}
         />
 
         <div className={styles.workspaceBody}>
           <main className={styles.main} data-testid="main-content">
-            <div className={styles.content}>
+            <div className={`${styles.content} ${currentView === 'library' ? styles.libraryContent : ''}`}>
               {currentView === 'settings' ? (
                 <Settings
                   scrollToSection={settingsTarget}
@@ -209,6 +222,7 @@ function App() {
                   <BrainyChat
                     vaults={vaultProps}
                     currentVaultId={selectedVaultId === 'all' ? undefined : selectedVaultId}
+                    variant="page"
                     onClose={() => navigate('library')}
                     onOpenSettings={() => {
                       setSettingsTarget('ai-settings');
@@ -226,11 +240,9 @@ function App() {
                   loadingVaults={isLoadingVaults}
                   selectedVaultId={selectedVaultId}
                   onVaultChange={setSelectedVaultId}
-                  onCreateNote={() => openCapture()}
-                  onCreateVault={() => {
-                    setCaptureAfterVaultCreate(false);
-                    setIsCreateVaultOpen(true);
-                  }}
+                  onCreateNote={() => { void openCapture(); }}
+                  onCreateVault={() => setIsCreateVaultOpen(true)}
+                  onOpenBrainy={openBrainy}
                   refreshToken={libraryRefreshToken}
                 />
               )}
@@ -259,11 +271,7 @@ function App() {
 
       <CreateVaultModal
         isOpen={isCreateVaultOpen}
-        initialName={captureAfterVaultCreate ? 'Inbox' : ''}
-        onClose={() => {
-          setIsCreateVaultOpen(false);
-          setCaptureAfterVaultCreate(false);
-        }}
+        onClose={() => setIsCreateVaultOpen(false)}
         onCreate={handleCreateVault}
       />
       <CaptureModal

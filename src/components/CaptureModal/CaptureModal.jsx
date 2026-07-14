@@ -137,9 +137,16 @@ const CaptureModal = ({ isOpen, onClose, onSave, vaults = [], initialVaultId = '
               id="capture-content"
               value={content}
               onChange={(e) => setContent(e.target.value)}
+              onKeyDown={(e) => {
+                if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                  e.preventDefault();
+                  e.currentTarget.form?.requestSubmit();
+                }
+              }}
               placeholder="Paste anything or start typing…"
-              rows={7}
+              rows={4}
               required
+              aria-keyshortcuts="Control+Enter Meta+Enter"
               className={styles.textarea}
               data-testid="capture-content-input"
             />

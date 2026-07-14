@@ -5,7 +5,6 @@ import {
   Cog6ToothIcon,
   SunIcon,
   MoonIcon,
-  SparklesIcon,
   PlusIcon,
   StopIcon as StopIconOutline
 } from '@heroicons/react/24/outline';
@@ -17,11 +16,8 @@ const Sidebar = ({
   title = 'Library',
   onLibraryClick,
   onSettingsClick,
-  onBrainyClick,
   onCreateNote,
   currentView = 'library',
-  isBrainyOpen = false,
-  brainyMode = 'sidebar'
 }) => {
   const { theme, toggleTheme } = useTheme();
   const appWindow = useMemo(() => {
@@ -39,9 +35,6 @@ const Sidebar = ({
       return false;
     }
   }, []);
-  const isBrainyFull = brainyMode === 'full';
-  const brainyActive = isBrainyFull ? currentView === 'brainy' : isBrainyOpen;
-
   useEffect(() => {
     if (!appWindow) {
       return;
@@ -106,14 +99,6 @@ const Sidebar = ({
     }
   }, [handleMaximize, isMac]);
 
-  const handleBrainyNav = () => {
-    if (isBrainyFull) {
-      onBrainyClick && onBrainyClick();
-      return;
-    }
-    onBrainyClick && onBrainyClick();
-  };
-
   const navItems = [
     {
       id: 'library',
@@ -124,16 +109,6 @@ const Sidebar = ({
       onClick: onLibraryClick,
       testId: 'nav-library',
       ariaLabel: 'Open library',
-    },
-    {
-      id: 'brainy',
-      label: 'brainy',
-      shortLabel: 'brainy',
-      icon: SparklesIcon,
-      active: brainyActive,
-      onClick: handleBrainyNav,
-      testId: 'nav-brainy',
-      ariaLabel: isBrainyFull ? 'Open brainy' : 'Open brainy AI assistant',
     },
     {
       id: 'settings',

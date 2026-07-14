@@ -13,7 +13,7 @@ html {
 
 body {
   margin: 0; /* Remove default body margin */
-  padding: var(--space-xs) var(--space-sm) var(--space-sm) var(--space-sm); /* App gutter: reduced top padding for custom titlebar */
+  padding: 0;
   font-family: var(--font-family-body);
   color: var(--color-text-primary);
   /* Simplified background for better performance on macOS */
@@ -27,9 +27,9 @@ body {
 
 :root {
   --scrollbar-size: 10px;
-  --scrollbar-track: rgba(15, 23, 42, 0.06);
-  --scrollbar-thumb: rgba(15, 23, 42, 0.35);
-  --scrollbar-thumb-hover: rgba(15, 23, 42, 0.55);
+  --scrollbar-track: rgba(0, 0, 0, 0.06);
+  --scrollbar-thumb: rgba(0, 0, 0, 0.35);
+  --scrollbar-thumb-hover: rgba(0, 0, 0, 0.55);
 }
 
 body::before {
@@ -67,6 +67,16 @@ a:hover {
 /* Buttons, inputs, and focus outlines */
 button, input, select, textarea {
   font-family: var(--font-family-sans);
+}
+
+select:not([multiple]) {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 36px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 14 14' fill='none'%3E%3Cpath d='m4 5.5 3 3 3-3' stroke='%23878787' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-position: right 12px center;
+  background-repeat: no-repeat;
+  background-size: 14px;
 }
 
 :focus-visible {
@@ -117,5 +127,15 @@ button, input, select, textarea {
   .masonry-card:not(:hover),
   .card:not(:hover) {
     will-change: auto;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }

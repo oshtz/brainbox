@@ -1,26 +1,13 @@
 .app {
-  --app-gutter-top: var(--space-xs);
-  --app-gutter-bottom: var(--space-sm);
   display: flex;
   flex-direction: column;
   width: 100%;
-  height: calc(100vh - var(--app-gutter-top) - var(--app-gutter-bottom) - var(--space-xs));
+  height: 100vh;
   overflow: hidden;
   gap: 0;
   min-height: 0; /* allow children to size/scroll correctly */
-  margin-top: var(--space-xs);
+  margin-top: 0;
   --detail-panel-width: 420px;
-  padding-right: 0;
-  transition: padding-right var(--transition-duration) var(--transition-timing);
-}
-
-:global(:root[data-vault-workspace]) body {
-  background: var(--ui-body-background);
-  padding: 0;
-}
-
-.appNudged {
-  padding-right: var(--detail-panel-width);
 }
 
 .workspaceBody {
@@ -36,7 +23,7 @@
   flex-direction: column;
   overflow: hidden;
   background: var(--ui-main-background);
-  border: 1px solid transparent;
+  border: 0;
   border-radius: 0;
   box-shadow: none;
   min-height: 0; /* allow .content to scroll */
@@ -49,17 +36,22 @@
 }
 
 .content {
-  --page-content-max-width: 100%;
+  --page-content-max-width: 1440px;
   flex: 1;
-  overflow-y: auto;
-  padding: var(--space-sm) var(--space-md) var(--space-md);
+  overflow: hidden;
+  padding: clamp(20px, 3vw, 42px) clamp(20px, 3.5vw, 54px) clamp(36px, 5vw, 72px);
+}
+
+.content.libraryContent {
+  padding: 0;
+  overflow: hidden;
 }
 
 .contentNoTopPadding {
   padding-top: 0;
 }
 
-.content:not(.vaultWorkspaceContent) > * {
+.content:not(.vaultWorkspaceContent):not(.libraryContent) > * {
   width: min(100%, var(--page-content-max-width));
   margin-inline: auto;
 }
@@ -224,9 +216,9 @@
 }
 
 .vaultFilterChipActive {
-  background: rgba(var(--color-primary-rgb), 0.28);
+  background: var(--color-primary);
   border-color: transparent;
-  color: #fff;
+  color: var(--color-on-primary);
 }
 
 .vaultFilterAdd {
@@ -474,7 +466,7 @@
 @media (max-width: 576px) {
   .app {
     margin-top: 0;
-    height: calc(100vh - var(--app-gutter-bottom));
+    height: 100vh;
   }
 
   .content {
@@ -577,11 +569,9 @@
 
 @keyframes slideInRight {
   from {
-    opacity: 0;
     transform: translateX(20px);
   }
   to {
-    opacity: 1;
     transform: translateX(0);
   }
 }
@@ -687,6 +677,5 @@
   height: calc(100vh - var(--app-header-height, 56px) - var(--space-xl));
   min-height: 520px;
   overflow: hidden;
-  border-radius: var(--border-radius-lg);
-  background: var(--ui-panel-bg);
+  background: transparent;
 }

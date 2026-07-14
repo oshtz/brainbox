@@ -68,14 +68,6 @@ export interface SearchResult {
 export interface ThemeContextType {
   theme: 'light' | 'dark';
   toggleTheme: () => void;
-  accent: string;
-  setAccent: (color: string) => void;
-}
-
-export interface RGB {
-  r: number;
-  g: number;
-  b: number;
 }
 
 // Component prop types

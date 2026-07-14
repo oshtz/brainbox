@@ -29,7 +29,7 @@
   padding: 0.35rem 0.75rem;
   border-radius: var(--border-radius-md);
   border: 1px solid transparent;
-  background: var(--color-accent-bg, rgba(99, 102, 241, 0.08));
+  background: var(--color-accent-bg, rgba(127, 127, 127, 0.08));
   font-size: 0.85rem;
   font-weight: 600;
   color: var(--color-accent);

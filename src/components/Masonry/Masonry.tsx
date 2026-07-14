@@ -41,34 +41,17 @@ export interface MasonryProps {
   actionsMode?: 'buttons' | 'menu';
   selectedId?: string | number | null;
   preferSummary?: boolean;
+  columnAdjustment?: number;
 }
 
 type MenuState = { item: MasonryItem; x: number; y: number; returnFocus: HTMLElement };
 
-const Masonry: React.FC<MasonryProps> = ({ data, onCardClick, onCopyItem, onDeleteItem, onOpenExternal, onMoveItem, alwaysShowOverlay = false, actionsMode = 'buttons', selectedId = null, preferSummary = false }) => {
-  const [columns, setColumns] = useState<number>(2);
+const Masonry: React.FC<MasonryProps> = ({ data, onCardClick, onCopyItem, onDeleteItem, onOpenExternal, onMoveItem, alwaysShowOverlay = false, actionsMode = 'buttons', selectedId = null, preferSummary = false, columnAdjustment = 0 }) => {
   const [menu, setMenu] = useState<MenuState | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   // Track measured overlay heights for URL previews keyed by item id
   const [measuredHeights, setMeasuredHeights] = useState<Record<string, number>>({});
   const observersRef = useRef<Map<string, ResizeObserver>>(new Map());
-
-  useEffect(() => {
-    const updateColumns = () => {
-      if (window.matchMedia("(min-width: 1500px)").matches) {
-        setColumns(5);
-      } else if (window.matchMedia("(min-width: 1000px)").matches) {
-        setColumns(4);
-      } else if (window.matchMedia("(min-width: 600px)").matches) {
-        setColumns(3);
-      } else {
-        setColumns(1);
-      }
-    };
-    updateColumns();
-    window.addEventListener("resize", updateColumns);
-    return () => window.removeEventListener("resize", updateColumns);
-  }, []);
 
   // Disconnect observers on unmount
   useEffect(() => {
@@ -81,20 +64,19 @@ const Masonry: React.FC<MasonryProps> = ({ data, onCardClick, onCopyItem, onDele
   const ref = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState<number>(0);
   useEffect(() => {
-    const handleResize = () => {
-      if (ref.current) {
-        setWidth(ref.current.offsetWidth);
-      }
-    };
-    handleResize();
-    window.addEventListener("resize", handleResize);
-    return () => window.removeEventListener("resize", handleResize);
+    if (!ref.current) return;
+    const observer = new ResizeObserver(([entry]) => setWidth(entry.contentRect.width));
+    observer.observe(ref.current);
+    return () => observer.disconnect();
   }, []);
+
+  const gutter = 18;
+  const automaticColumns = Math.max(1, Math.min(4, Math.floor((width - gutter) / (260 + gutter))));
+  const columns = Math.max(1, automaticColumns + columnAdjustment);
 
   const [heights, gridItems] = useMemo<[number[], GridItem[]]>(() => {
     const heights = new Array(columns).fill(0);
-    const gutter = 10;
-    const colWidth = columns > 0 ? (Math.max(0, width - gutter * (columns + 1)) / columns) : 0;
+    const colWidth = columns > 0 ? (Math.max(0, width - gutter * (columns - 1)) / columns) : 0;
     const computeHeight = (child: MasonryItem): number => {
       if (!colWidth) return child.height;
       if (child?.metadata?.provider === 'youtube') {
@@ -108,13 +90,12 @@ const Masonry: React.FC<MasonryProps> = ({ data, onCardClick, onCopyItem, onDele
         const key = String(child.id);
         const measured = measuredHeights[key];
         if (typeof measured === 'number' && measured > 0) {
-          // Add a small safety padding to avoid clipping shadows/borders
-          return Math.ceil(measured + 8);
+          return Math.ceil(measured);
         }
         // Fallback heuristic if not yet measured
-        const hasImage = Boolean(child?.metadata?.preview_image);
-        const textBase = 24 /* padding */ + 18 /* host line */ + 40 /* title lines */ + 10 /* padding */;
-        const imageH = hasImage ? 84 + 8 /* gap */ : 0;
+        const hasImage = Boolean(child?.metadata?.preview_image || child.image);
+        const textBase = child?.metadata?.preview_description ? 132 : 94;
+        const imageH = hasImage ? Math.round(colWidth * 9 / 16) : 0;
         return textBase + imageH;
       }
       // fallback for notes
@@ -122,8 +103,8 @@ const Masonry: React.FC<MasonryProps> = ({ data, onCardClick, onCopyItem, onDele
     };
     const gridItems = data.map((child) => {
       const column = heights.indexOf(Math.min(...heights));
-      const x = gutter + column * (colWidth + gutter);
-      const y = heights[column] === 0 ? gutter : heights[column];
+      const x = column * (colWidth + gutter);
+      const y = heights[column];
       const h = computeHeight(child);
       heights[column] = y + h + gutter;
       return {
@@ -192,22 +173,27 @@ const Masonry: React.FC<MasonryProps> = ({ data, onCardClick, onCopyItem, onDele
 
   return (
     <>
-    <div ref={ref} className="masonry" style={{ height: Math.max(...heights, 0) + 16 }}>
+    <div ref={ref} className="masonry" style={{ height: Math.max(...heights, 0) }}>
       {transitions((style, item) => {
         const isSelected = selectedId != null && String(selectedId) === String(item.id);
         const isAddCard = item?.metadata?.item_type === 'add';
-        const hasImage = Boolean(item.image) && (item?.metadata?.item_type === 'url' || !preferSummary);
+        const isUrl = item?.metadata?.item_type === 'url';
+        const isYoutube = item?.metadata?.provider === 'youtube';
+        const hasImage = Boolean(item.image) && (isUrl || !preferSummary);
+        const previewImage = isUrl ? item?.metadata?.preview_image || item.image : '';
+        const cardHasMedia = isUrl ? Boolean(previewImage) : hasImage;
         const noteExcerpt = preferSummary && item.summary
           ? item.summary.trim()
           : typeof item.content === 'string' ? item.content.trim() : '';
         const linkDescription = preferSummary && item.summary
           ? item.summary.trim()
           : item?.metadata?.preview_description;
+        const showNoteTitle = Boolean(item.title && !noteExcerpt.toLowerCase().startsWith(item.title.trim().toLowerCase()));
         return (
         <a.div
           key={item.id}
           style={style}
-          className={`masonry-card${isSelected ? ' is-selected' : ''}${isAddCard ? ' is-add-card' : ''}${!hasImage ? ' no-media' : ''}`}
+          className={`masonry-card${isSelected ? ' is-selected' : ''}${isAddCard ? ' is-add-card' : ''}${isUrl ? ' is-url' : ' is-note'}${!cardHasMedia ? ' no-media' : ''}`}
           data-testid="masonry-card"
           data-item-id={String(item.id)}
           onContextMenu={(event) => {
@@ -254,7 +240,7 @@ const Masonry: React.FC<MasonryProps> = ({ data, onCardClick, onCopyItem, onDele
               role="button"
               aria-label={`Open item ${item.title || item.id}`}
               style={{
-                backgroundImage: hasImage ? `url(${item.image})` : undefined,
+                backgroundImage: hasImage && (!isUrl || isYoutube) ? `url(${item.image})` : undefined,
                 touchAction: 'manipulation',
                 WebkitTouchCallout: 'none',
                 cursor: 'pointer'
@@ -262,18 +248,10 @@ const Masonry: React.FC<MasonryProps> = ({ data, onCardClick, onCopyItem, onDele
             />
           )}
           {!isAddCard && !hasImage && item?.metadata?.item_type !== 'url' && (
-            <button
-              type="button"
-              className="masonry-note-preview"
-              onClick={(e) => {
-                e.stopPropagation();
-                onCardClick?.(item);
-              }}
-            >
-              <span className="masonry-note-mark">"</span>
+            <div className="masonry-note-preview" aria-hidden="true">
+              {showNoteTitle && <span className="masonry-note-title">{item.title}</span>}
               <span className="masonry-note-text">{noteExcerpt || item.title}</span>
-              <span className="masonry-note-title">{item.title}</span>
-            </button>
+            </div>
           )}
           <div className={`masonry-card-overlay ${alwaysShowOverlay ? 'always-on' : ''}`} aria-hidden={false}>
             {item?.metadata?.provider === 'youtube' && (
@@ -284,7 +262,7 @@ const Masonry: React.FC<MasonryProps> = ({ data, onCardClick, onCopyItem, onDele
             )}
             {!isAddCard && item?.metadata?.item_type === 'url' && item?.metadata?.provider !== 'youtube' && (
               <div
-                className="masonry-link-preview"
+                className={`masonry-link-preview${previewImage ? ' has-media' : ''}`}
                 ref={(el) => {
                   const key = String(item.id);
                   // Clean up any previous observer for this id
@@ -315,19 +293,21 @@ const Masonry: React.FC<MasonryProps> = ({ data, onCardClick, onCopyItem, onDele
                   }
                 }}
               >
-                <div className="mlp-host">
-                  {(() => { const fav = faviconForUrl(item?.metadata?.url); return fav ? <img src={fav} alt="" /> : null; })()}
-                  <span>{(() => { try { return new URL(item?.metadata?.url || '').hostname; } catch { return 'link'; } })()}</span>
-                </div>
-                {item?.metadata?.preview_image && (
+                {previewImage && (
                   <div className="mlp-media">
-                    <img src={item.metadata.preview_image} alt="" />
+                    <img src={previewImage} alt="" />
                   </div>
                 )}
-                <div className="mlp-title" title={item.title || item?.metadata?.preview_title || item?.metadata?.url}>{item.title || item?.metadata?.preview_title || item?.metadata?.url}</div>
-                {linkDescription && (
-                  <div className="mlp-desc" title={linkDescription}>{linkDescription}</div>
-                )}
+                <div className="mlp-body">
+                  <div className="mlp-host">
+                    {(() => { const fav = faviconForUrl(item?.metadata?.url); return fav ? <img src={fav} alt="" /> : null; })()}
+                    <span>{(() => { try { return new URL(item?.metadata?.url || '').hostname; } catch { return 'link'; } })()}</span>
+                  </div>
+                  <div className="mlp-title" title={item.title || item?.metadata?.preview_title || item?.metadata?.url}>{item.title || item?.metadata?.preview_title || item?.metadata?.url}</div>
+                  {linkDescription && (
+                    <div className="mlp-desc" title={linkDescription}>{linkDescription}</div>
+                  )}
+                </div>
               </div>
             )}
             {!isAddCard && actionsMode === 'buttons' ? (

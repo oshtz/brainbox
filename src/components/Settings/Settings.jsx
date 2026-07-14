@@ -13,6 +13,7 @@ import {
   SparklesIcon,
   ArrowUpCircleIcon,
 } from '@heroicons/react/24/outline';
+import styles from './Settings.module.css';
 
 // Tab configuration
 const TABS = [
@@ -24,56 +25,7 @@ const TABS = [
   { id: 'updates', label: 'Updates', Icon: ArrowUpCircleIcon },
 ];
 
-// Tab icon style (defined early for TabButton)
-const tabIconStyle = {
-  width: 18,
-  height: 18,
-  flexShrink: 0,
-};
-
-// Tab label style (defined early for TabButton)
-const tabLabelStyle = {
-  flex: 1,
-};
-
-// TabButton component with hover state
 function TabButton({ tab, isActive, onClick }) {
-  const [isHovered, setIsHovered] = useState(false);
-
-  const getStyle = () => {
-    if (isActive) {
-      return {
-        display: 'flex',
-        alignItems: 'center',
-        gap: '0.4rem',
-        padding: '0.45rem 0.7rem',
-        borderRadius: 6,
-        border: 'none',
-        background: 'var(--color-accent)',
-        color: '#fff',
-        cursor: 'pointer',
-        fontWeight: 600,
-        fontSize: '0.82rem',
-        transition: 'all 0.2s ease',
-        boxShadow: 'none',
-      };
-    }
-    return {
-      display: 'flex',
-      alignItems: 'center',
-      gap: '0.4rem',
-      padding: '0.45rem 0.7rem',
-      borderRadius: 6,
-      border: 'none',
-      background: isHovered ? 'var(--color-surface)' : 'transparent',
-      color: isHovered ? 'var(--color-text-primary)' : 'var(--color-text-secondary)',
-      cursor: 'pointer',
-      fontWeight: 500,
-      fontSize: '0.82rem',
-      transition: 'all 0.2s ease',
-    };
-  };
-
   const Icon = tab.Icon;
   
   return (
@@ -83,12 +35,10 @@ function TabButton({ tab, isActive, onClick }) {
       aria-controls={`panel-${tab.id}`}
       id={`tab-${tab.id}`}
       onClick={onClick}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
-      style={getStyle()}
+      className={`${styles.tabButton} ${isActive ? styles.tabButtonActive : ''}`}
     >
-      <Icon style={tabIconStyle} />
-      <span style={tabLabelStyle}>{tab.label}</span>
+      <Icon className={styles.tabIcon} />
+      <span className={styles.tabLabel}>{tab.label}</span>
     </button>
   );
 }
@@ -216,7 +166,7 @@ function CaptureSettings() {
                 <div style={inlineActionRowStyle}>
                   <button
                     type="button"
-                    style={{ ...buttonStyle, background: 'var(--color-accent)', color: '#fff', border: '1px solid var(--color-accent)' }}
+                    style={{ ...buttonStyle, background: 'var(--color-accent)', color: 'var(--color-on-primary)', border: '1px solid var(--color-accent)' }}
                     onClick={handleSaveHotkey}
                   >
                     Save hotkey
@@ -308,7 +258,7 @@ function CaptureSettings() {
             <div style={inlineActionRowStyle}>
               <button
                 type="button"
-                style={{ ...buttonStyle, background: 'var(--color-accent)', color: '#fff', border: '1px solid var(--color-accent)' }}
+                style={{ ...buttonStyle, background: 'var(--color-accent)', color: 'var(--color-on-primary)', border: '1px solid var(--color-accent)' }}
                 onClick={handleRegisterProtocol}
               >
                 Register Protocol Handler (Windows)
@@ -329,15 +279,13 @@ function CaptureSettings() {
 
 // Appearance Settings Panel
 function AppearanceSettings() {
-  const { accent, setAccent, theme, toggleTheme } = useTheme();
-  const presets = ['#6366f1', '#ef4444', '#10b981', '#f59e0b', '#06b6d4', '#e879f9', '#3b82f6', '#14b8a6'];
-  const accentLabel = String(accent || '').toUpperCase() || '--';
+  const { theme, toggleTheme } = useTheme();
   const toggleLabel = `Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`;
 
   return (
     <SettingCard
       title="Appearance"
-      description="Tune colors and theme to match your workspace."
+      description="Choose a neutral light or dark workspace."
       action={
         <button
           type="button"
@@ -347,43 +295,7 @@ function AppearanceSettings() {
           {toggleLabel}
         </button>
       }
-    >
-      <div style={appearanceLayoutStyle}>
-        <div style={{ display: 'grid', gap: '0.75rem' }}>
-          <div>
-            <label htmlFor="settings-accent-color" style={labelStyle}>Accent color</label>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-              <input
-                id="settings-accent-color"
-                type="color"
-                value={accent}
-                onChange={(e) => setAccent(e.target.value)}
-                aria-label="Pick accent color"
-                style={colorPickerStyle}
-              />
-              <span style={accentBadgeStyle}>{accentLabel}</span>
-            </div>
-          </div>
-        </div>
-        <div style={{ display: 'grid', gap: '0.75rem' }}>
-          <span style={subtleLabelStyle}>Quick presets</span>
-          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-            {presets.map((c) => {
-              const isActive = accent === c;
-              return (
-                <button
-                  key={c}
-                  type="button"
-                  onClick={() => setAccent(c)}
-                  aria-label={`Set accent ${c}`}
-                  style={presetButtonStyle(c, isActive)}
-                />
-              );
-            })}
-          </div>
-        </div>
-      </div>
-    </SettingCard>
+    />
   );
 }
 
@@ -481,10 +393,15 @@ const Settings = ({ scrollToSection, onScrollComplete }) => {
   };
 
   return (
-    <div style={settingsContainerStyle} data-testid="settings-section">
-      {/* Tab Navigation Wrapper */}
-      <div style={tabNavWrapperStyle}>
-        <nav style={tabNavStyle} role="tablist" aria-label="Settings sections">
+    <section className={styles.settings} data-testid="settings-section">
+      <header className={styles.pageHeader}>
+        <h1>Settings</h1>
+        <p>Manage capture, privacy, backups, AI, and updates.</p>
+      </header>
+
+      <div className={styles.layout}>
+        <div className={styles.navWrap}>
+          <nav className={styles.tabNav} role="tablist" aria-label="Settings sections">
           {TABS.map((tab) => (
             <TabButton
               key={tab.id}
@@ -493,113 +410,29 @@ const Settings = ({ scrollToSection, onScrollComplete }) => {
               onClick={() => handleTabChange(tab.id)}
             />
           ))}
-        </nav>
-      </div>
+          </nav>
+        </div>
 
-      {/* Tab Content Panel */}
-      <div
-        style={tabContentStyle}
-        role="tabpanel"
-        id={`panel-${activeTab}`}
-        aria-labelledby={`tab-${activeTab}`}
-      >
-        {renderTabContent()}
+        <div
+          className={styles.tabContent}
+          role="tabpanel"
+          id={`panel-${activeTab}`}
+          aria-labelledby={`tab-${activeTab}`}
+        >
+          {renderTabContent()}
+        </div>
       </div>
-    </div>
+    </section>
   );
 };
 
 export default Settings;
 
-// Main container with top tabs layout
-const settingsContainerStyle = {
-  display: 'flex',
-  flexDirection: 'column',
-  width: '100%',
-  maxWidth: 'var(--page-content-max-width, 1040px)',
-  margin: '0 auto',
-};
-
-// Wrapper to handle negative margin for nav - pulls nav flush against header
-const tabNavWrapperStyle = {
-  margin: 0,
-  position: 'sticky',
-  top: 0,
-  zIndex: 10,
-};
-
-// Tab navigation row
-const tabNavStyle = {
-  display: 'flex',
-  flexWrap: 'wrap',
-  justifyContent: 'flex-start',
-  gap: '0.25rem',
-  padding: '0 0 0.65rem',
-  background: 'var(--ui-main-background)',
-  borderBottom: '1px solid var(--ui-hairline-border)',
-};
-
-// Tab button base style
-const tabButtonStyle = {
-  display: 'flex',
-  alignItems: 'center',
-  gap: '0.4rem',
-  padding: '0.45rem 0.7rem',
-  borderRadius: 6,
-  border: 'none',
-  background: 'transparent',
-  color: 'var(--color-text-secondary)',
-  cursor: 'pointer',
-  fontWeight: 500,
-  fontSize: '0.82rem',
-  textAlign: 'left',
-  transition: 'all 0.2s ease',
-  width: '100%',
-};
-
-// Tab button active style
-const tabButtonActiveStyle = {
-  ...tabButtonStyle,
-  background: 'var(--color-accent)',
-  color: '#fff',
-  fontWeight: 600,
-  boxShadow: 'none',
-};
-
-// Tab content area
-const tabContentStyle = {
-  display: 'flex',
-  flexDirection: 'column',
-  gap: '0.85rem',
-  minWidth: 0,
-  padding: '0.85rem 0 24px',
-  maxWidth: 'none',
-  margin: 0,
-  width: '100%',
-  boxSizing: 'border-box',
-};
-
-// Legacy pageStyle kept for compatibility but not used
-const pageStyle = {
-  padding: '2.5rem 2rem',
-  display: 'grid',
-  gap: '1.75rem',
-  maxWidth: 960,
-  margin: '0 auto',
-};
-
-const appearanceLayoutStyle = {
-  display: 'grid',
-  gap: '1.25rem',
-  gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-  alignItems: 'center',
-};
-
 const cardStyle = {
-  background: 'var(--ui-panel-bg)',
-  borderRadius: 'var(--border-radius-lg)',
-  border: '1px solid transparent',
-  padding: 'var(--space-md)',
+  background: 'transparent',
+  border: 0,
+  borderRadius: 0,
+  padding: '0 0 var(--space-2xl)',
   boxShadow: 'none',
 };
 
@@ -614,16 +447,18 @@ const cardHeaderStyle = {
 
 const cardTitleStyle = {
   margin: 0,
-  fontSize: '1rem',
+  fontSize: 'clamp(1.35rem, 2vw, 1.7rem)',
   fontWeight: 600,
+  letterSpacing: '-0.035em',
   color: 'var(--color-text-primary)',
 };
 
 const cardDescriptionStyle = {
   margin: '0.35rem 0 0',
-  fontSize: '0.86rem',
+  maxWidth: '65ch',
+  fontSize: '0.92rem',
   color: 'var(--color-text-secondary)',
-  lineHeight: 1.4,
+  lineHeight: 1.55,
 };
 
 const cardBodyStyle = {
@@ -669,46 +504,6 @@ const buttonStyle = {
   transition: 'background-color 0.2s ease, border-color 0.2s ease, opacity 0.2s ease',
   boxShadow: 'none',
 };
-
-const colorPickerStyle = {
-  width: 46,
-  height: 36,
-  padding: 0,
-  border: '1px solid var(--ui-muted-border)',
-  background: 'var(--ui-control-bg)',
-  borderRadius: 'var(--border-radius-md)',
-  cursor: 'pointer',
-};
-
-const accentBadgeStyle = {
-  display: 'inline-flex',
-  alignItems: 'center',
-  gap: '0.4rem',
-  padding: '0.35rem 0.75rem',
-  borderRadius: 'var(--border-radius-md)',
-  border: '1px solid transparent',
-  background: 'var(--ui-control-bg)',
-  fontSize: '0.85rem',
-  fontWeight: 600,
-  color: 'var(--color-text-primary)',
-  minWidth: 96,
-  justifyContent: 'center',
-};
-
-const presetButtonStyle = (color, isActive) => ({
-  width: 34,
-  height: 34,
-  borderRadius: '50%',
-  border: isActive ? `2px solid var(--color-text-primary)` : '2px solid transparent',
-  outline: `1px solid ${isActive ? 'var(--color-text-primary)' : 'var(--color-border)'}`,
-  background: color,
-  cursor: 'pointer',
-  display: 'grid',
-  placeItems: 'center',
-  boxShadow: 'none',
-  transition: 'outline-color 0.2s ease',
-  transform: 'none',
-});
 
 const badgeStyle = {
   display: 'inline-flex',
@@ -946,7 +741,7 @@ const statusBubbleStyle = (variant = 'info') => {
     },
     accent: {
       border: 'var(--color-accent)',
-      background: 'var(--color-accent-bg, rgba(99, 102, 241, 0.08))',
+      background: 'var(--color-accent-bg, rgba(127, 127, 127, 0.08))',
       color: 'var(--color-accent)',
     },
     danger: {

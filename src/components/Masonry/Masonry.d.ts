@@ -18,6 +18,7 @@ export interface MasonryProps {
   actionsMode?: 'buttons' | 'menu';
   selectedId?: string | number | null;
   preferSummary?: boolean;
+  columnAdjustment?: number;
 }
 declare const Masonry: React.FC<MasonryProps>;
 export default Masonry;

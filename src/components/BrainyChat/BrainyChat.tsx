@@ -51,6 +51,7 @@ interface ChatThread {
 interface Props {
   vaults: VaultInfo[];
   currentVaultId?: string;
+  variant?: 'panel' | 'page';
   onClose: () => void;
   onDataChange?: () => void;
   onOpenSettings?: () => void;
@@ -85,7 +86,7 @@ const generateThreadTitle = (messages: ChatMessage[]) => {
   return 'New Chat';
 };
 
-const BrainyChat: React.FC<Props> = ({ vaults, currentVaultId, onClose, onDataChange, onOpenSettings }) => {
+const BrainyChat: React.FC<Props> = ({ vaults, currentVaultId, variant = 'panel', onClose, onDataChange, onOpenSettings }) => {
   const { getVaultKey } = useVaultPassword();
   const promptDialog = usePrompt();
   const confirmDialog = useConfirm();
@@ -502,7 +503,7 @@ const BrainyChat: React.FC<Props> = ({ vaults, currentVaultId, onClose, onDataCh
   };
 
   return (
-    <div className={styles.container} data-testid="brainy-chat">
+    <div className={`${styles.container} ${variant === 'page' ? styles.page : ''}`} data-testid="brainy-chat">
       <div className={styles.header}>
         <div className={styles.headerMain}>
           <span
