@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useTheme } from '../../contexts/ThemeContext';
 import { invoke } from '@tauri-apps/api/core';
 import { useHotkey } from '../../contexts/HotkeyContext';
@@ -10,27 +10,34 @@ import {
   LinkIcon,
   SwatchIcon,
   LockClosedIcon,
-  CloudArrowDownIcon,
   SparklesIcon,
-  ArrowUpCircleIcon,
 } from '@heroicons/react/24/outline';
 import styles from './Settings.module.css';
 
 // Tab configuration
 const TABS = [
+  { id: 'general', label: 'General', Icon: SwatchIcon },
   { id: 'capture', label: 'Capture', Icon: LinkIcon },
-  { id: 'appearance', label: 'Appearance', Icon: SwatchIcon },
-  { id: 'security', label: 'Security', Icon: LockClosedIcon },
-  { id: 'data', label: 'Data', Icon: CloudArrowDownIcon },
   { id: 'ai', label: 'AI', Icon: SparklesIcon },
-  { id: 'updates', label: 'Updates', Icon: ArrowUpCircleIcon },
+  { id: 'privacy-data', label: 'Privacy & Data', Icon: LockClosedIcon },
 ];
+
+const SECTION_TARGETS = {
+  'appearance-settings': { tabId: 'general', targetId: 'appearance-settings' },
+  'update-settings': { tabId: 'general', targetId: 'update-settings' },
+  'capture-settings': { tabId: 'capture', targetId: 'capture-settings' },
+  'ai-settings': { tabId: 'ai', targetId: 'ai-settings' },
+  'security-settings': { tabId: 'privacy-data', targetId: 'security-settings' },
+  'backup-settings': { tabId: 'privacy-data', targetId: 'backup-settings' },
+  'sync-settings': { tabId: 'privacy-data', targetId: 'sync-settings' },
+};
 
 function TabButton({ tab, isActive, onClick }) {
   const Icon = tab.Icon;
   
   return (
     <button
+      type="button"
       role="tab"
       aria-selected={isActive}
       aria-controls={`panel-${tab.id}`}
@@ -140,19 +147,33 @@ function CaptureSettings() {
 
   return (
     <SettingCard
+      id="capture-settings"
       title="Capture tools"
       description="Install the bookmarklet or trigger capture with a keyboard shortcut."
     >
       <div style={cardSectionStackStyle}>
-        <div style={captureCardGridStyle}>
+        <div style={captureCardGridStyle} data-testid="capture-methods">
           <div style={hotkeyPanelStyle}>
             <div style={hotkeyMetaRowStyle}>
-              <span style={subtleLabelStyle}>Capture hotkey</span>
-              <span style={hotkeyBadgeStyle}>{hotkeySummary}</span>
+              <div style={captureMethodCopyStyle}>
+                <h3 style={captureMethodHeadingStyle}>Capture hotkey</h3>
+                <p style={bodyTextStyle}>
+                  Use a custom shortcut to open capture without leaving brainbox.
+                </p>
+              </div>
+              <div style={inlineActionRowStyle}>
+                <span style={hotkeyBadgeStyle}>{hotkeySummary}</span>
+                {!editingHotkey && (
+                  <button
+                    type="button"
+                    style={buttonStyle}
+                    onClick={() => setEditingHotkey(true)}
+                  >
+                    Edit hotkey
+                  </button>
+                )}
+              </div>
             </div>
-            <p style={bodyTextStyle}>
-              Use a custom shortcut to open capture without leaving brainbox.
-            </p>
             {editingHotkey ? (
               <div style={{ display: 'grid', gap: '0.75rem' }}>
                 <input
@@ -181,53 +202,16 @@ function CaptureSettings() {
                   </button>
                 </div>
               </div>
-            ) : (
-              <button
-                type="button"
-                style={buttonStyle}
-                onClick={() => setEditingHotkey(true)}
-              >
-                Edit hotkey
-              </button>
-            )}
+            ) : null}
             {hotkeyError && (
               <div style={statusBubbleStyle('danger')} role="alert">
                 {hotkeyError}
               </div>
             )}
-
-            {capturedUrl ? (
-              <div style={capturePreviewStyle}>
-                <span style={subtleLabelStyle}>Recent capture preview</span>
-                <p style={bodyTextMutedStyle}>
-                  Some sites block previews in iframes (X-Frame-Options). Open the capture in brainbox if the preview is blank.
-                </p>
-                <iframe
-                  src={capturedUrl}
-                  title="Captured content preview"
-                  style={captureIframeStyle}
-                  sandbox="allow-same-origin allow-scripts allow-popups allow-forms"
-                />
-              </div>
-            ) : (
-              <div style={capturePlaceholderStyle}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-                  <span style={subtleLabelStyle}>Waiting for a capture</span>
-                  <p style={bodyTextMutedStyle}>
-                    Use your hotkey or bookmarklet to send a page. We'll show a live preview here when something arrives.
-                  </p>
-                </div>
-                <div style={inlineActionRowStyle}>
-                  <span style={{ fontSize: '0.85rem', color: 'var(--color-text-secondary)' }}>
-                    Need a shortcut? Click "Edit hotkey" above.
-                  </span>
-                </div>
-              </div>
-            )}
           </div>
 
           <div style={bookmarkletPanelStyle}>
-            <span style={subtleLabelStyle}>Bookmarklet</span>
+            <h3 style={captureMethodHeadingStyle}>Bookmarklet</h3>
             <p style={bodyTextStyle}>
               Drag the button to your bookmarks bar. Select text before using it to capture a sourced note, or use it without a selection to save the page.
             </p>
@@ -242,29 +226,32 @@ function CaptureSettings() {
               >
                 Capture (Localhost - Recommended)
               </button>
-              <button
-                type="button"
-                style={bookmarkletLinkStyle('secondary')}
-                draggable="true"
-                onDragStart={(event) => handleBookmarkletDragStart(event, BOOKMARKLET_PROTOCOL)}
-                onClick={() => handleBookmarkletCopy(BOOKMARKLET_PROTOCOL)}
-                aria-label="Drag to bookmarks to install capture bookmarklet using protocol handler"
-              >
-                Capture (Protocol)
-              </button>
             </div>
             <p style={bodyTextMutedStyle}>
               Tip: If you cannot drag, right-click the button and choose "Bookmark link". Configure HTTPS-only mode to allow 127.0.0.1 if needed.
             </p>
-            <div style={inlineActionRowStyle}>
-              <button
-                type="button"
-                style={{ ...buttonStyle, background: 'var(--color-accent)', color: 'var(--color-on-primary)', border: '1px solid var(--color-accent)' }}
-                onClick={handleRegisterProtocol}
-              >
-                Register Protocol Handler (Windows)
-              </button>
-            </div>
+            <details style={captureAlternativeStyle}>
+              <summary style={captureAlternativeSummaryStyle}>Use the Windows protocol handler instead</summary>
+              <div style={captureAlternativeBodyStyle}>
+                <button
+                  type="button"
+                  style={{ ...buttonStyle, background: 'var(--color-accent)', color: 'var(--color-on-primary)', border: '1px solid var(--color-accent)' }}
+                  onClick={handleRegisterProtocol}
+                >
+                  Register Protocol Handler (Windows)
+                </button>
+                <button
+                  type="button"
+                  style={bookmarkletLinkStyle('secondary')}
+                  draggable="true"
+                  onDragStart={(event) => handleBookmarkletDragStart(event, BOOKMARKLET_PROTOCOL)}
+                  onClick={() => handleBookmarkletCopy(BOOKMARKLET_PROTOCOL)}
+                  aria-label="Drag to bookmarks to install capture bookmarklet using protocol handler"
+                >
+                  Capture (Protocol)
+                </button>
+              </div>
+            </details>
             {regStatus !== 'idle' && regMessage && (
               <div style={statusBubbleStyle(statusVariant)} role="status">
                 {regMessage}
@@ -273,6 +260,34 @@ function CaptureSettings() {
           </div>
         </div>
 
+        {capturedUrl ? (
+          <div style={capturePreviewStyle} data-testid="capture-preview">
+            <h3 style={captureMethodHeadingStyle}>Recent capture preview</h3>
+            <p style={bodyTextMutedStyle}>
+              Some sites block previews in iframes (X-Frame-Options). Open the capture in brainbox if the preview is blank.
+            </p>
+            <iframe
+              src={capturedUrl}
+              title="Captured content preview"
+              style={captureIframeStyle}
+              sandbox="allow-same-origin allow-scripts allow-popups allow-forms"
+            />
+          </div>
+        ) : (
+          <div style={capturePlaceholderStyle} data-testid="capture-preview">
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+              <h3 style={captureMethodHeadingStyle}>Waiting for a capture</h3>
+              <p style={bodyTextMutedStyle}>
+                Use your hotkey or bookmarklet to send a page. We'll show a live preview here when something arrives.
+              </p>
+            </div>
+            <div style={inlineActionRowStyle}>
+              <span style={{ fontSize: '0.85rem', color: 'var(--color-text-secondary)' }}>
+                Need a shortcut? Click "Edit hotkey" above.
+              </span>
+            </div>
+          </div>
+        )}
       </div>
     </SettingCard>
   );
@@ -285,6 +300,7 @@ function AppearanceSettings() {
 
   return (
     <SettingCard
+      id="appearance-settings"
       title="Appearance"
       description="Choose a neutral light or dark workspace."
       action={
@@ -304,6 +320,7 @@ function AppearanceSettings() {
 function SecuritySettings() {
   return (
     <SettingCard
+      id="security-settings"
       title="Security"
       description="Manage vault encryption keys and session security."
     >
@@ -351,31 +368,38 @@ function AISettingsPanel() {
 }
 
 const Settings = ({ scrollToSection, onScrollComplete, onSyncDataChange }) => {
-  const [activeTab, setActiveTab] = useState('capture');
-
-  // Map scrollToSection values to tab IDs
-  const sectionToTab = {
-    'ai-settings': 'ai',
-    'sync-settings': 'data',
-    'capture-settings': 'capture',
-    'appearance-settings': 'appearance',
-    'security-settings': 'security',
-    'backup-settings': 'data',
-    'update-settings': 'updates',
-  };
+  const [activeTab, setActiveTab] = useState('general');
+  const tabContentRef = useRef(null);
 
   // Handle scroll to section when navigating from another page
   useEffect(() => {
     if (scrollToSection) {
       const timer = setTimeout(() => {
-        // Map the scroll section to a tab
-        const tabId = sectionToTab[scrollToSection] || scrollToSection;
+        const destination = SECTION_TARGETS[scrollToSection];
+        const tabId = destination?.tabId || scrollToSection;
         const validTab = TABS.find(t => t.id === tabId);
         if (validTab) {
           setActiveTab(tabId);
-        }
-        if (onScrollComplete) {
-          onScrollComplete();
+
+          requestAnimationFrame(() => {
+            const panel = tabContentRef.current;
+            const target = destination?.targetId
+              ? document.getElementById(destination.targetId)
+              : null;
+
+            if (panel && target) {
+              panel.scrollTop = Math.max(
+                0,
+                panel.scrollTop + target.getBoundingClientRect().top - panel.getBoundingClientRect().top,
+              );
+            } else if (panel) {
+              panel.scrollTop = 0;
+            }
+
+            onScrollComplete?.();
+          });
+        } else {
+          onScrollComplete?.();
         }
       }, 100);
       return () => clearTimeout(timer);
@@ -383,26 +407,25 @@ const Settings = ({ scrollToSection, onScrollComplete, onSyncDataChange }) => {
   }, [scrollToSection, onScrollComplete]);
 
   const handleTabChange = useCallback((tabId) => {
+    if (tabContentRef.current) {
+      tabContentRef.current.scrollTop = 0;
+    }
     setActiveTab(tabId);
   }, []);
 
   // Render the active tab's content
   const renderTabContent = () => {
     switch (activeTab) {
+      case 'general':
+        return <><AppearanceSettings /><UpdateSettings /></>;
       case 'capture':
         return <CaptureSettings />;
-      case 'appearance':
-        return <AppearanceSettings />;
-      case 'security':
-        return <SecuritySettings />;
-      case 'data':
-        return <><SyncSettings onDataChange={onSyncDataChange} /><BackupSettings /></>;
       case 'ai':
         return <AISettingsPanel />;
-      case 'updates':
-        return <UpdateSettings />;
+      case 'privacy-data':
+        return <><SecuritySettings /><SyncSettings onDataChange={onSyncDataChange} /><BackupSettings /></>;
       default:
-        return <CaptureSettings />;
+        return <><AppearanceSettings /><UpdateSettings /></>;
     }
   };
 
@@ -410,24 +433,37 @@ const Settings = ({ scrollToSection, onScrollComplete, onSyncDataChange }) => {
     <section className={styles.settings} data-testid="settings-section">
       <header className={styles.pageHeader}>
         <h1>Settings</h1>
-        <p>Manage capture, privacy, backups, AI, and updates.</p>
+        <p>Manage appearance, capture, AI, privacy, backups, and updates.</p>
       </header>
 
       <div className={styles.layout}>
         <div className={styles.navWrap}>
           <nav className={styles.tabNav} role="tablist" aria-label="Settings sections">
-          {TABS.map((tab) => (
-            <TabButton
-              key={tab.id}
-              tab={tab}
-              isActive={activeTab === tab.id}
-              onClick={() => handleTabChange(tab.id)}
-            />
-          ))}
+            {TABS.map((tab) => (
+              <TabButton
+                key={tab.id}
+                tab={tab}
+                isActive={activeTab === tab.id}
+                onClick={() => handleTabChange(tab.id)}
+              />
+            ))}
           </nav>
+          <div className={styles.mobileSelectWrap}>
+            <select
+              className={styles.mobileSelect}
+              value={activeTab}
+              onChange={(event) => handleTabChange(event.target.value)}
+              aria-label="Settings section"
+            >
+              {TABS.map((tab) => (
+                <option key={tab.id} value={tab.id}>{tab.label}</option>
+              ))}
+            </select>
+          </div>
         </div>
 
         <div
+          ref={tabContentRef}
           className={styles.tabContent}
           role="tabpanel"
           id={`panel-${activeTab}`}
@@ -486,6 +522,17 @@ const subtleLabelStyle = {
   letterSpacing: '0.05em',
   textTransform: 'uppercase',
   color: 'var(--color-text-secondary)',
+};
+
+const captureMethodHeadingStyle = {
+  ...subtleLabelStyle,
+  margin: 0,
+};
+
+const captureMethodCopyStyle = {
+  display: 'grid',
+  gap: '0.4rem',
+  minWidth: 0,
 };
 
 const labelStyle = {
@@ -562,6 +609,25 @@ const bookmarkletButtonsStyle = {
   gap: '0.75rem',
 };
 
+const captureAlternativeStyle = {
+  display: 'grid',
+  gap: '0.75rem',
+};
+
+const captureAlternativeSummaryStyle = {
+  color: 'var(--color-text-secondary)',
+  cursor: 'pointer',
+  fontSize: '0.85rem',
+  fontWeight: 600,
+};
+
+const captureAlternativeBodyStyle = {
+  display: 'flex',
+  flexWrap: 'wrap',
+  gap: '0.75rem',
+  paddingTop: '0.75rem',
+};
+
 const bookmarkletLinkStyle = (variant = 'primary') => ({
   display: 'inline-flex',
   alignItems: 'center',
@@ -593,6 +659,13 @@ const formGridStyle = {
 
 const inlineActionRowStyle = {
   display: 'flex',
+  flexWrap: 'wrap',
+  gap: '0.75rem',
+};
+
+const updatePrimaryActionsStyle = {
+  display: 'flex',
+  alignItems: 'center',
   flexWrap: 'wrap',
   gap: '0.75rem',
 };
@@ -826,17 +899,15 @@ function UpdateSettings() {
 
   return (
     <SettingCard
+      id="update-settings"
       title="App updates"
       description="Check for a release, then download it manually from GitHub."
       action={
-        <div style={badgeStyle} aria-live="polite">
-          <span style={{ opacity: 0.65 }}>Version</span>
-          <span>{releaseName || '--'}</span>
-        </div>
-      }
-    >
-      <div style={cardSectionStackStyle}>
-        <div style={inlineActionRowStyle}>
+        <div style={updatePrimaryActionsStyle} data-testid="update-primary-actions">
+          <div style={badgeStyle} aria-live="polite">
+            <span style={{ opacity: 0.65 }}>Version</span>
+            <span>{releaseName || '--'}</span>
+          </div>
           <button
             type="button"
             onClick={checkForUpdates}
@@ -845,7 +916,17 @@ function UpdateSettings() {
           >
             {isChecking ? 'Checking...' : 'Check for updates'}
           </button>
+        </div>
+      }
+    >
+      <div style={cardSectionStackStyle}>
+        {updateStatus && (
+          <div style={statusBubbleStyle(hasUpdate ? 'accent' : 'info')} role="status">
+            {updateStatus}
+          </div>
+        )}
 
+        <div style={inlineActionRowStyle} data-testid="update-secondary-actions">
           <a href={releasesUrl} target="_blank" rel="noreferrer" style={buttonStyle}>
             Open GitHub Releases
           </a>
@@ -853,12 +934,6 @@ function UpdateSettings() {
             Copy release link
           </button>
         </div>
-
-        {updateStatus && (
-          <div style={statusBubbleStyle(hasUpdate ? 'accent' : 'info')} role="status">
-            {updateStatus}
-          </div>
-        )}
       </div>
     </SettingCard>
   )

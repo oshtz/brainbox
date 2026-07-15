@@ -9,7 +9,7 @@
 }
 
 .header {
-  min-height: 64px;
+  min-height: 58px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -724,6 +724,6 @@
   }
 
   .inputArea {
-    padding: 10px 12px calc(12px + env(safe-area-inset-bottom));
+    padding: 10px 12px calc(90px + env(safe-area-inset-bottom));
   }
 }

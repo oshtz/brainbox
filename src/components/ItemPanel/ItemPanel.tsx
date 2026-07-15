@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { XMarkIcon, EllipsisVerticalIcon } from '@heroicons/react/24/outline';
+import { ChevronDownIcon, ChevronUpIcon, XMarkIcon, EllipsisVerticalIcon } from '@heroicons/react/24/outline';
 import styles from './ItemPanel.module.css';
 import { generateMeshGradientDataURL } from '../../utils/meshGradient';
 import { getYouTubeId, youtubeEmbedUrl, isUrl as looksLikeUrl, splitSourcedNote } from '../../utils/urlPreview';
@@ -26,9 +26,13 @@ interface Props {
   onSummarizingChange?: (id: string, busy: boolean) => void;
   relatedItems?: Item[];
   onSelectRelated?: (item: Item) => void;
+  position?: number;
+  total?: number;
+  onPrevious?: () => void;
+  onNext?: () => void;
 }
 
-const ItemPanel: React.FC<Props> = ({ item, vaults, currentVaultId, onClose, onRename, onMove, onUpdateImage, onDelete, onUpdateSummary, onUpdateContent, summarizing = false, onSummarizingChange, relatedItems = [], onSelectRelated }) => {
+const ItemPanel: React.FC<Props> = ({ item, vaults, currentVaultId, onClose, onRename, onMove, onUpdateImage, onDelete, onUpdateSummary, onUpdateContent, summarizing = false, onSummarizingChange, relatedItems = [], onSelectRelated, position, total, onPrevious, onNext }) => {
   const { getVaultKey } = useVaultPassword();
   const { showError, showSuccess, showWarning } = useToast();
   const promptDialog = usePrompt();
@@ -44,6 +48,7 @@ const ItemPanel: React.FC<Props> = ({ item, vaults, currentVaultId, onClose, onR
   const [isPasting, setIsPasting] = useState(false);
   const [imgMenuOpen, setImgMenuOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const moveSelectRef = useRef<HTMLSelectElement | null>(null);
   const [summary, setSummary] = useState<string>(item?.summary || '');
   const [sumError, setSumError] = useState('');
   const activeItemIdRef = useRef(String(item?.id));
@@ -189,11 +194,45 @@ const ItemPanel: React.FC<Props> = ({ item, vaults, currentVaultId, onClose, onR
   const host = (() => { try { return new URL(contentEdit).hostname.replace(/^www\./, ''); } catch { return ''; } })();
   const youtubeId = isUrl ? getYouTubeId(contentEdit) : null;
 
+  useEffect(() => {
+    const handleReviewShortcut = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey) return;
+      const target = event.target as HTMLElement | null;
+      if (target?.matches('input, textarea, select, [contenteditable="true"]')) return;
+      if (document.querySelector('[role="dialog"], [role="menu"]')) return;
+
+      const key = event.key.toLowerCase();
+      if (key === 'j' && onNext) {
+        event.preventDefault();
+        onNext();
+      } else if (key === 'k' && onPrevious) {
+        event.preventDefault();
+        onPrevious();
+      } else if (key === 'm') {
+        event.preventDefault();
+        moveSelectRef.current?.focus();
+      } else if (event.key === 'Enter') {
+        if (target?.matches('button, a')) return;
+        const source = sourcedNote.sourceUrl || (contentIsUrl ? contentEdit : '');
+        if (!source) return;
+        event.preventDefault();
+        window.open(source, '_blank');
+      }
+    };
+    window.addEventListener('keydown', handleReviewShortcut, true);
+    return () => window.removeEventListener('keydown', handleReviewShortcut, true);
+  }, [contentEdit, contentIsUrl, onNext, onPrevious, sourcedNote.sourceUrl]);
+
   return (
     <aside className={styles.panel} data-testid="item-panel" aria-label="Item details">
       <div className={styles.header}>
-        <span className={styles.panelKind}>{isUrl ? 'Link' : 'Note'}</span>
+        <div className={styles.panelContext}>
+          <span className={styles.panelKind}>{isUrl ? 'Link' : 'Note'}</span>
+          {position && total && <span className={styles.position} data-testid="item-position">{position} of {total}</span>}
+        </div>
         <div className={styles.headerActions}>
+          <button type="button" className={styles.iconButton} aria-label="Previous item" title="Previous item (K)" onClick={onPrevious} disabled={!onPrevious}><ChevronUpIcon className={styles.iconButtonSvg} /></button>
+          <button type="button" className={styles.iconButton} aria-label="Next item" title="Next item (J)" onClick={onNext} disabled={!onNext}><ChevronDownIcon className={styles.iconButtonSvg} /></button>
           <div className={styles.menuWrap}>
             <input
               ref={fileInputRef}
@@ -401,7 +440,7 @@ const ItemPanel: React.FC<Props> = ({ item, vaults, currentVaultId, onClose, onR
         </div>
       </div>
       <div className={styles.footer}>
-        <select className={styles.select} aria-label="Move item to vault" value={targetVault} onChange={(e) => setTargetVault(e.target.value)}>
+        <select ref={moveSelectRef} className={styles.select} aria-label="Move item to vault" value={targetVault} onChange={(e) => setTargetVault(e.target.value)}>
           {vaults.map(v => (
             <option key={v.id} value={v.id}>{v.title}</option>
           ))}

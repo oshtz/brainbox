@@ -323,6 +323,24 @@ function App() {
                   onCreateNote={() => { void openCapture(); }}
                   onCreateVault={() => setIsCreateVaultOpen(true)}
                   onOpenBrainy={openBrainy}
+                  brainyOpen={isBrainyOpen && brainyMode === 'sidebar'}
+                  onCloseBrainy={() => setIsBrainyOpen(false)}
+                  brainyPanel={(
+                    <BrainyChat
+                      vaults={vaultProps}
+                      currentVaultId={selectedVaultId === 'all' ? undefined : selectedVaultId}
+                      onClose={() => setIsBrainyOpen(false)}
+                      onOpenSettings={() => {
+                        setSettingsTarget('ai-settings');
+                        navigate('settings');
+                      }}
+                      onDataChange={() => {
+                        fetchVaults();
+                        setLibraryRefreshToken((token) => token + 1);
+                        window.dispatchEvent(new Event('brainbox:data-changed'));
+                      }}
+                    />
+                  )}
                   summarizingItemIds={summarizingItemIds}
                   onSummarizingChange={(id, busy) => setSummarizingItemIds((current) => {
                     const next = new Set(current);
@@ -334,25 +352,6 @@ function App() {
               )}
             </div>
           </main>
-
-          {isBrainyOpen && brainyMode === 'sidebar' && (
-            <aside className={styles.brainyChatPanel} aria-label="brainy assistant">
-              <BrainyChat
-                vaults={vaultProps}
-                currentVaultId={selectedVaultId === 'all' ? undefined : selectedVaultId}
-                onClose={() => setIsBrainyOpen(false)}
-                onOpenSettings={() => {
-                  setSettingsTarget('ai-settings');
-                  navigate('settings');
-                }}
-                onDataChange={() => {
-                  fetchVaults();
-                  setLibraryRefreshToken((token) => token + 1);
-                  window.dispatchEvent(new Event('brainbox:data-changed'));
-                }}
-              />
-            </aside>
-          )}
         </div>
       </div>
 

@@ -4,24 +4,17 @@
   width: 100%;
   max-width: 100vw;
   height: 100%;
-  background: var(--color-surface);
-  border-left: 1px solid var(--ui-hairline-border);
+  background: var(--ui-panel-strong-bg);
   display: flex;
   flex-direction: column;
   z-index: 1;
-  animation: panelSlideInRight 0.16s ease-out;
-}
-
-@keyframes panelSlideInRight {
-  from { opacity: 0; transform: translateX(16px); }
-  to { opacity: 1; transform: translateX(0); }
 }
 
 .header {
-  min-height: 52px;
+  min-height: 58px;
   padding: 8px 12px 8px 18px;
   border-bottom: 1px solid var(--ui-hairline-border);
-  background: var(--color-surface);
+  background: var(--ui-panel-strong-bg);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -34,6 +27,19 @@
   color: var(--color-text-tertiary);
   font-size: 11px;
   font-weight: var(--font-weight-medium);
+}
+
+.panelContext {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.position {
+  color: var(--color-text-tertiary);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
 }
 
 .headerActions {
@@ -58,6 +64,12 @@
 .iconButton:hover {
   background: var(--ui-control-hover-bg);
   color: var(--color-text-primary);
+}
+
+.iconButton:disabled {
+  color: var(--color-text-tertiary);
+  opacity: 0.42;
+  cursor: default;
 }
 
 .iconButtonSvg {
@@ -483,7 +495,7 @@
 .footer {
   padding: 12px 14px;
   border-top: 1px solid var(--ui-hairline-border);
-  background: var(--color-surface);
+  background: var(--ui-panel-strong-bg);
   display: flex;
   align-items: center;
   gap: 8px;
@@ -534,7 +546,6 @@
   .panel {
     flex-basis: 100%;
     width: 100%;
-    border-left: 0;
   }
 
   .footer {

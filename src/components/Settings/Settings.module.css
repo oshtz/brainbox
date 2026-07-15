@@ -52,6 +52,21 @@
   gap: 3px;
 }
 
+.mobileSelectWrap {
+  display: none;
+}
+
+.mobileSelect {
+  width: 100%;
+  min-height: 42px;
+  padding: 0 40px 0 12px;
+  border: 1px solid var(--ui-muted-border);
+  border-radius: 10px;
+  background: var(--ui-input-bg);
+  color: var(--color-text-primary);
+  font: inherit;
+}
+
 .tabButton {
   position: relative;
   display: flex;
@@ -143,37 +158,20 @@
   .navWrap {
     position: static;
     flex: 0 0 auto;
+    align-self: stretch;
     z-index: 10;
-    margin-inline: -4px;
-    padding: 6px 4px 10px;
-    overflow-x: auto;
+    width: 100%;
+    padding: 6px 0 10px;
     background: var(--ui-main-background);
   }
 
   .tabNav {
-    display: flex;
-    width: max-content;
-    min-width: 100%;
+    display: none;
   }
 
-  .tabButton {
-    width: auto;
-    min-height: 38px;
-    white-space: nowrap;
-  }
-
-  .tabButton::before {
-    top: auto;
-    right: 12px;
-    bottom: 0;
-    left: 12px;
-    width: auto;
-    height: 2px;
-    transform: scaleX(0.4);
-  }
-
-  .tabButtonActive::before {
-    transform: scaleX(1);
+  .mobileSelectWrap {
+    display: block;
+    width: 100%;
   }
 
   .tabContent {
@@ -187,8 +185,4 @@
     font-size: clamp(2.3rem, 12vw, 3.4rem);
   }
 
-  .tabButton {
-    gap: 7px;
-    padding-inline: 9px;
-  }
 }

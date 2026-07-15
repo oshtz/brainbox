@@ -494,29 +494,6 @@
   }
 }
 
-/* brainy Chat Panel */
-.brainyChatPanel {
-  width: 400px;
-  min-width: 340px;
-  max-width: min(440px, 65vw);
-  display: flex;
-  flex-direction: column;
-  flex: 0 0 auto;
-  background: var(--ui-panel-strong-bg);
-  border: 0;
-  border-left: 1px solid var(--ui-hairline-border);
-  border-radius: 0;
-  box-shadow: none;
-  overflow: hidden;
-  direction: rtl;
-  resize: horizontal;
-  animation: slideInRight 0.16s ease-out;
-}
-
-.brainyChatPanel > * {
-  direction: ltr;
-}
-
 .brainyOrb {
   position: fixed;
   right: 28px;
@@ -562,32 +539,9 @@
 }
 
 
-@keyframes slideInRight {
-  from {
-    transform: translateX(20px);
-  }
-  to {
-    transform: translateX(0);
-  }
-}
-
 @media (max-width: 1024px) {
   .appNudged {
     padding-right: 0;
-  }
-
-  .brainyChatPanel {
-    position: fixed;
-    top: calc(48px + var(--space-md));
-    right: var(--space-md);
-    bottom: var(--space-md);
-    width: calc(100% - var(--space-md) * 2);
-    max-width: 420px;
-    z-index: 100;
-    resize: none;
-    border: 1px solid var(--ui-soft-border);
-    border-radius: 14px;
-    box-shadow: var(--shadow-sm);
   }
 }
 
@@ -621,16 +575,6 @@
 }
 
 @media (max-width: 576px) {
-  .brainyChatPanel {
-    top: 0;
-    right: 0;
-    bottom: 0;
-    width: 100%;
-    max-width: 100%;
-    border: 0;
-    border-radius: 0;
-  }
-
   .vaultSearchBox {
     min-height: 44px;
   }
@@ -663,9 +607,6 @@
     overflow: visible;
   }
 
-  .brainyChatPanel {
-    display: none;
-  }
 }
 .brainyFullPage {
   width: 100%;

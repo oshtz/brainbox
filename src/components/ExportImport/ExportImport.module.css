@@ -13,6 +13,23 @@
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.exportGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+  align-items: start;
+}
+
+.exportControls {
+  display: grid;
+  gap: 1rem;
+}
+
+.exportControls .field {
+  margin-bottom: 0;
 }
 
 .sectionLabel {
@@ -140,6 +157,17 @@
   line-height: 1.5;
 }
 
+.importRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.importRow .description {
+  max-width: 60ch;
+}
+
 .fileInput {
   display: none;
 }
@@ -157,6 +185,7 @@
   font-weight: 600;
   font-size: 0.95rem;
   transition: all 0.2s ease;
+  flex: 0 0 auto;
 }
 
 .fileLabel:hover {
@@ -280,4 +309,36 @@
 .cancelButton:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+@media (max-width: 620px) {
+  .exportGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .importRow {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .fileLabel,
+  .primaryButton {
+    width: 100%;
+  }
+}
+
+@media (max-width: 420px) {
+  .selectionActions {
+    flex-basis: 100%;
+  }
+
+  .dialogActions {
+    align-items: stretch;
+    flex-direction: column-reverse;
+  }
+
+  .dialogActions .cancelButton,
+  .dialogActions .primaryButton {
+    width: 100%;
+  }
 }

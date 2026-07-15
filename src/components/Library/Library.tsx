@@ -11,12 +11,135 @@ import { BackendVaultItem, BackendUrlMetadata, ItemMetadata } from '../../types'
 import { isTauriRuntime } from '../../utils/tauriRuntime';
 import { listE2EItems } from '../../utils/e2eFixtures';
 import { rediscoverItems, relatedItems as getRelatedItems } from '../../utils/serendipity';
-import { MinusIcon, PlusIcon } from '@heroicons/react/24/outline';
+import { CheckIcon, ChevronDownIcon, MinusIcon, PlusIcon } from '@heroicons/react/24/outline';
 
 const CARD_SIZES = [0, 1, 2] as const;
 const CARD_SIZE_KEY = 'brainbox-library-card-size';
 
 type Vault = { id: string; title: string; has_password?: boolean };
+type ToolbarOption = { value: string; label: string };
+
+const ToolbarSelect = ({
+  label,
+  value,
+  options,
+  onChange,
+  className = '',
+}: {
+  label: string;
+  value: string;
+  options: ToolbarOption[];
+  onChange: (value: string) => void;
+  className?: string;
+}) => {
+  const [open, setOpen] = useState(false);
+  const openRef = useRef(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const optionRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const activeIndexRef = useRef(0);
+  const menuId = React.useId();
+  const selectedIndex = Math.max(0, options.findIndex((option) => option.value === value));
+
+  const setMenuOpen = (next: boolean) => {
+    openRef.current = next;
+    if (next) activeIndexRef.current = selectedIndex;
+    setOpen(next);
+  };
+
+  useEffect(() => {
+    if (!open) return;
+    const frame = window.requestAnimationFrame(() => optionRefs.current[activeIndexRef.current]?.focus());
+    const closeOutside = (event: PointerEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) setMenuOpen(false);
+    };
+    document.addEventListener('pointerdown', closeOutside);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      document.removeEventListener('pointerdown', closeOutside);
+    };
+  }, [open, selectedIndex]);
+
+  const moveFocus = (direction: number) => {
+    const current = optionRefs.current.indexOf(document.activeElement as HTMLButtonElement);
+    const start = current >= 0 ? current : activeIndexRef.current;
+    const next = (start + direction + options.length) % options.length;
+    activeIndexRef.current = next;
+    const focusNext = () => optionRefs.current[next]?.focus();
+    focusNext();
+    if (!optionRefs.current[next]) window.requestAnimationFrame(focusNext);
+  };
+
+  return (
+    <div
+      ref={rootRef}
+      className={`${styles.toolbarSelect} ${className}`}
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setMenuOpen(false);
+      }}
+      onKeyDown={(event) => {
+        if (!openRef.current && (event.key === 'ArrowDown' || event.key === 'ArrowUp')) {
+          event.preventDefault();
+          setMenuOpen(true);
+          return;
+        }
+        if (!openRef.current) return;
+        if (event.key === 'Escape') {
+          event.preventDefault();
+          setMenuOpen(false);
+          buttonRef.current?.focus();
+        } else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+          event.preventDefault();
+          moveFocus(event.key === 'ArrowDown' ? 1 : -1);
+        } else if ((event.key === 'Enter' || event.key === ' ') && event.target === buttonRef.current) {
+          event.preventDefault();
+          onChange(options[activeIndexRef.current].value);
+          setMenuOpen(false);
+        } else if (event.key === 'Home' || event.key === 'End') {
+          event.preventDefault();
+          activeIndexRef.current = event.key === 'Home' ? 0 : options.length - 1;
+          optionRefs.current[activeIndexRef.current]?.focus();
+        }
+      }}
+    >
+      <button
+        ref={buttonRef}
+        type="button"
+        className={styles.toolbarSelectTrigger}
+        aria-label={label}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-controls={open ? menuId : undefined}
+        onClick={() => setMenuOpen(!openRef.current)}
+      >
+        <span>{options[selectedIndex]?.label}</span>
+        <ChevronDownIcon className={styles.toolbarSelectChevron} aria-hidden="true" />
+      </button>
+      {open && (
+        <div id={menuId} className={styles.toolbarSelectMenu} role="menu" aria-label={`${label} options`}>
+          {options.map((option, index) => (
+            <button
+              key={option.value}
+              ref={(element) => { optionRefs.current[index] = element; }}
+              type="button"
+              className={styles.toolbarSelectOption}
+              role="menuitemradio"
+              aria-checked={option.value === value}
+              onClick={() => {
+                onChange(option.value);
+                setMenuOpen(false);
+                buttonRef.current?.focus();
+              }}
+            >
+              <span>{option.label}</span>
+              {option.value === value && <CheckIcon className={styles.toolbarSelectCheck} aria-hidden="true" />}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
 
 type LibraryItem = {
   id: string;
@@ -39,6 +162,9 @@ interface Props {
   onCreateNote: () => void;
   onCreateVault: () => void;
   onOpenBrainy: () => void;
+  brainyOpen?: boolean;
+  brainyPanel?: React.ReactNode;
+  onCloseBrainy?: () => void;
   summarizingItemIds: ReadonlySet<string>;
   onSummarizingChange: (id: string, busy: boolean) => void;
   refreshToken?: number;
@@ -52,6 +178,9 @@ const Library: React.FC<Props> = ({
   onCreateNote,
   onCreateVault,
   onOpenBrainy,
+  brainyOpen = false,
+  brainyPanel,
+  onCloseBrainy,
   summarizingItemIds,
   onSummarizingChange,
   refreshToken = 0,
@@ -83,34 +212,35 @@ const Library: React.FC<Props> = ({
   const openItem = (item: LibraryItem) => {
     if (!selectedItem) rememberedScrollTopRef.current = scrollAreaRef.current?.scrollTop || 0;
     triggerItemIdRef.current = item.id;
+    onCloseBrainy?.();
     setSelectedItem(item);
   };
 
   const closeItem = () => {
     const itemId = triggerItemIdRef.current;
     setSelectedItem(null);
-    window.requestAnimationFrame(() => {
+    window.setTimeout(() => {
       if (scrollAreaRef.current) scrollAreaRef.current.scrollTop = rememberedScrollTopRef.current;
       if (!itemId) return;
       scrollAreaRef.current
         ?.querySelector<HTMLElement>(`[data-item-id="${CSS.escape(itemId)}"] .masonry-card-bg`)
         ?.focus({ preventScroll: true });
-    });
+    }, 200);
   };
 
   useEffect(() => {
-    if (!selectedItem) return;
+    if (!selectedItem && !brainyOpen) return;
     const handleEscape = (event: KeyboardEvent) => {
       if (event.key !== 'Escape' || event.defaultPrevented) return;
       const target = event.target as HTMLElement | null;
       if (target?.matches('input, textarea, select, [contenteditable="true"]')) return;
       if (document.querySelector('[role="dialog"], [role="menu"]')) return;
       event.preventDefault();
-      closeItem();
+      selectedItem ? closeItem() : onCloseBrainy?.();
     };
     window.addEventListener('keydown', handleEscape);
     return () => window.removeEventListener('keydown', handleEscape);
-  }, [selectedItem]);
+  }, [brainyOpen, selectedItem]);
 
   useEffect(() => {
     if (vaults.length === 0) {
@@ -234,6 +364,8 @@ const Library: React.FC<Props> = ({
     : rediscoverItems(visibleItems, Math.floor(Date.now() / 86_400_000), rediscoverOffset),
   [query, rediscoverHidden, rediscoverOffset, visibleItems]);
   const related = useMemo(() => selectedItem ? getRelatedItems(items, selectedItem) : [], [items, selectedItem]);
+  const reviewItems = selectedItem && visibleItems.some((item) => item.id === selectedItem.id) ? visibleItems : items;
+  const reviewIndex = selectedItem ? reviewItems.findIndex((item) => item.id === selectedItem.id) : -1;
 
   useEffect(() => {
     if (!rediscoverAnimating) return;
@@ -248,9 +380,9 @@ const Library: React.FC<Props> = ({
   const isMac = typeof navigator !== 'undefined' && /Mac/i.test(navigator.platform || '');
 
   return (
-    <section className={`${styles.wrap} ${selectedItem ? styles.inspectorOpen : ''}`} data-testid="library-section">
+    <section className={`${styles.wrap} ${selectedItem || brainyOpen ? styles.inspectorOpen : ''}`} data-testid="library-section">
       <div className={styles.libraryMain} data-testid="library-main">
-        <div className={styles.libraryInner}>
+      <div className={styles.libraryInner}>
       <div className={styles.commandArea}>
         <header className={styles.heading}>
           <div className={styles.headingCopy}>
@@ -262,7 +394,7 @@ const Library: React.FC<Props> = ({
           </div>
           <div className={styles.headingActions}>
             {items.length > 0 && (
-              <button type="button" className={styles.textButton} onClick={onOpenBrainy} data-testid="library-brainy-button">
+              <button type="button" className={styles.textButton} onClick={() => { setSelectedItem(null); onOpenBrainy(); }} data-testid="library-brainy-button">
                 Ask brainy
               </button>
             )}
@@ -272,6 +404,7 @@ const Library: React.FC<Props> = ({
           </div>
         </header>
 
+        <div className={styles.commandBar}>
         <label className={styles.searchBox}>
           <span className={styles.srOnly}>Search notes and links</span>
           <input
@@ -301,15 +434,23 @@ const Library: React.FC<Props> = ({
               ))}
             </div>
 
-            <select className={styles.select} value={selectedVaultId} onChange={(event) => onVaultChange(event.target.value)} aria-label="Filter by vault">
-              <option value="all">All vaults</option>
-              {vaults.map((vault) => <option key={vault.id} value={vault.id}>{vault.title}</option>)}
-            </select>
+            <ToolbarSelect
+              label="Filter by vault"
+              value={selectedVaultId}
+              options={[{ value: 'all', label: 'All vaults' }, ...vaults.map((vault) => ({ value: vault.id, label: vault.title }))]}
+              onChange={onVaultChange}
+            />
 
-            <select className={styles.select} value={sortBy} onChange={(event) => setSortBy(event.target.value as 'updated' | 'created')} aria-label="Sort order">
-              <option value="updated">Recently updated</option>
-              <option value="created">Recently created</option>
-            </select>
+            <ToolbarSelect
+              label="Sort order"
+              value={sortBy}
+              options={[
+                { value: 'updated', label: 'Recently updated' },
+                { value: 'created', label: 'Recently created' },
+              ]}
+              onChange={(next) => setSortBy(next as 'updated' | 'created')}
+              className={styles.sortSelect}
+            />
 
             <div className={`${styles.segmented} ${styles.zoomControls}`} role="group" aria-label="Card size">
               <button
@@ -334,6 +475,7 @@ const Library: React.FC<Props> = ({
             <div className={styles.hint} aria-live="polite">{loading ? 'Loading…' : `${visibleItems.length} items`}</div>
           </div>
         )}
+        </div>
       </div>
 
       <div ref={scrollAreaRef} className={styles.scrollArea} data-testid="library-scroll-area">
@@ -453,11 +595,17 @@ const Library: React.FC<Props> = ({
         </div>
       </div>
 
-      {selectedItem && (
+      {(brainyOpen || selectedItem) && (
+        <div className={styles.contextRail} data-testid="context-rail">
+        {brainyOpen ? brainyPanel : selectedItem && (
         <ItemPanel
           item={selectedItem}
           relatedItems={related}
           onSelectRelated={(item) => openItem(item as LibraryItem)}
+          position={reviewIndex >= 0 ? reviewIndex + 1 : undefined}
+          total={reviewIndex >= 0 ? reviewItems.length : undefined}
+          onPrevious={reviewIndex > 0 ? () => openItem(reviewItems[reviewIndex - 1]) : undefined}
+          onNext={reviewIndex >= 0 && reviewIndex < reviewItems.length - 1 ? () => openItem(reviewItems[reviewIndex + 1]) : undefined}
           currentVaultId={selectedItem.vault_id}
           vaults={vaults}
           onClose={closeItem}
@@ -519,6 +667,8 @@ const Library: React.FC<Props> = ({
             } catch { showError('Failed to delete item.'); }
           }}
         />
+        )}
+        </div>
       )}
     </section>
   );

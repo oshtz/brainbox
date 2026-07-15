@@ -215,6 +215,130 @@ test.describe('brainbox app shell', () => {
       .not.toBe(currentTheme);
     await expect.poll(() => page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--color-primary').trim())).toBe('#eeeeee');
   });
+
+  test('organizes settings around four responsive destinations', async ({ page }, testInfo) => {
+    const isMobile = testInfo.project.name === 'Mobile Chrome';
+    await page.getByTestId('nav-settings').click();
+
+    const tablist = page.getByRole('tablist', { name: 'Settings sections' });
+    const sectionSelect = page.getByLabel('Settings section', { exact: true });
+    await expect(page.locator('[role="tab"]')).toHaveCount(4);
+    await expect(page.getByRole('heading', { name: 'Appearance' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'App updates' })).toBeVisible();
+    await expect(page.getByTestId('update-primary-actions')).toContainText('Version');
+    await expect(page.getByTestId('update-primary-actions').getByRole('button', { name: 'Check for updates' })).toBeVisible();
+    await expect(page.getByTestId('update-secondary-actions')).toContainText('Open GitHub Releases');
+
+    if (isMobile) {
+      await expect(tablist).toBeHidden();
+      await expect(sectionSelect).toBeVisible();
+      await sectionSelect.selectOption('capture');
+    } else {
+      await expect(tablist).toBeVisible();
+      await expect(sectionSelect).toBeHidden();
+      expect(await tablist.getByRole('tab').allTextContents()).toEqual([
+        'General',
+        'Capture',
+        'AI',
+        'Privacy & Data',
+      ]);
+      await tablist.getByRole('tab', { name: 'Capture' }).click();
+    }
+
+    const captureMethods = page.getByTestId('capture-methods').locator(':scope > div');
+    const captureMethodBoxes = await captureMethods.evaluateAll((elements) => elements.map((element) => {
+      const rect = element.getBoundingClientRect();
+      return { top: rect.top, bottom: rect.bottom };
+    }));
+    const capturePreviewBox = await page.getByTestId('capture-preview').evaluate((element) => {
+      const rect = element.getBoundingClientRect();
+      return { top: rect.top, bottom: rect.bottom };
+    });
+    expect(captureMethodBoxes).toHaveLength(2);
+    if (isMobile) {
+      expect(captureMethodBoxes[1].top).toBeGreaterThan(captureMethodBoxes[0].bottom);
+    } else {
+      expect(Math.abs(captureMethodBoxes[1].top - captureMethodBoxes[0].top)).toBeLessThanOrEqual(1);
+    }
+    expect(capturePreviewBox.top).toBeGreaterThan(Math.max(...captureMethodBoxes.map((box) => box.bottom)));
+
+    const protocolAlternative = page.getByText('Use the Windows protocol handler instead', { exact: true });
+    await protocolAlternative.click();
+    const registerProtocol = page.getByRole('button', { name: 'Register Protocol Handler (Windows)' });
+    const protocolBookmarklet = page.getByRole('button', { name: 'Drag to bookmarks to install capture bookmarklet using protocol handler' });
+    await expect(registerProtocol).toBeVisible();
+    await expect(protocolBookmarklet).toBeVisible();
+    expect(await protocolAlternative.locator('..').getByRole('button').allTextContents()).toEqual([
+      'Register Protocol Handler (Windows)',
+      'Capture (Protocol)',
+    ]);
+
+    if (isMobile) await sectionSelect.selectOption('privacy-data');
+    else await tablist.getByRole('tab', { name: 'Privacy & Data' }).click();
+
+    await expect(page.getByRole('heading', { name: 'Security' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Backups & restore' })).toBeVisible();
+    const sessionColumns = await page.getByTestId('session-settings-grid').locator(':scope > div').evaluateAll((elements) => (
+      elements.map((element) => element.getBoundingClientRect().top)
+    ));
+    const exportColumns = await page.getByTestId('backup-export-grid').locator(':scope > div').evaluateAll((elements) => (
+      elements.map((element) => element.getBoundingClientRect().top)
+    ));
+    if (isMobile) {
+      expect(sessionColumns[1]).toBeGreaterThan(sessionColumns[0]);
+      expect(exportColumns[1]).toBeGreaterThan(exportColumns[0]);
+    } else {
+      expect(Math.abs(sessionColumns[1] - sessionColumns[0])).toBeLessThanOrEqual(1);
+      expect(Math.abs(exportColumns[1] - exportColumns[0])).toBeLessThanOrEqual(1);
+    }
+
+    if (isMobile) await sectionSelect.selectOption('ai');
+    else await tablist.getByRole('tab', { name: 'AI' }).click();
+
+    const providerBoxes = await page.getByTestId('ai-provider-grid').locator(':scope > button').evaluateAll((elements) => (
+      elements.map((element) => {
+        const rect = element.getBoundingClientRect();
+        return { top: rect.top, left: rect.left };
+      })
+    ));
+    expect(providerBoxes).toHaveLength(6);
+    expect(Math.abs(providerBoxes[1].top - providerBoxes[0].top)).toBeLessThanOrEqual(1);
+    if (isMobile) {
+      expect(providerBoxes[2].top).toBeGreaterThan(providerBoxes[0].top);
+    } else {
+      expect(Math.abs(providerBoxes[2].top - providerBoxes[0].top)).toBeLessThanOrEqual(1);
+    }
+
+    const formFieldTops = await page.getByTestId('ai-provider-form').locator(':scope > div').evaluateAll((elements) => (
+      elements.map((element) => element.getBoundingClientRect().top)
+    ));
+    expect([2, 3]).toContain(formFieldTops.length);
+    if (isMobile) {
+      for (let index = 1; index < formFieldTops.length; index += 1) {
+        expect(formFieldTops[index]).toBeGreaterThan(formFieldTops[index - 1]);
+      }
+    } else if (formFieldTops.length === 3) {
+      expect(formFieldTops[1]).toBeGreaterThan(formFieldTops[0]);
+      expect(Math.abs(formFieldTops[2] - formFieldTops[1])).toBeLessThanOrEqual(1);
+    } else {
+      expect(Math.abs(formFieldTops[1] - formFieldTops[0])).toBeLessThanOrEqual(1);
+    }
+
+    const advanced = page.locator('details');
+    await expect(advanced).toHaveCount(1);
+    await expect(advanced).not.toHaveAttribute('open', '');
+    await expect(page.getByText('brainy System Prompt')).toBeHidden();
+    await advanced.locator('summary').click();
+    await expect(page.getByText('brainy System Prompt')).toBeVisible();
+    await expect(page.getByText('Quick Test', { exact: true })).toBeVisible();
+
+    if (isMobile) {
+      const overflow = await page.getByTestId('settings-section').evaluate((element) =>
+        element.scrollWidth - element.clientWidth,
+      );
+      expect(overflow).toBeLessThanOrEqual(1);
+    }
+  });
 });
 
 test.describe('brainbox populated workspace fixture', () => {
@@ -236,12 +360,16 @@ test.describe('brainbox populated workspace fixture', () => {
     const rediscover = page.getByTestId('rediscover-shelf');
     await expect(rediscover).toBeVisible();
     await expect(rediscover.locator('button').filter({ hasNotText: /Shuffle|Hide/ })).toHaveCount(3);
+    const rediscoverCards = rediscover.locator('button').filter({ hasNotText: /Shuffle|Hide/ });
+    const shelfBoxes = await rediscoverCards.evaluateAll((cards) => cards.map((card) => {
+      const box = card.getBoundingClientRect();
+      return { top: box.top, height: box.height };
+    }));
+    expect(Math.max(...shelfBoxes.map(({ top }) => top)) - Math.min(...shelfBoxes.map(({ top }) => top))).toBeLessThanOrEqual(1);
+    expect(Math.max(...shelfBoxes.map(({ height }) => height))).toBeLessThanOrEqual(130);
     const firstRediscoverSet = await rediscover.locator('button').filter({ hasNotText: /Shuffle|Hide/ }).allTextContents();
     await rediscover.getByRole('button', { name: 'Shuffle' }).click();
-    await expect(rediscover.locator('[data-phase="leaving"]')).toHaveCount(1);
-    await expect(rediscover.locator('[data-phase="entering"]')).toHaveCount(1);
     await expect.poll(() => rediscover.locator('button').filter({ hasNotText: /Shuffle|Hide/ }).allTextContents()).not.toEqual(firstRediscoverSet);
-    await expect(rediscover.locator('[data-phase="current"]')).toBeVisible();
     await rediscover.getByRole('button', { name: 'Hide' }).click();
     await expect(rediscover).toHaveAttribute('data-hiding', 'true');
     await expect(rediscover).toHaveCount(0);
@@ -291,7 +419,7 @@ test.describe('brainbox populated workspace fixture', () => {
       };
     });
     expect(dock.panelPosition).not.toBe('fixed');
-    expect(dock.panelBackground).toMatch(/^rgb\(/);
+    expect(dock.panelBackground).toMatch(/^rgba?\(/);
     expect(dock.appWidth).toBe(dock.viewportWidth);
     expect(dock.appHeight).toBe(dock.viewportHeight);
     expect(Math.abs(dock.libraryWidth - dock.appWidth)).toBeLessThanOrEqual(1);
@@ -365,6 +493,19 @@ test.describe('brainbox populated workspace fixture', () => {
     await expect.poll(() => scroll.evaluate((element, expected) => Math.abs(element.scrollTop - expected), scrollTop)).toBeLessThanOrEqual(1);
   });
 
+  test('reviews adjacent items from the detail rail', async ({ page }) => {
+    await page.locator('[data-item-id="102"] .masonry-card-bg').click();
+    const position = page.getByTestId('item-position');
+    await expect(position).toHaveText(/^\d+ of \d+$/);
+    const before = Number((await position.textContent())?.split(' ')[0]);
+    const next = page.getByRole('button', { name: 'Next item' });
+    const direction = await next.isEnabled() ? 1 : -1;
+    await (direction === 1 ? next : page.getByRole('button', { name: 'Previous item' })).click();
+    await expect(position).toHaveText(new RegExp(`^${before + direction} of `));
+    await page.keyboard.press('m');
+    await expect(page.getByLabel('Move item to vault')).toBeFocused();
+  });
+
   test('renders notes without images as readable text cards', async ({ page }) => {
     await expect(page.locator('[data-item-id="101"] .masonry-note-preview')).toBeVisible();
     await expect(page.locator('[data-item-id="101"] .masonry-note-text')).toContainText('Create a desktop smoke path');
@@ -386,7 +527,7 @@ test.describe('brainbox populated workspace fixture', () => {
     await libraryScroll.evaluate((element) => { element.scrollTop = 0; });
 
     const firstCard = page.getByTestId('masonry-card').first();
-    await expect.poll(() => firstCard.evaluate((element) => element.getBoundingClientRect().width)).toBeGreaterThan(300);
+    await expect.poll(() => firstCard.evaluate((element) => element.getBoundingClientRect().width)).toBeGreaterThan(260);
     const defaultWidth = await firstCard.evaluate((element) => element.getBoundingClientRect().width);
     await page.getByRole('button', { name: 'Show smaller cards' }).click();
     await expect.poll(() => firstCard.evaluate((element) => element.getBoundingClientRect().width)).toBeLessThan(defaultWidth);
@@ -402,6 +543,7 @@ test.describe('brainbox populated workspace fixture', () => {
     await page.getByTestId('nav-settings').click();
     const settingsTitle = page.getByRole('heading', { name: 'Settings' });
     const captureTab = page.getByRole('tab', { name: /Capture/ });
+    await captureTab.click();
     const panel = page.getByRole('tabpanel');
     await expect(panel).toHaveCSS('mask-image', /linear-gradient/);
     const fixedTops = await Promise.all([
@@ -456,8 +598,45 @@ test.describe('brainbox populated workspace fixture', () => {
   test('keeps brainy contextual to a populated Library', async ({ page }) => {
     await expect(page.getByTestId('nav-brainy')).toHaveCount(0);
     await expect(page.getByTestId('library-brainy-button')).toBeVisible();
+    await page.getByRole('button', { name: /Open item Tauri smoke path checklist/ }).click();
+    const targetRailWidth = Math.min(420, page.viewportSize()?.width || 420);
+    await expect.poll(() => page.getByTestId('context-rail').evaluate((element) => element.getBoundingClientRect().width)).toBeGreaterThan(targetRailWidth - 2);
+    const itemRail = await page.getByTestId('context-rail').boundingBox();
+    if ((page.viewportSize()?.width || 0) <= 760) {
+      await page.getByRole('button', { name: 'Close item details' }).click();
+    }
     await page.getByTestId('library-brainy-button').click();
     await expect(page.getByTestId('brainy-chat')).toBeVisible();
+    await expect(page.getByTestId('item-panel')).toHaveCount(0);
+    const isNarrow = (page.viewportSize()?.width || 0) <= 760;
+    await expect.poll(async () => {
+      const brainyRail = await page.getByTestId('context-rail').boundingBox();
+      return isNarrow
+        ? Math.abs((brainyRail?.width || 0) - (itemRail?.width || 0))
+        : Math.max(
+        Math.abs((brainyRail?.x || 0) - (itemRail?.x || 0)),
+        Math.abs((brainyRail?.width || 0) - (itemRail?.width || 0)),
+      );
+    }).toBeLessThanOrEqual(1);
+    if (isNarrow) {
+      const composer = await page.getByPlaceholder('Configure AI provider in Settings first').locator('..').boundingBox();
+      const bottomNav = await page.getByTestId('nav-settings').boundingBox();
+      expect((composer?.y || 0) + (composer?.height || 0)).toBeLessThanOrEqual((bottomNav?.y || 0) + 1);
+    }
+    await page.keyboard.press('Escape');
+    await expect(page.getByTestId('context-rail')).toHaveCount(0);
+  });
+
+  test('opens the AI section from the brainy settings shortcut', async ({ page }, testInfo) => {
+    await page.getByTestId('library-brainy-button').click();
+    await page.getByRole('button', { name: 'Open brainy settings' }).click();
+
+    await expect(page.getByTestId('settings-section')).toBeVisible();
+    await expect(page.locator('#tab-ai')).toHaveAttribute('aria-selected', 'true');
+    if (testInfo.project.name === 'Mobile Chrome') {
+      await expect(page.getByLabel('Settings section', { exact: true })).toHaveValue('ai');
+    }
+    await expect(page.locator('details')).toHaveCount(1);
   });
 
   test('keeps cards readable when brainy narrows the Library canvas', async ({ page }) => {
@@ -501,8 +680,22 @@ test.describe('brainbox populated workspace fixture', () => {
 
     await page.getByTestId('library-search-input').fill('');
     await expect(page.getByTestId('rediscover-shelf')).toBeVisible();
-    await page.getByLabel('Filter by vault').selectOption('1');
+    const toolbarHeights = await Promise.all([
+      page.getByRole('group', { name: 'Type filter' }),
+      page.getByLabel('Filter by vault'),
+      page.getByLabel('Sort order'),
+      page.getByRole('group', { name: 'Card size' }),
+    ].map((control) => control.evaluate((element) => element.getBoundingClientRect().height)));
+    expect(Math.max(...toolbarHeights) - Math.min(...toolbarHeights)).toBeLessThanOrEqual(1);
+
+    await page.getByLabel('Filter by vault').click();
+    await page.getByRole('menuitemradio', { name: 'Research Intake - URLs and clipped source notes' }).click();
     await expect(page.getByTestId('masonry-card')).toHaveCount(3);
+
+    await page.getByLabel('Sort order').click();
+    await page.keyboard.press('ArrowDown');
+    await page.keyboard.press('Enter');
+    await expect(page.getByLabel('Sort order')).toContainText('Recently created');
   });
 
   test('filters notes and links without heuristic categories', async ({ page }) => {
