@@ -301,6 +301,7 @@ test('native localhost bookmarklet captures selected text as a sourced note', as
     await expect(page.getByTestId('capture-content-input')).toHaveValue(`${selectedText}\n\nSource: ${sourceUrl}`);
     await expect(page.getByTestId('capture-vault-select')).toHaveValue('1');
     await page.getByTestId('capture-content-input').press('Control+Enter');
+    await expect(page.getByTestId('capture-modal')).toHaveCount(0);
   } finally {
     await sourceBrowser.close();
   }
