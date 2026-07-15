@@ -56,8 +56,11 @@ const Masonry: React.FC<MasonryProps> = ({ data, onCardClick, onCopyItem, onDele
   useLayoutEffect(() => {
     const element = ref.current;
     if (!element) return;
-    setWidth(element.getBoundingClientRect().width);
-    const observer = new ResizeObserver(([entry]) => setWidth(entry.contentRect.width));
+    const initialWidth = element.getBoundingClientRect().width;
+    if (initialWidth > 0) setWidth(initialWidth);
+    const observer = new ResizeObserver(([entry]) => {
+      if (entry.contentRect.width > 0) setWidth(entry.contentRect.width);
+    });
     observer.observe(element);
     return () => observer.disconnect();
   }, []);

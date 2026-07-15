@@ -230,27 +230,33 @@ const Library: React.FC<Props> = ({
     if (selectedItem || !itemId || !scrollArea || !wrap) return;
 
     const restore = () => {
-      scrollArea
-        .querySelector<HTMLElement>(`[data-item-id="${CSS.escape(itemId)}"] .masonry-card-bg`)
-        ?.focus({ preventScroll: true });
+      const target = scrollArea.querySelector<HTMLElement>(`[data-item-id="${CSS.escape(itemId)}"] .masonry-card-bg`);
+      if (!target) return false;
+      target.focus({ preventScroll: true });
       scrollArea.scrollTop = rememberedScrollTopRef.current;
+      return Math.abs(scrollArea.scrollTop - rememberedScrollTopRef.current) <= 1;
     };
     const finish = () => {
-      restore();
+      if (!restore()) return false;
       restoreItemIdRef.current = null;
+      return true;
     };
     const onTransitionEnd = (event: TransitionEvent) => {
       if (event.target === wrap && event.propertyName === 'grid-template-columns') finish();
     };
 
-    restore();
     wrap.addEventListener('transitionend', onTransitionEnd);
-    const frame = window.requestAnimationFrame(restore);
-    const fallback = window.setTimeout(finish, 350);
+    let frame = 0;
+    let attempts = 0;
+    const restoreWhenReady = () => {
+      if (finish() || attempts >= 120) return;
+      attempts += 1;
+      frame = window.requestAnimationFrame(restoreWhenReady);
+    };
+    restoreWhenReady();
     return () => {
       wrap.removeEventListener('transitionend', onTransitionEnd);
       window.cancelAnimationFrame(frame);
-      window.clearTimeout(fallback);
     };
   }, [selectedItem]);
 
