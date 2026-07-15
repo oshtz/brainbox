@@ -773,7 +773,7 @@ fn sync_import_from_path(
         return Err("Sync file not found. No sync data available.".to_string());
     }
 
-    let contents = fs::read_to_string(&sync_file_path)
+    let contents = fs::read_to_string(sync_file_path)
         .map_err(|e| format!("Failed to read sync file: {}", e))?;
     let loaded_sync = read_sync_file(&contents, sync_passphrase)?;
     let sync_file = loaded_sync.sync_file;

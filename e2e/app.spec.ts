@@ -508,10 +508,9 @@ test.describe('brainbox populated workspace fixture', () => {
 
   test('renders notes without images as readable text cards', async ({ page }) => {
     await expect(page.locator('[data-item-id="101"] .masonry-note-preview')).toBeVisible();
-    await expect(page.locator('[data-item-id="101"] .masonry-note-text')).toContainText('Create a desktop smoke path');
-    const compactHeight = await page.locator('[data-item-id="201"]').evaluate((element) => element.getBoundingClientRect().height);
-    const detailedHeight = await page.locator('[data-item-id="101"]').evaluate((element) => element.getBoundingClientRect().height);
-    expect(Math.abs(detailedHeight - compactHeight)).toBeGreaterThan(10);
+    const noteText = page.locator('[data-item-id="101"] .masonry-note-text');
+    await expect(noteText).toContainText('Create a desktop smoke path');
+    expect(await noteText.evaluate((element) => element.scrollHeight - element.clientHeight)).toBeLessThanOrEqual(1);
   });
 
   test('keeps page controls fixed while content scrolls and persists grid zoom', async ({ page }) => {

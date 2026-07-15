@@ -60,13 +60,13 @@ pub fn set_sync_secret(secret: Option<String>) -> Result<bool, String> {
         let Ok(entry) = sync_entry() else {
             return Ok(false);
         };
-        return match secret {
+        match secret {
             Some(value) => Ok(entry.set_password(&value).is_ok()),
             None => match entry.delete_credential() {
                 Ok(()) | Err(keyring::Error::NoEntry) => Ok(true),
                 Err(_) => Ok(false),
             },
-        };
+        }
     }
     #[cfg(not(any(target_os = "windows", target_os = "macos")))]
     {

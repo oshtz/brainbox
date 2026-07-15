@@ -53,10 +53,12 @@ const Masonry: React.FC<MasonryProps> = ({ data, onCardClick, onCopyItem, onDele
 
   const ref = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState<number>(0);
-  useEffect(() => {
-    if (!ref.current) return;
+  useLayoutEffect(() => {
+    const element = ref.current;
+    if (!element) return;
+    setWidth(element.getBoundingClientRect().width);
     const observer = new ResizeObserver(([entry]) => setWidth(entry.contentRect.width));
-    observer.observe(ref.current);
+    observer.observe(element);
     return () => observer.disconnect();
   }, []);
 
@@ -65,6 +67,7 @@ const Masonry: React.FC<MasonryProps> = ({ data, onCardClick, onCopyItem, onDele
   const columns = Math.max(1, automaticColumns + columnAdjustment);
 
   const [heights, gridItems] = useMemo<[number[], GridItem[]]>(() => {
+    if (!width) return [[], []];
     const heights = new Array(columns).fill(0);
     const colWidth = columns > 0 ? (Math.max(0, width - gutter * (columns - 1)) / columns) : 0;
     const computeHeight = (child: MasonryItem): number => {
@@ -139,19 +142,25 @@ const Masonry: React.FC<MasonryProps> = ({ data, onCardClick, onCopyItem, onDele
   };
 
   useLayoutEffect(() => {
-    if (!menu || !menuRef.current) return;
-    const rect = menuRef.current.getBoundingClientRect();
+    const menuElement = menuRef.current;
+    if (!menu || !menuElement) return;
+    const rect = menuElement.getBoundingClientRect();
     const x = Math.max(8, Math.min(menu.x, window.innerWidth - rect.width - 8));
     const y = Math.max(8, Math.min(menu.y, window.innerHeight - rect.height - 8));
-    if (x !== menu.x || y !== menu.y) setMenu((current) => current ? { ...current, x, y } : null);
+    menuElement.style.left = `${x}px`;
+    menuElement.style.top = `${y}px`;
   }, [menu]);
 
   useEffect(() => {
     if (!menu) return;
     const close = () => setMenu(null);
+    const closeOnWheel = (event: WheelEvent) => {
+      if (event.target instanceof Node && menuRef.current?.contains(event.target)) return;
+      close();
+    };
     const frame = requestAnimationFrame(() => {
       menuRef.current?.querySelector<HTMLButtonElement>('[role="menuitem"]')?.focus({ preventScroll: true });
-      window.addEventListener('scroll', close, true);
+      window.addEventListener('wheel', closeOnWheel, true);
     });
     const onPointerDown = (event: PointerEvent) => {
       if (!menuRef.current?.contains(event.target as Node)) close();
@@ -168,7 +177,7 @@ const Masonry: React.FC<MasonryProps> = ({ data, onCardClick, onCopyItem, onDele
     return () => {
       cancelAnimationFrame(frame);
       window.removeEventListener('pointerdown', onPointerDown);
-      window.removeEventListener('scroll', close, true);
+      window.removeEventListener('wheel', closeOnWheel, true);
       window.removeEventListener('resize', close);
       window.removeEventListener('keydown', onKeyDown);
     };

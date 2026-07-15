@@ -1,7 +1,7 @@
 {
   "name": "brainbox",
   "private": true,
-  "version": "1.2.0",
+  "version": "1.3.0",
   "type": "module",
   "license": "MIT",
   "engines": {
@@ -54,17 +54,5 @@
     "vite": "^6.4.3",
     "vitest": "^3.2.7"
   },
-  "packageManager": "pnpm@10.9.0+sha512.0486e394640d3c1fb3c9d43d49cf92879ff74f8516959c235308f5a8f62e2e19528a65cdc2a3058f587cde71eba3d5b56327c8c33a97e4c4051ca48a10ca2d5f",
-  "pnpm": {
-    "overrides": {
-      "brace-expansion@>=2.0.0 <2.0.3": "2.0.3",
-      "flatted@<3.4.2": "3.4.2",
-      "glob@>=10.2.0 <10.5.0": "10.5.0",
-      "minimatch@>=9.0.0 <9.0.9": "9.0.9",
-      "picomatch@>=4.0.0 <4.0.4": "4.0.4",
-      "postcss@<8.5.10": "8.5.16",
-      "rollup@>=4.0.0 <4.59.0": "4.62.2",
-      "ws@>=8.0.0 <8.21.0": "8.21.0"
-    }
-  }
+  "packageManager": "pnpm@11.13.0+sha512.88d94724d8f2e6c186744a5584c6e59ecac869ec7ba15e9cb4cd628e8dc7066820b2481d8ee3b51ea8da323a7378068aa58c556a3720d32b7c20a051d088363a"
 }
