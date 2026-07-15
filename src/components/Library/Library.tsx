@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import Masonry from '../Masonry/Masonry';
 import ItemPanel from '../ItemPanel/ItemPanel';
@@ -205,9 +205,11 @@ const Library: React.FC<Props> = ({
   const [rediscoverPrevious, setRediscoverPrevious] = useState<LibraryItem[]>([]);
   const [rediscoverAnimating, setRediscoverAnimating] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
+  const wrapRef = useRef<HTMLElement>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const rememberedScrollTopRef = useRef(0);
   const triggerItemIdRef = useRef<string | null>(null);
+  const restoreItemIdRef = useRef<string | null>(null);
 
   const openItem = (item: LibraryItem) => {
     if (!selectedItem) rememberedScrollTopRef.current = scrollAreaRef.current?.scrollTop || 0;
@@ -217,16 +219,40 @@ const Library: React.FC<Props> = ({
   };
 
   const closeItem = () => {
-    const itemId = triggerItemIdRef.current;
+    restoreItemIdRef.current = triggerItemIdRef.current;
     setSelectedItem(null);
-    window.setTimeout(() => {
-      if (scrollAreaRef.current) scrollAreaRef.current.scrollTop = rememberedScrollTopRef.current;
-      if (!itemId) return;
-      scrollAreaRef.current
-        ?.querySelector<HTMLElement>(`[data-item-id="${CSS.escape(itemId)}"] .masonry-card-bg`)
-        ?.focus({ preventScroll: true });
-    }, 200);
   };
+
+  useLayoutEffect(() => {
+    const itemId = restoreItemIdRef.current;
+    const scrollArea = scrollAreaRef.current;
+    const wrap = wrapRef.current;
+    if (selectedItem || !itemId || !scrollArea || !wrap) return;
+
+    const restore = () => {
+      scrollArea.scrollTop = rememberedScrollTopRef.current;
+      scrollArea
+        .querySelector<HTMLElement>(`[data-item-id="${CSS.escape(itemId)}"] .masonry-card-bg`)
+        ?.focus({ preventScroll: true });
+    };
+    const finish = () => {
+      restore();
+      restoreItemIdRef.current = null;
+    };
+    const onTransitionEnd = (event: TransitionEvent) => {
+      if (event.target === wrap && event.propertyName === 'grid-template-columns') finish();
+    };
+
+    restore();
+    wrap.addEventListener('transitionend', onTransitionEnd);
+    const frame = window.requestAnimationFrame(restore);
+    const fallback = window.setTimeout(finish, 350);
+    return () => {
+      wrap.removeEventListener('transitionend', onTransitionEnd);
+      window.cancelAnimationFrame(frame);
+      window.clearTimeout(fallback);
+    };
+  }, [selectedItem]);
 
   useEffect(() => {
     if (!selectedItem && !brainyOpen) return;
@@ -380,7 +406,7 @@ const Library: React.FC<Props> = ({
   const isMac = typeof navigator !== 'undefined' && /Mac/i.test(navigator.platform || '');
 
   return (
-    <section className={`${styles.wrap} ${selectedItem || brainyOpen ? styles.inspectorOpen : ''}`} data-testid="library-section">
+    <section ref={wrapRef} className={`${styles.wrap} ${selectedItem || brainyOpen ? styles.inspectorOpen : ''}`} data-testid="library-section">
       <div className={styles.libraryMain} data-testid="library-main">
       <div className={styles.libraryInner}>
       <div className={styles.commandArea}>
