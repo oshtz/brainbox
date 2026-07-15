@@ -236,27 +236,41 @@ const Library: React.FC<Props> = ({
       scrollArea.scrollTop = rememberedScrollTopRef.current;
       return Math.abs(scrollArea.scrollTop - rememberedScrollTopRef.current) <= 1;
     };
+    let resizeObserver: ResizeObserver | null = null;
+    let mutationObserver: MutationObserver | null = null;
+    const disconnectObservers = () => {
+      resizeObserver?.disconnect();
+      mutationObserver?.disconnect();
+    };
     const finish = () => {
       if (!restore()) return false;
       restoreItemIdRef.current = null;
+      disconnectObservers();
       return true;
     };
     const onTransitionEnd = (event: TransitionEvent) => {
       if (event.target === wrap && event.propertyName === 'grid-template-columns') finish();
     };
+    const observeLayout = () => {
+      resizeObserver?.observe(scrollArea);
+      Array.from(scrollArea.children).forEach((child) => resizeObserver?.observe(child));
+    };
 
     wrap.addEventListener('transitionend', onTransitionEnd);
-    let frame = 0;
-    let attempts = 0;
-    const restoreWhenReady = () => {
-      if (finish() || attempts >= 120) return;
-      attempts += 1;
-      frame = window.requestAnimationFrame(restoreWhenReady);
-    };
-    restoreWhenReady();
+    resizeObserver = new ResizeObserver(finish);
+    mutationObserver = new MutationObserver(() => {
+      observeLayout();
+      finish();
+    });
+    if (!finish()) {
+      observeLayout();
+      mutationObserver.observe(scrollArea, { childList: true, subtree: true });
+    }
+    const frame = window.requestAnimationFrame(finish);
     return () => {
       wrap.removeEventListener('transitionend', onTransitionEnd);
       window.cancelAnimationFrame(frame);
+      disconnectObservers();
     };
   }, [selectedItem]);
 

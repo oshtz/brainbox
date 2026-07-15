@@ -599,7 +599,10 @@ test.describe('brainbox populated workspace fixture', () => {
     await expect(page.getByTestId('library-brainy-button')).toBeVisible();
     await page.getByRole('button', { name: /Open item Tauri smoke path checklist/ }).click();
     const targetRailWidth = Math.min(420, page.viewportSize()?.width || 420);
-    await expect.poll(() => page.getByTestId('context-rail').evaluate((element) => element.getBoundingClientRect().width)).toBeGreaterThan(targetRailWidth - 2);
+    await expect.poll(async () => {
+      const width = await page.getByTestId('context-rail').evaluate((element) => element.getBoundingClientRect().width);
+      return Math.abs(width - targetRailWidth);
+    }).toBeLessThanOrEqual(0.5);
     const itemRail = await page.getByTestId('context-rail').boundingBox();
     if ((page.viewportSize()?.width || 0) <= 760) {
       await page.getByRole('button', { name: 'Close item details' }).click();
