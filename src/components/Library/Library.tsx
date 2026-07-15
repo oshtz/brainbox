@@ -238,6 +238,7 @@ const Library: React.FC<Props> = ({
     };
     let resizeObserver: ResizeObserver | null = null;
     let mutationObserver: MutationObserver | null = null;
+    let settleTimer = 0;
     const disconnectObservers = () => {
       resizeObserver?.disconnect();
       mutationObserver?.disconnect();
@@ -248,28 +249,34 @@ const Library: React.FC<Props> = ({
       disconnectObservers();
       return true;
     };
+    const restoreThroughLayout = () => {
+      restore();
+      window.clearTimeout(settleTimer);
+      settleTimer = window.setTimeout(finish, 100);
+    };
     const onTransitionEnd = (event: TransitionEvent) => {
-      if (event.target === wrap && event.propertyName === 'grid-template-columns') finish();
+      if (event.target === wrap && event.propertyName === 'grid-template-columns') restoreThroughLayout();
     };
     const observeLayout = () => {
+      resizeObserver?.observe(wrap);
       resizeObserver?.observe(scrollArea);
       Array.from(scrollArea.children).forEach((child) => resizeObserver?.observe(child));
     };
 
     wrap.addEventListener('transitionend', onTransitionEnd);
-    resizeObserver = new ResizeObserver(finish);
+    resizeObserver = new ResizeObserver(restoreThroughLayout);
     mutationObserver = new MutationObserver(() => {
       observeLayout();
-      finish();
+      restoreThroughLayout();
     });
-    if (!finish()) {
-      observeLayout();
-      mutationObserver.observe(scrollArea, { childList: true, subtree: true });
-    }
-    const frame = window.requestAnimationFrame(finish);
+    observeLayout();
+    mutationObserver.observe(scrollArea, { childList: true, subtree: true });
+    restoreThroughLayout();
+    const frame = window.requestAnimationFrame(restoreThroughLayout);
     return () => {
       wrap.removeEventListener('transitionend', onTransitionEnd);
       window.cancelAnimationFrame(frame);
+      window.clearTimeout(settleTimer);
       disconnectObservers();
     };
   }, [selectedItem]);
