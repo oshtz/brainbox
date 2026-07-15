@@ -233,8 +233,9 @@ const Library: React.FC<Props> = ({
       const target = scrollArea.querySelector<HTMLElement>(`[data-item-id="${CSS.escape(itemId)}"] .masonry-card-bg`);
       if (!target) return false;
       target.focus({ preventScroll: true });
-      scrollArea.scrollTop = rememberedScrollTopRef.current;
-      return Math.abs(scrollArea.scrollTop - rememberedScrollTopRef.current) <= 1;
+      const targetScrollTop = Math.min(rememberedScrollTopRef.current, Math.max(0, scrollArea.scrollHeight - scrollArea.clientHeight));
+      scrollArea.scrollTop = targetScrollTop;
+      return Math.abs(scrollArea.scrollTop - targetScrollTop) <= 1;
     };
     let resizeObserver: ResizeObserver | null = null;
     let mutationObserver: MutationObserver | null = null;
