@@ -253,20 +253,30 @@ function App() {
 
   useEffect(() => {
     if (!isTauriRuntime()) return;
+    let disposed = false;
     const unlisteners: Array<() => void> = [];
+    const register = (registration: Promise<() => void>) => {
+      void registration.then((unlisten) => {
+        if (disposed) unlisten();
+        else unlisteners.push(unlisten);
+      });
+    };
 
-    listen('capture-hotkey-pressed', () => openCapture()).then((unlisten) => unlisteners.push(unlisten));
-    listen('vaults-changed', fetchVaults).then((unlisten) => unlisteners.push(unlisten));
-    listen<CaptureFromProtocolPayload>('capture-from-protocol', ({ payload }) => {
+    register(listen('capture-hotkey-pressed', () => openCapture()));
+    register(listen('vaults-changed', fetchVaults));
+    register(listen<CaptureFromProtocolPayload>('capture-from-protocol', ({ payload }) => {
       openCapture({ title: payload?.title || '', url: payload?.url || '', selection: payload?.selection || '' });
-    }).then((unlisten) => unlisteners.push(unlisten));
-    listen<string>('tauri://protocol', ({ payload }) => {
+    }));
+    register(listen<string>('tauri://protocol', ({ payload }) => {
       if (!payload?.startsWith('brainbox://capture?')) return;
       const params = new URLSearchParams(payload.split('?')[1]);
       openCapture({ title: params.get('title') || '', url: params.get('url') || '' });
-    }).then((unlisten) => unlisteners.push(unlisten));
+    }));
 
-    return () => unlisteners.forEach((unlisten) => unlisten());
+    return () => {
+      disposed = true;
+      unlisteners.forEach((unlisten) => unlisten());
+    };
   }, [vaults]);
 
   const vaultProps = vaults.map(({ id, title, has_password }) => ({ id, title, has_password }));
