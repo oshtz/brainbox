@@ -490,7 +490,36 @@ test.describe('brainbox populated workspace fixture', () => {
     await page.keyboard.press('Escape');
     await expect(page.getByTestId('item-panel')).toHaveCount(0);
     await expect(cards.nth(5)).toBeFocused();
-    await expect.poll(() => scroll.evaluate((element, expected) => Math.abs(element.scrollTop - expected), scrollTop)).toBeLessThanOrEqual(1);
+    try {
+      await expect.poll(() => scroll.evaluate((element, expected) => Math.abs(element.scrollTop - expected), scrollTop)).toBeLessThanOrEqual(1);
+    } catch (error) {
+      const diagnostics = await page.evaluate((expected) => {
+        const scrollArea = document.querySelector<HTMLElement>('[data-testid="library-scroll-area"]');
+        const libraryMain = document.querySelector<HTMLElement>('[data-testid="library-main"]');
+        const librarySection = document.querySelector<HTMLElement>('[data-testid="library-section"]');
+        const activeCard = document.activeElement?.closest('[data-item-id]') as HTMLElement | null;
+        const masonry = document.querySelector<HTMLElement>('[data-testid="library-scroll-area"] > div:last-child');
+        const beforeManualWrite = scrollArea?.scrollTop ?? null;
+        if (scrollArea) scrollArea.scrollTop = expected;
+        return {
+          expected,
+          beforeManualWrite,
+          afterManualWrite: scrollArea?.scrollTop ?? null,
+          scrollHeight: scrollArea?.scrollHeight ?? null,
+          clientHeight: scrollArea?.clientHeight ?? null,
+          innerWidth: window.innerWidth,
+          innerHeight: window.innerHeight,
+          visualViewportWidth: window.visualViewport?.width ?? null,
+          mainDisplay: libraryMain ? getComputedStyle(libraryMain).display : null,
+          sectionClass: librarySection?.className ?? null,
+          activeItemId: activeCard?.dataset.itemId ?? null,
+          cardCount: document.querySelectorAll('.masonry-card-bg[data-masonry-focusable]').length,
+          masonryHeight: masonry?.getBoundingClientRect().height ?? null,
+        };
+      }, scrollTop);
+      console.log(`SCROLL_RESTORE_DIAGNOSTICS ${JSON.stringify(diagnostics)}`);
+      throw error;
+    }
   });
 
   test('reviews adjacent items from the detail rail', async ({ page }) => {
