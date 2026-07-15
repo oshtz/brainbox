@@ -850,18 +850,6 @@ impl SyncSettings {
         conn.execute("DELETE FROM sync_settings WHERE key = ?1", [key])?;
         Ok(())
     }
-
-    /// Get all sync settings as key-value pairs
-    pub fn get_all(conn: &Connection) -> Result<Vec<(String, String)>> {
-        Self::create_table(conn)?;
-        let mut stmt = conn.prepare("SELECT key, value FROM sync_settings")?;
-        let rows = stmt.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?;
-        let mut settings = Vec::new();
-        for row in rows {
-            settings.push(row?);
-        }
-        Ok(settings)
-    }
 }
 
 #[cfg(test)]

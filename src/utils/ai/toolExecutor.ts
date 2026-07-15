@@ -6,7 +6,7 @@
  */
 
 import { invoke } from '@tauri-apps/api/core';
-import { BackendSearchResult, BackendVault, BackendVaultItem } from '../../types';
+import { BackendVault, BackendVaultItem } from '../../types';
 import { ToolCall, ToolResult, WRITE_TOOLS } from './tools';
 
 export interface VaultInfo {
@@ -46,11 +46,6 @@ type BackendVaultItemListEntry = Pick<BackendVaultItem, 'id' | 'title'> &
   };
 
 type BackendCreateItemResponse = Pick<BackendVaultItem, 'id' | 'title'>;
-
-type BackendSearchResultRow = Pick<BackendSearchResult, 'id' | 'title' | 'score'> & {
-  content?: string | null;
-  snippet?: string | null;
-};
 
 export class ToolExecutor {
   private config: ToolExecutorConfig;
@@ -228,22 +223,7 @@ export class ToolExecutor {
       }
 
       case 'search_items': {
-        const query = args.query as string;
-        try {
-          const results = await invoke<BackendSearchResultRow[]>('search', {
-            query,
-            limit: 20,
-          });
-          return results.map((r) => ({
-            id: r.id,
-            title: r.title,
-            snippet: (r.snippet ?? r.content ?? '').slice(0, 200),
-            score: r.score,
-          }));
-        } catch {
-          // Fallback: search manually through vaults
-          return this.manualSearch(query);
-        }
+        return this.manualSearch(String(args.query ?? ''));
       }
 
       // === Item Write Operations ===
@@ -383,9 +363,7 @@ export class ToolExecutor {
     }
   }
 
-  /**
-   * Manual search fallback when search index is unavailable
-   */
+  /** Search decrypted vault items without relying on the process-local index. */
   private async manualSearch(query: string): Promise<unknown[]> {
     interface SearchResultItem {
       id: string;
@@ -395,13 +373,14 @@ export class ToolExecutor {
       snippet: string;
     }
     const results: SearchResultItem[] = [];
-    const queryLower = query.toLowerCase();
+    const terms = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    if (terms.length === 0) return [];
     const vaults = this.config.getVaults();
 
     interface ManualSearchItem {
       id: number;
       title?: string;
-      content_preview?: string;
+      content?: string;
       summary?: string;
     }
 
@@ -418,17 +397,19 @@ export class ToolExecutor {
         });
 
         for (const item of items) {
-          const titleMatch = item.title?.toLowerCase().includes(queryLower);
-          const contentMatch = item.content_preview?.toLowerCase().includes(queryLower);
-          const summaryMatch = item.summary?.toLowerCase().includes(queryLower);
+          const title = item.title ?? '';
+          const content = item.content ?? '';
+          const summary = item.summary ?? '';
+          const haystack = `${title} ${content} ${summary}`.toLowerCase();
 
-          if (titleMatch || contentMatch || summaryMatch) {
+          if (terms.every((term) => haystack.includes(term))) {
+            const summaryMatched = terms.some((term) => summary.toLowerCase().includes(term));
             results.push({
               id: String(item.id),
               vault_id: vault.id,
               vault_name: vault.title,
-              title: item.title ?? '',
-              snippet: (item.content_preview?.slice(0, 200) ?? item.summary?.slice(0, 200) ?? ''),
+              title,
+              snippet: (summaryMatched ? summary : content || summary).slice(0, 200),
             });
           }
         }

@@ -1,5 +1,14 @@
 const SERVICE: &str = "brainbox.ai";
+const SYNC_SERVICE: &str = "brainbox.sync";
+const SYNC_ACCOUNT: &str = "default";
 const ALLOWED_PROVIDERS: &[&str] = &["openrouter", "openai", "anthropic", "google"];
+
+static SESSION_SYNC_SECRET: std::sync::OnceLock<std::sync::Mutex<Option<String>>> =
+    std::sync::OnceLock::new();
+
+fn session_sync_secret() -> &'static std::sync::Mutex<Option<String>> {
+    SESSION_SYNC_SECRET.get_or_init(|| std::sync::Mutex::new(None))
+}
 
 fn validate_provider(provider: &str) -> Result<(), String> {
     if ALLOWED_PROVIDERS.contains(&provider) {
@@ -13,6 +22,56 @@ fn validate_provider(provider: &str) -> Result<(), String> {
 fn entry(provider: &str) -> Result<keyring::Entry, String> {
     validate_provider(provider)?;
     keyring::Entry::new(SERVICE, provider).map_err(|e| e.to_string())
+}
+
+#[cfg(any(target_os = "windows", target_os = "macos"))]
+fn sync_entry() -> Result<keyring::Entry, String> {
+    keyring::Entry::new(SYNC_SERVICE, SYNC_ACCOUNT).map_err(|e| e.to_string())
+}
+
+pub fn get_sync_secret() -> Result<Option<String>, String> {
+    #[cfg(any(target_os = "windows", target_os = "macos"))]
+    {
+        if let Ok(entry) = sync_entry() {
+            match entry.get_password() {
+                Ok(secret) => {
+                    *session_sync_secret().lock().map_err(|e| e.to_string())? =
+                        Some(secret.clone());
+                    return Ok(Some(secret));
+                }
+                Err(keyring::Error::NoEntry) => {}
+                Err(_) => {}
+            }
+        }
+    }
+    session_sync_secret()
+        .lock()
+        .map(|secret| secret.clone())
+        .map_err(|e| e.to_string())
+}
+
+/// Returns true when the secret was persisted in the OS keyring.
+pub fn set_sync_secret(secret: Option<String>) -> Result<bool, String> {
+    let secret = secret.filter(|value| !value.trim().is_empty());
+    *session_sync_secret().lock().map_err(|e| e.to_string())? = secret.clone();
+
+    #[cfg(any(target_os = "windows", target_os = "macos"))]
+    {
+        let Ok(entry) = sync_entry() else {
+            return Ok(false);
+        };
+        match secret {
+            Some(value) => Ok(entry.set_password(&value).is_ok()),
+            None => match entry.delete_credential() {
+                Ok(()) | Err(keyring::Error::NoEntry) => Ok(true),
+                Err(_) => Ok(false),
+            },
+        }
+    }
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+    {
+        Ok(false)
+    }
 }
 
 #[tauri::command]

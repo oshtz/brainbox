@@ -102,7 +102,7 @@ export const AISettings: React.FC = () => {
       {/* Provider Selection */}
       <div className={styles.section}>
         <span className={styles.sectionLabel}>AI Provider</span>
-        <div className={styles.providerGrid}>
+        <div className={styles.providerGrid} data-testid="ai-provider-grid">
           {providers.map((p) => (
             (() => {
               const providerCardSettings = aiService.getProviderSettings(p.type);
@@ -141,10 +141,10 @@ export const AISettings: React.FC = () => {
       <div className={styles.section}>
         <span className={styles.sectionLabel}>{config.name} Settings</span>
 
-        <div className={styles.formGrid}>
+        <div className={styles.formGrid} data-testid="ai-provider-form">
           {/* API Key (for cloud providers) */}
           {config.requiresApiKey && (
-            <div className={styles.field}>
+            <div className={`${styles.field} ${styles.fieldFull}`}>
               <label className={styles.fieldLabel}>API Key</label>
               <input
                 type="password"
@@ -206,77 +206,87 @@ export const AISettings: React.FC = () => {
         </div>
       </div>
 
-      {/* System Prompt */}
-      <div className={styles.section}>
-        <span className={styles.sectionLabel}>brainy System Prompt</span>
-        <textarea
-          value={systemPrompt}
-          onChange={(e) => setSystemPrompt(e.target.value)}
-          className={styles.textarea}
-          rows={6}
-        />
-        <div className={styles.actions}>
-          <button type="button" onClick={handleSaveSystemPrompt} className={styles.button}>
-            Save Prompt
-          </button>
-        </div>
-      </div>
-
       {/* brainy UI Mode */}
       <div className={styles.section}>
         <span className={styles.sectionLabel}>brainy UI Mode</span>
-        <div className={styles.modeToggle}>
-          <button
-            type="button"
-            className={`${styles.modeButton} ${brainyMode === 'sidebar' ? styles.modeButtonActive : ''}`}
-            onClick={() => handleBrainyModeChange('sidebar')}
-          >
-            Sidebar
-          </button>
-          <button
-            type="button"
-            className={`${styles.modeButton} ${brainyMode === 'full' ? styles.modeButtonActive : ''}`}
-            onClick={() => handleBrainyModeChange('full')}
-          >
-            Full Tab
-          </button>
-        </div>
-        <p className={styles.modeHint}>
-          Sidebar keeps brainy docked next to your workspace. Full Tab opens the dedicated brainy screen.
-        </p>
-      </div>
-
-      {/* Test Section */}
-      <div className={styles.section}>
-        <span className={styles.sectionLabel}>Quick Test</span>
-        <div className={styles.testRow}>
-          <input
-            type="text"
-            value={testPrompt}
-            onChange={(e) => setTestPrompt(e.target.value)}
-            className={styles.input}
-            placeholder="Enter a test prompt"
-          />
-          <button
-            type="button"
-            onClick={handleTest}
-            className={styles.primaryButton}
-            disabled={!canTest}
-          >
-            {loading ? 'Working...' : 'Test'}
-          </button>
-        </div>
-
-        {error && (
-          <div className={styles.error} role="alert">
-            {error}
+        <div className={styles.modeRow} data-testid="ai-mode-row">
+          <p className={styles.modeHint}>
+            Sidebar keeps brainy docked next to your workspace. Full Tab opens the dedicated brainy screen.
+          </p>
+          <div className={styles.modeToggle}>
+            <button
+              type="button"
+              className={`${styles.modeButton} ${brainyMode === 'sidebar' ? styles.modeButtonActive : ''}`}
+              onClick={() => handleBrainyModeChange('sidebar')}
+            >
+              Sidebar
+            </button>
+            <button
+              type="button"
+              className={`${styles.modeButton} ${brainyMode === 'full' ? styles.modeButtonActive : ''}`}
+              onClick={() => handleBrainyModeChange('full')}
+            >
+              Full Tab
+            </button>
           </div>
-        )}
-
-        {testResult && (
-          <pre className={styles.testResult}>{testResult}</pre>
-        )}
+        </div>
       </div>
+
+      <details className={styles.advanced}>
+        <summary className={styles.advancedSummary}>
+          <span>Advanced</span>
+          <span className={styles.advancedHint}>System prompt and quick test</span>
+        </summary>
+        <div className={styles.advancedContent}>
+          {/* System Prompt */}
+          <div className={styles.section}>
+            <span className={styles.sectionLabel}>brainy System Prompt</span>
+            <textarea
+              value={systemPrompt}
+              onChange={(e) => setSystemPrompt(e.target.value)}
+              className={styles.textarea}
+              rows={6}
+            />
+            <div className={styles.actions}>
+              <button type="button" onClick={handleSaveSystemPrompt} className={styles.button}>
+                Save Prompt
+              </button>
+            </div>
+          </div>
+
+          {/* Test Section */}
+          <div className={styles.section}>
+            <span className={styles.sectionLabel}>Quick Test</span>
+            <div className={styles.testRow}>
+              <input
+                type="text"
+                value={testPrompt}
+                onChange={(e) => setTestPrompt(e.target.value)}
+                className={styles.input}
+                placeholder="Enter a test prompt"
+              />
+              <button
+                type="button"
+                onClick={handleTest}
+                className={styles.primaryButton}
+                disabled={!canTest}
+              >
+                {loading ? 'Working...' : 'Test'}
+              </button>
+            </div>
+
+            {error && (
+              <div className={styles.error} role="alert">
+                {error}
+              </div>
+            )}
+
+            {testResult && (
+              <pre className={styles.testResult}>{testResult}</pre>
+            )}
+          </div>
+        </div>
+      </details>
     </div>
   );
 };

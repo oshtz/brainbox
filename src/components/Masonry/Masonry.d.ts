@@ -4,16 +4,21 @@ export interface MasonryItem {
   height: number;
   image: string;
   title?: string;
+  summary?: string;
   [key: string]: unknown;
 }
 export interface MasonryProps {
   data: MasonryItem[];
   onCardClick?: (item: MasonryItem) => void;
+  onCopyItem?: (item: MasonryItem) => Promise<void> | void;
   onDeleteItem?: (item: MasonryItem) => void;
+  onOpenExternal?: (item: MasonryItem) => void;
   onMoveItem?: (item: MasonryItem, direction: "up" | "down") => void;
   alwaysShowOverlay?: boolean;
   actionsMode?: 'buttons' | 'menu';
   selectedId?: string | number | null;
+  preferSummary?: boolean;
+  columnAdjustment?: number;
 }
 declare const Masonry: React.FC<MasonryProps>;
 export default Masonry;

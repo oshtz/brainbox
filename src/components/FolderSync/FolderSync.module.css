@@ -1,0 +1,82 @@
+.stack {
+  display: grid;
+  gap: 14px;
+  color: var(--color-text-primary);
+}
+
+.stack p { margin: 0; line-height: 1.55; }
+
+.discovery,
+.preview,
+.warning {
+  display: grid;
+  gap: 6px;
+  padding: 14px;
+  border: 1px solid var(--ui-muted-border);
+  border-radius: 12px;
+  background: var(--ui-control-bg);
+  line-height: 1.45;
+}
+
+.discovery a { width: fit-content; color: var(--color-accent); font-weight: 600; }
+
+.muted { color: var(--color-text-secondary); font-size: var(--font-size-sm); }
+
+.path {
+  overflow: hidden;
+  padding: 10px 12px;
+  border-radius: 9px;
+  background: var(--ui-input-bg);
+  color: var(--color-text-secondary);
+  font-family: var(--font-family-mono, monospace);
+  font-size: 0.82rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.field { display: grid; gap: 6px; color: var(--color-text-secondary); font-size: var(--font-size-sm); }
+
+.field input {
+  min-height: 42px;
+  padding: 0 12px;
+  border: 1px solid var(--ui-muted-border);
+  border-radius: 9px;
+  background: var(--ui-input-bg);
+  color: var(--color-text-primary);
+  font: inherit;
+}
+
+.actions,
+.statusRow,
+.peers { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+
+.button,
+.primaryButton,
+.dangerButton {
+  min-height: 40px;
+  padding: 0 14px;
+  border: 1px solid var(--ui-muted-border);
+  border-radius: 9px;
+  background: var(--ui-control-bg);
+  color: var(--color-text-primary);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 600;
+}
+
+.primaryButton { width: fit-content; border-color: var(--color-accent); background: var(--color-accent); color: var(--color-on-primary); }
+.dangerButton { color: var(--color-danger, #d35b5b); }
+.button:disabled, .primaryButton:disabled, .dangerButton:disabled { cursor: not-allowed; opacity: 0.55; }
+
+.status {
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: var(--ui-control-bg);
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: capitalize;
+}
+
+.status[data-state="up_to_date"] { color: var(--color-accent); }
+.status[data-state="folder_unavailable"], .warning { color: var(--color-warning, #b87321); }
+.peers span { padding: 5px 9px; border-radius: 999px; background: var(--ui-control-bg); font-size: 0.8rem; }

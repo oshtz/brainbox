@@ -1,6 +1,7 @@
 // Core application types
 export interface Vault {
   id: string;
+  uuid?: string;
   title: string;
   name?: string;
   color?: string;
@@ -49,6 +50,7 @@ export interface CaptureData {
 export interface ProtocolCapture {
   title: string;
   url: string;
+  selection?: string;
 }
 
 export interface SearchResult {
@@ -68,14 +70,6 @@ export interface SearchResult {
 export interface ThemeContextType {
   theme: 'light' | 'dark';
   toggleTheme: () => void;
-  accent: string;
-  setAccent: (color: string) => void;
-}
-
-export interface RGB {
-  r: number;
-  g: number;
-  b: number;
 }
 
 // Component prop types
@@ -124,6 +118,7 @@ export type RequiredFields<T, K extends keyof T> = T & Required<Pick<T, K>>;
 export interface BackendVault {
   id: number;
   name: string;
+  uuid?: string | null;
   cover_image?: string | null;
   has_password?: boolean;
   created_at?: string;
@@ -161,4 +156,5 @@ export interface BackendSearchResult {
 export interface CaptureFromProtocolPayload {
   title?: string;
   url?: string;
+  selection?: string;
 }

@@ -83,135 +83,148 @@ export const KeyManagement: React.FC<KeyManagementProps> = ({ onVaultLocked }) =
     <div className={styles.container}>
       <div className={styles.section}>
         <div className={styles.sectionHeader}>
-          <span className={styles.sectionLabel}>Unlocked Vaults</span>
-          <span className={styles.badge}>
-            {unlockedVaults.length} of {unlockedVaults.length + lockedVaults.length}
-          </span>
-        </div>
-
-        {loading ? (
-          <div className={styles.loading}>Loading vaults...</div>
-        ) : unlockedVaults.length === 0 ? (
-          <div className={styles.emptyState}>
-            <LockClosedIcon className={styles.lockIcon} aria-hidden="true" />
-            <p>No vaults are currently unlocked</p>
-            <p className={styles.muted}>
-              Unlock a vault by opening it and entering your password
-            </p>
-          </div>
-        ) : (
-          <div className={styles.vaultList}>
-            {unlockedVaults.map((vault) => (
-              <div key={vault.id} className={styles.vaultItem}>
-                <div className={styles.vaultInfo}>
-                  <LockOpenIcon className={styles.vaultIcon} aria-hidden="true" />
-                  <div className={styles.vaultDetails}>
-                    <span className={styles.vaultName}>{vault.name}</span>
-                    <span className={styles.vaultId}>ID: {vault.id}</span>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  className={styles.lockButton}
-                  onClick={() => handleLockVault(String(vault.id), vault.name)}
-                  aria-label={`Lock vault ${vault.name}`}
-                >
-                  Lock
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {unlockedVaults.length > 0 && (
-          <div className={styles.actions}>
-            <button
-              type="button"
-              className={styles.lockAllButton}
-              onClick={handleLockAll}
-            >
-              Lock All Vaults
-            </button>
-          </div>
-        )}
-      </div>
-
-      <div className={styles.section}>
-        <div className={styles.sectionHeader}>
-          <span className={styles.sectionLabel}>Locked Vaults</span>
-          <span className={styles.badgeMuted}>{lockedVaults.length}</span>
-        </div>
-
-        {lockedVaults.length === 0 ? (
-          <div className={styles.emptyStateMuted}>
-            All vaults are unlocked
-          </div>
-        ) : (
-          <div className={styles.lockedList}>
-            {lockedVaults.map((vault) => (
-              <div key={vault.id} className={styles.lockedItem}>
-                <LockClosedIcon className={styles.lockedIcon} aria-hidden="true" />
-                <span className={styles.lockedName}>{vault.name}</span>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {passwordlessVaults.length > 0 && (
-        <div className={styles.section}>
-          <div className={styles.sectionHeader}>
-            <span className={styles.sectionLabel}>Vaults Without Password</span>
-            <span className={styles.badgeMuted}>{passwordlessVaults.length}</span>
-          </div>
-
-          <div className={styles.lockedList}>
-            {passwordlessVaults.map((vault) => (
-              <div key={vault.id} className={styles.lockedItem}>
-                <LockOpenIcon className={styles.lockedIcon} aria-hidden="true" />
-                <span className={styles.lockedName}>{vault.name}</span>
-                <span className={styles.muted} style={{ marginLeft: 'auto', fontSize: '12px' }}>Always accessible</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      <div className={styles.section}>
-        <div className={styles.sectionHeader}>
           <span className={styles.sectionLabel}>Session Settings</span>
         </div>
 
-        <div className={styles.settingRow}>
-          <div className={styles.settingInfo}>
-            <span className={styles.settingLabel}>Auto-lock timeout</span>
-            <span className={styles.settingDescription}>
-              Automatically lock vaults after a period of inactivity
-            </span>
+        <div className={styles.sessionGrid} data-testid="session-settings-grid">
+          <div className={styles.settingRow}>
+            <div className={styles.settingInfo}>
+              <span className={styles.settingLabel}>Auto-lock timeout</span>
+              <span className={styles.settingDescription}>
+                Automatically lock vaults after a period of inactivity
+              </span>
+            </div>
+            <select
+              value={sessionTimeout}
+              onChange={(e) => setSessionTimeout(parseInt(e.target.value, 10))}
+              className={styles.select}
+              aria-label="Session timeout"
+            >
+              {timeoutOptions.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
           </div>
-          <select
-            value={sessionTimeout}
-            onChange={(e) => setSessionTimeout(parseInt(e.target.value, 10))}
-            className={styles.select}
-            aria-label="Session timeout"
-          >
-            {timeoutOptions.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
-        </div>
 
-        <div className={styles.infoBox}>
-          <InformationCircleIcon className={styles.infoIcon} aria-hidden="true" />
-          <p>
-            Encryption keys are stored in memory only. Closing brainbox or
-            locking a vault will clear the keys. For maximum security, lock
-            your vaults when not in use.
-          </p>
+          <div className={styles.infoBox}>
+            <InformationCircleIcon className={styles.infoIcon} aria-hidden="true" />
+            <p>
+              Encryption keys are stored in memory only. Closing brainbox or
+              locking a vault will clear the keys. For maximum security, lock
+              your vaults when not in use.
+            </p>
+          </div>
         </div>
       </div>
+
+      <div className={styles.vaultAccess}>
+        <div className={styles.sectionHeader}>
+          <span className={styles.sectionLabel}>Vault Access</span>
+        </div>
+
+        <div className={styles.section}>
+          <div className={styles.sectionHeader}>
+            <span className={styles.sectionLabel}>Unlocked Vaults</span>
+            <span className={styles.badge}>
+              {unlockedVaults.length} of {unlockedVaults.length + lockedVaults.length}
+            </span>
+          </div>
+
+          {loading ? (
+            <div className={styles.loading}>Loading vaults...</div>
+          ) : unlockedVaults.length === 0 ? (
+            <div className={styles.emptyState}>
+              <LockClosedIcon className={styles.lockIcon} aria-hidden="true" />
+              <div className={styles.emptyStateCopy}>
+                <p>No vaults are currently unlocked</p>
+                <p className={styles.muted}>
+                  Unlock a vault by opening it and entering your password
+                </p>
+              </div>
+            </div>
+          ) : (
+            <div className={styles.vaultList}>
+              {unlockedVaults.map((vault) => (
+                <div key={vault.id} className={styles.vaultItem}>
+                  <div className={styles.vaultInfo}>
+                    <LockOpenIcon className={styles.vaultIcon} aria-hidden="true" />
+                    <div className={styles.vaultDetails}>
+                      <span className={styles.vaultName}>{vault.name}</span>
+                      <span className={styles.vaultId}>ID: {vault.id}</span>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    className={styles.lockButton}
+                    onClick={() => handleLockVault(String(vault.id), vault.name)}
+                    aria-label={`Lock vault ${vault.name}`}
+                  >
+                    Lock
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {unlockedVaults.length > 0 && (
+            <div className={styles.actions}>
+              <button
+                type="button"
+                className={styles.lockAllButton}
+                onClick={handleLockAll}
+              >
+                Lock All Vaults
+              </button>
+            </div>
+          )}
+        </div>
+
+        <div className={styles.vaultStateGrid} data-testid="vault-state-grid">
+          <div className={styles.section}>
+            <div className={styles.sectionHeader}>
+              <span className={styles.sectionLabel}>Locked Vaults</span>
+              <span className={styles.badgeMuted}>{lockedVaults.length}</span>
+            </div>
+
+            {lockedVaults.length === 0 ? (
+              <div className={styles.emptyStateMuted}>
+                All vaults are unlocked
+              </div>
+            ) : (
+              <div className={styles.lockedList}>
+                {lockedVaults.map((vault) => (
+                  <div key={vault.id} className={styles.lockedItem}>
+                    <LockClosedIcon className={styles.lockedIcon} aria-hidden="true" />
+                    <span className={styles.lockedName}>{vault.name}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {passwordlessVaults.length > 0 && (
+            <div className={styles.section}>
+              <div className={styles.sectionHeader}>
+                <span className={styles.sectionLabel}>Vaults Without Password</span>
+                <span className={styles.badgeMuted}>{passwordlessVaults.length}</span>
+              </div>
+
+              <div className={styles.lockedList}>
+                {passwordlessVaults.map((vault) => (
+                  <div key={vault.id} className={styles.lockedItem}>
+                    <LockOpenIcon className={styles.lockedIcon} aria-hidden="true" />
+                    <span className={styles.lockedName}>{vault.name}</span>
+                    <span className={`${styles.muted} ${styles.accessStatus}`}>Always accessible</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
     </div>
   );
 };

@@ -5,7 +5,6 @@ import {
   Cog6ToothIcon,
   SunIcon,
   MoonIcon,
-  SparklesIcon,
   PlusIcon,
   StopIcon as StopIconOutline
 } from '@heroicons/react/24/outline';
@@ -15,13 +14,11 @@ import { useTheme } from '../../contexts/ThemeContext';
 
 const Sidebar = ({
   title = 'Library',
+  backgroundJobCount = 0,
   onLibraryClick,
   onSettingsClick,
-  onBrainyClick,
   onCreateNote,
   currentView = 'library',
-  isBrainyOpen = false,
-  brainyMode = 'sidebar'
 }) => {
   const { theme, toggleTheme } = useTheme();
   const appWindow = useMemo(() => {
@@ -39,9 +36,6 @@ const Sidebar = ({
       return false;
     }
   }, []);
-  const isBrainyFull = brainyMode === 'full';
-  const brainyActive = isBrainyFull ? currentView === 'brainy' : isBrainyOpen;
-
   useEffect(() => {
     if (!appWindow) {
       return;
@@ -106,14 +100,6 @@ const Sidebar = ({
     }
   }, [handleMaximize, isMac]);
 
-  const handleBrainyNav = () => {
-    if (isBrainyFull) {
-      onBrainyClick && onBrainyClick();
-      return;
-    }
-    onBrainyClick && onBrainyClick();
-  };
-
   const navItems = [
     {
       id: 'library',
@@ -124,16 +110,6 @@ const Sidebar = ({
       onClick: onLibraryClick,
       testId: 'nav-library',
       ariaLabel: 'Open library',
-    },
-    {
-      id: 'brainy',
-      label: 'brainy',
-      shortLabel: 'brainy',
-      icon: SparklesIcon,
-      active: brainyActive,
-      onClick: handleBrainyNav,
-      testId: 'nav-brainy',
-      ariaLabel: isBrainyFull ? 'Open brainy' : 'Open brainy AI assistant',
     },
     {
       id: 'settings',
@@ -186,6 +162,12 @@ const Sidebar = ({
       </nav>
 
       <div className={styles.actions} data-tauri-drag-region="false" data-nodrag>
+        {backgroundJobCount > 0 && (
+          <div className={styles.jobIndicator} role="status" data-testid="background-jobs">
+            <span className={styles.jobDot} aria-hidden="true" />
+            <span className={styles.jobLabel}>{backgroundJobCount === 1 ? 'Summarizing' : `${backgroundJobCount} summaries`}</span>
+          </div>
+        )}
         {currentView === 'library' && (
           <button
             type="button"

@@ -26,6 +26,12 @@ export function isUrl(input?: string): boolean {
   }
 }
 
+export function splitSourcedNote(content: string): { body: string; sourceUrl: string | null } {
+  const match = content.match(/^(.*)\r?\n\r?\nSource:\s*(\S+)\s*$/s);
+  if (!match || !isUrl(match[2])) return { body: content, sourceUrl: null };
+  return { body: match[1], sourceUrl: match[2] };
+}
+
 /**
  * Checks if a URL is a YouTube video URL
  *

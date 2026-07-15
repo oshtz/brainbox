@@ -164,7 +164,7 @@ brainy is an intelligent assistant built into brainbox with full tool calling ca
 
 - Global Hotkey (Windows): default `Alt+Shift+B` toggles the capture modal.
 - Custom Protocol (Windows): open `brainbox://capture?url={URL}&title={TITLE}` to send the current page to brainbox. The app registers the protocol under the current user.
-- Bookmarklet: use `examples/bookmarklet-direct.js` to copy the current page’s `{url,title}` as JSON to the clipboard; then paste into brainbox’s capture field.
+- Bookmarklet: drag the localhost bookmarklet from Settings → Capture. With selected text it opens a sourced note; without a selection it opens the existing page-link capture. `examples/bookmarklet-direct.js` contains the same bookmarklet code.
 - Bridge Page: `examples/brainbox-bridge.html` is a small page that redirects to the brainbox protocol; you can host/use it to create links that trigger the app.
 
 ## Data & Security
@@ -217,7 +217,7 @@ brainbox/
 ├─ styles/                 # Design tokens, globals, themes
 ├─ public/                 # Static assets
 ├─ examples/
-│  ├─ bookmarklet-direct.js    # Clipboard-based bookmarklet
+│  ├─ bookmarklet-direct.js    # Localhost bookmarklet for links and selected text
 │  └─ brainbox-bridge.html     # Protocol bridge page
 ```
 

@@ -6,7 +6,8 @@ use chacha20poly1305::{aead::Aead, Key, KeyInit, XChaCha20Poly1305, XNonce};
 use rand::{rngs::OsRng, RngCore};
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use sha2::{Digest, Sha256};
+use std::collections::{HashMap, HashSet};
 use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -24,10 +25,8 @@ const SYNC_ENVELOPE_ITERATIONS: u32 = 210_000;
 /// Sync file name
 pub const SYNC_FILE_NAME: &str = "brainbox.sync";
 
-/// Captures subfolder name
-pub const CAPTURES_FOLDER_NAME: &str = "captures";
-
-const DATA_DIR_ENV: &str = "BRAINBOX_DATA_DIR";
+pub const SYNC_DEVICES_DIR: &str = "devices";
+pub const SYNC_DEVICE_EXTENSION: &str = "brainbox-sync";
 
 // --- Sync Data Structures ---
 
@@ -101,7 +100,6 @@ pub struct EncryptedSyncEnvelope {
 
 struct LoadedSyncFile {
     sync_file: SyncFile,
-    encrypted: bool,
 }
 
 // --- Export Result ---
@@ -125,6 +123,129 @@ pub struct SyncImportResult {
     pub conflicts: Vec<String>, // Item titles that had conflicts
     pub warnings: Vec<String>,
     pub skipped_vaults: Vec<String>, // Names of vaults skipped due to password mismatch
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct SyncPeerInfo {
+    pub device_id: String,
+    pub device_name: String,
+    pub exported_at: String,
+    pub last_imported_at: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SyncFolderInspection {
+    pub state: String,
+    pub folder: String,
+    pub devices: Vec<SyncPeerInfo>,
+    pub vault_count: usize,
+    pub item_count: usize,
+    pub needs_sync_passphrase: bool,
+    pub vaults_needing_password: Vec<VaultPasswordInfo>,
+    pub message: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct FolderSyncStatus {
+    pub state: String,
+    pub folder: Option<String>,
+    pub device_name: String,
+    pub last_success_at: Option<String>,
+    pub peers: Vec<SyncPeerInfo>,
+    pub message: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct FolderSyncResult {
+    pub state: String,
+    pub imported_vaults: usize,
+    pub imported_items: usize,
+    pub exported_vaults: usize,
+    pub exported_items: usize,
+    pub conflicts: Vec<String>,
+    pub data_changed: bool,
+    pub skipped_peers: Vec<String>,
+    pub warnings: Vec<String>,
+    pub vaults_needing_password: Vec<VaultPasswordInfo>,
+}
+
+fn create_sync_peers_table(conn: &Connection) -> Result<(), String> {
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS sync_peers (
+            device_id TEXT PRIMARY KEY,
+            device_name TEXT NOT NULL,
+            snapshot_hash TEXT NOT NULL,
+            exported_at TEXT NOT NULL,
+            last_imported_at TEXT NOT NULL
+        )",
+        [],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+fn peer_snapshot_hash(conn: &Connection, device_id: &str) -> Result<Option<String>, String> {
+    create_sync_peers_table(conn)?;
+    let mut stmt = conn
+        .prepare("SELECT snapshot_hash FROM sync_peers WHERE device_id = ?1")
+        .map_err(|e| e.to_string())?;
+    let mut rows = stmt.query([device_id]).map_err(|e| e.to_string())?;
+    rows.next()
+        .map_err(|e| e.to_string())?
+        .map(|row| row.get(0).map_err(|e| e.to_string()))
+        .transpose()
+}
+
+fn peer_exported_at(conn: &Connection, device_id: &str) -> Result<Option<String>, String> {
+    create_sync_peers_table(conn)?;
+    let mut stmt = conn
+        .prepare("SELECT exported_at FROM sync_peers WHERE device_id = ?1")
+        .map_err(|e| e.to_string())?;
+    let mut rows = stmt.query([device_id]).map_err(|e| e.to_string())?;
+    rows.next()
+        .map_err(|e| e.to_string())?
+        .map(|row| row.get(0).map_err(|e| e.to_string()))
+        .transpose()
+}
+
+fn save_peer(conn: &Connection, sync_file: &SyncFile, snapshot_hash: &str) -> Result<(), String> {
+    create_sync_peers_table(conn)?;
+    conn.execute(
+        "INSERT OR REPLACE INTO sync_peers
+         (device_id, device_name, snapshot_hash, exported_at, last_imported_at)
+         VALUES (?1, ?2, ?3, ?4, ?5)",
+        rusqlite::params![
+            sync_file.device_id,
+            sync_file.device_name,
+            snapshot_hash,
+            sync_file.exported_at,
+            chrono::Utc::now().to_rfc3339(),
+        ],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+fn list_peers(conn: &Connection) -> Result<Vec<SyncPeerInfo>, String> {
+    create_sync_peers_table(conn)?;
+    let mut stmt = conn
+        .prepare(
+            "SELECT device_id, device_name, exported_at, last_imported_at
+             FROM sync_peers ORDER BY device_name, device_id",
+        )
+        .map_err(|e| e.to_string())?;
+    let rows = stmt
+        .query_map([], |row| {
+            Ok(SyncPeerInfo {
+                device_id: row.get(0)?,
+                device_name: row.get(1)?,
+                exported_at: row.get(2)?,
+                last_imported_at: row.get(3)?,
+            })
+        })
+        .map_err(|e| e.to_string())?;
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())
 }
 
 // --- Helper Functions ---
@@ -171,19 +292,6 @@ pub fn get_sync_folder(conn: &Connection) -> Result<Option<String>, String> {
 /// Set sync folder path in settings
 pub fn set_sync_folder(conn: &Connection, path: &str) -> Result<(), String> {
     SyncSettings::set(conn, "sync_folder", path).map_err(|e| e.to_string())
-}
-
-/// Get captures folder path (from app data directory)
-fn get_captures_folder() -> Result<PathBuf, String> {
-    let app_dir = if let Ok(path) = std::env::var(DATA_DIR_ENV) {
-        let data_dir = PathBuf::from(path);
-        fs::create_dir_all(&data_dir)
-            .map_err(|e| format!("Failed to create app data dir override: {}", e))?;
-        data_dir
-    } else {
-        dirs::data_local_dir().ok_or("Failed to get app data dir")?
-    };
-    Ok(app_dir.join("brainbox_captures"))
 }
 
 // --- Export Functions ---
@@ -340,7 +448,11 @@ pub fn sync_export(
     };
 
     // Write sync file
-    let sync_file_path = sync_folder.join(SYNC_FILE_NAME);
+    let devices_dir = sync_folder.join(SYNC_DEVICES_DIR);
+    fs::create_dir_all(&devices_dir)
+        .map_err(|e| format!("Failed to create sync devices folder: {}", e))?;
+    let sync_file_path =
+        devices_dir.join(format!("{}.{}", sync_file.device_id, SYNC_DEVICE_EXTENSION));
     let envelope = encrypt_sync_envelope(&sync_file, sync_passphrase)?;
     let json = serde_json::to_string_pretty(&envelope)
         .map_err(|e| format!("Failed to serialize sync file: {}", e))?;
@@ -361,8 +473,12 @@ pub fn sync_export(
 }
 
 fn write_sync_snapshot(path: &Path, contents: &[u8]) -> Result<(), String> {
-    let temp_path = path.with_file_name(format!("{}.tmp", SYNC_FILE_NAME));
-    let backup_path = path.with_file_name(format!("{}.bak", SYNC_FILE_NAME));
+    let filename = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .ok_or("Invalid sync snapshot path")?;
+    let temp_path = path.with_file_name(format!("{}.tmp", filename));
+    let backup_path = path.with_file_name(format!("{}.bak", filename));
     let mut temp = OpenOptions::new()
         .create(true)
         .truncate(true)
@@ -392,102 +508,6 @@ fn write_sync_snapshot(path: &Path, contents: &[u8]) -> Result<(), String> {
             .map_err(|e| format!("Failed to remove old sync snapshot: {}", e))?;
     }
     Ok(())
-}
-
-/// Get sync status information
-#[derive(Debug, Serialize, Deserialize)]
-pub struct SyncStatus {
-    pub sync_enabled: bool,
-    pub sync_folder: Option<String>,
-    pub device_name: String,
-    pub last_sync_at: Option<String>,
-    pub last_sync_device: Option<String>,
-    pub remote_file_exists: bool,
-    pub remote_exported_at: Option<String>,
-    pub remote_device_name: Option<String>,
-    pub has_changes: bool,
-}
-
-pub fn check_sync_status(conn: &Connection) -> Result<SyncStatus, String> {
-    // Ensure tables exist and are migrated before any queries
-    Vault::create_table(conn).map_err(|e| e.to_string())?;
-    VaultItem::create_table(conn).map_err(|e| e.to_string())?;
-    SyncSettings::create_table(conn).map_err(|e| e.to_string())?;
-
-    let sync_folder = get_sync_folder(conn)?;
-    let device_name = get_device_name(conn)?;
-    let last_sync_at = SyncSettings::get(conn, "last_sync_at").map_err(|e| e.to_string())?;
-    let last_sync_device =
-        SyncSettings::get(conn, "last_sync_device").map_err(|e| e.to_string())?;
-
-    let mut remote_file_exists = false;
-    let mut remote_exported_at = None;
-    let mut remote_device_name = None;
-    let mut has_changes = false;
-
-    if let Some(ref folder) = sync_folder {
-        let sync_file_path = Path::new(folder).join(SYNC_FILE_NAME);
-        if sync_file_path.exists() {
-            remote_file_exists = true;
-
-            // Try to read the sync file to get metadata
-            if let Ok(contents) = fs::read_to_string(&sync_file_path) {
-                if let Ok((exported_at, device_name, _encrypted)) =
-                    read_sync_file_metadata(&contents)
-                {
-                    remote_exported_at = Some(exported_at.clone());
-                    remote_device_name = Some(device_name);
-
-                    // Check if remote is newer than last sync
-                    if let Some(ref last) = last_sync_at {
-                        has_changes = exported_at > *last;
-                    } else {
-                        has_changes = true; // Never synced before
-                    }
-                }
-            }
-        }
-    }
-
-    Ok(SyncStatus {
-        sync_enabled: sync_folder.is_some(),
-        sync_folder,
-        device_name,
-        last_sync_at,
-        last_sync_device,
-        remote_file_exists,
-        remote_exported_at,
-        remote_device_name,
-        has_changes,
-    })
-}
-
-/// Get list of vaults that need passwords for export
-pub fn get_locked_vaults(conn: &Connection) -> Result<Vec<(i64, String)>, String> {
-    Vault::create_table(conn).map_err(|e| e.to_string())?;
-
-    let vaults = Vault::list(conn).map_err(|e| e.to_string())?;
-    let locked: Vec<(i64, String)> = vaults
-        .into_iter()
-        .filter(|v| v.has_password)
-        .map(|v| (v.id, v.name))
-        .collect();
-
-    Ok(locked)
-}
-
-/// Get all sync settings
-pub fn get_sync_settings(conn: &Connection) -> Result<HashMap<String, String>, String> {
-    SyncSettings::create_table(conn).map_err(|e| e.to_string())?;
-
-    let settings = SyncSettings::get_all(conn).map_err(|e| e.to_string())?;
-    Ok(settings.into_iter().collect())
-}
-
-/// Set a sync setting
-pub fn set_sync_setting(conn: &Connection, key: &str, value: &str) -> Result<(), String> {
-    SyncSettings::create_table(conn).map_err(|e| e.to_string())?;
-    SyncSettings::set(conn, key, value).map_err(|e| e.to_string())
 }
 
 // --- Import Functions ---
@@ -621,32 +641,12 @@ fn read_sync_file(contents: &str, sync_passphrase: Option<&str>) -> Result<Loade
             "Sync file passphrase is required to read this encrypted sync file.".to_string()
         })?;
         let sync_file = decrypt_sync_envelope(&envelope, passphrase)?;
-        return Ok(LoadedSyncFile {
-            sync_file,
-            encrypted: true,
-        });
+        return Ok(LoadedSyncFile { sync_file });
     }
 
     let sync_file: SyncFile =
         serde_json::from_str(contents).map_err(|e| format!("Failed to parse sync file: {}", e))?;
-    Ok(LoadedSyncFile {
-        sync_file,
-        encrypted: false,
-    })
-}
-
-fn read_sync_file_metadata(contents: &str) -> Result<(String, String, bool), String> {
-    if let Some(envelope) = parse_encrypted_sync_envelope(contents)? {
-        return Ok((
-            envelope.exported_at,
-            "Encrypted sync file".to_string(),
-            true,
-        ));
-    }
-
-    let sync_file: SyncFile =
-        serde_json::from_str(contents).map_err(|e| format!("Failed to parse sync file: {}", e))?;
-    Ok((sync_file.exported_at, sync_file.device_name, false))
+    Ok(LoadedSyncFile { sync_file })
 }
 
 fn encrypt_sync_field(sync_key: &[u8; 32], plaintext: &str) -> Result<String, String> {
@@ -740,7 +740,8 @@ fn encrypt_password(key: &[u8; 32], password: &str) -> Result<Vec<u8>, String> {
 
 /// Import sync file and merge with local database
 /// passwords: Map of vault_uuid -> password (for re-encrypting imported items)
-pub fn sync_import(
+#[cfg(test)]
+fn sync_import(
     conn: &Connection,
     passwords: HashMap<String, String>,
     sync_passphrase: Option<&str>,
@@ -753,15 +754,26 @@ pub fn sync_import(
     // Get sync folder
     let sync_folder_str = get_sync_folder(conn)?
         .ok_or("Sync folder not configured. Please set a sync folder in settings.")?;
-    let sync_folder = Path::new(&sync_folder_str);
+    let sync_file_path = Path::new(&sync_folder_str).join(SYNC_FILE_NAME);
+    sync_import_from_path(conn, &sync_file_path, &passwords, sync_passphrase, None)
+}
 
-    // Read sync file
-    let sync_file_path = sync_folder.join(SYNC_FILE_NAME);
+fn sync_import_from_path(
+    conn: &Connection,
+    sync_file_path: &Path,
+    passwords: &HashMap<String, String>,
+    sync_passphrase: Option<&str>,
+    conflict_baseline: Option<String>,
+) -> Result<SyncImportResult, String> {
+    Vault::create_table(conn).map_err(|e| e.to_string())?;
+    VaultItem::create_table(conn).map_err(|e| e.to_string())?;
+    SyncSettings::create_table(conn).map_err(|e| e.to_string())?;
+
     if !sync_file_path.exists() {
         return Err("Sync file not found. No sync data available.".to_string());
     }
 
-    let contents = fs::read_to_string(&sync_file_path)
+    let contents = fs::read_to_string(sync_file_path)
         .map_err(|e| format!("Failed to read sync file: {}", e))?;
     let loaded_sync = read_sync_file(&contents, sync_passphrase)?;
     let sync_file = loaded_sync.sync_file;
@@ -800,7 +812,10 @@ pub fn sync_import(
         }
     }
 
-    let last_sync_at = SyncSettings::get(conn, "last_sync_at").map_err(|e| e.to_string())?;
+    let last_sync_at = match conflict_baseline {
+        Some(value) => Some(value),
+        None => SyncSettings::get(conn, "last_sync_at").map_err(|e| e.to_string())?,
+    };
 
     let mut imported_vaults = 0;
     let mut imported_items = 0;
@@ -889,6 +904,7 @@ pub fn sync_import(
                         &plain_item,
                         &local_key,
                         &last_sync_at,
+                        &sync_file.device_name,
                     )?;
 
                     match import_result {
@@ -1014,46 +1030,10 @@ pub fn sync_import(
         .map_err(|e| e.to_string())?;
     tx.commit().map_err(|e| e.to_string())?;
 
-    // Copy captures from sync folder
-    let captures_src = sync_folder.join(CAPTURES_FOLDER_NAME);
-    let local_captures_folder = get_captures_folder()?;
-    let mut imported_captures = 0;
-
-    if captures_src.exists() {
-        // Create local captures folder if it doesn't exist
-        if !local_captures_folder.exists() {
-            fs::create_dir_all(&local_captures_folder)
-                .map_err(|e| format!("Failed to create local captures folder: {}", e))?;
-        }
-
-        if let Ok(entries) = fs::read_dir(&captures_src) {
-            for entry in entries.flatten() {
-                let path = entry.path();
-                if path.is_file() {
-                    if let Some(filename) = path.file_name().and_then(|n| n.to_str()) {
-                        let dest_path = local_captures_folder.join(filename);
-
-                        // Only copy if file doesn't exist locally
-                        if !dest_path.exists() {
-                            if let Err(e) = fs::copy(&path, &dest_path) {
-                                warnings
-                                    .push(format!("Failed to copy capture '{}': {}", filename, e));
-                            } else {
-                                imported_captures += 1;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    // Note: Search index rebuild should be triggered by the frontend after import
-
     Ok(SyncImportResult {
         imported_vaults,
         imported_items,
-        imported_captures,
+        imported_captures: 0,
         conflicts,
         warnings,
         skipped_vaults,
@@ -1076,22 +1056,74 @@ fn import_item(
     sync_item: &SyncItem,
     key: &[u8; 32],
     last_sync_at: &Option<String>,
+    remote_device_name: &str,
 ) -> Result<ImportItemResult, String> {
     // Check if item exists locally by UUID
     let local_item = VaultItem::get_by_uuid(conn, &sync_item.uuid).map_err(|e| e.to_string())?;
 
     match local_item {
         Some(existing_item) => {
+            let local_updated_at = existing_item.updated_at.clone();
+            let remote_updated_at = &sync_item.updated_at;
+            let is_conflict = last_sync_at.as_ref().is_some_and(|last| {
+                local_updated_at > *last
+                    && *remote_updated_at > *last
+                    && local_updated_at != *remote_updated_at
+            });
+
             // Handle soft delete sync
             if sync_item.deleted_at.is_some() && existing_item.deleted_at.is_none() {
-                // Remote is deleted, apply locally
+                if is_conflict {
+                    let recovery_title = format!(
+                        "{} [Recovered after delete from {}]",
+                        existing_item.title, remote_device_name
+                    );
+                    let recovery_uuid = uuid::Uuid::new_v4().to_string();
+                    conn.execute(
+                        "INSERT INTO vault_items (vault_id, title, content, created_at, updated_at, image, summary, sort_order, uuid) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+                        rusqlite::params![
+                            vault_id,
+                            &recovery_title,
+                            &existing_item.content,
+                            &existing_item.created_at,
+                            &existing_item.updated_at,
+                            &existing_item.image,
+                            &existing_item.summary,
+                            existing_item.sort_order,
+                            recovery_uuid,
+                        ],
+                    ).map_err(|e| e.to_string())?;
+
+                    if let Ok(content) = decrypt_content(key, &existing_item.content) {
+                        let recovery_id = conn.last_insert_rowid();
+                        let _ = crate::search::index_document(
+                            recovery_id.to_string(),
+                            recovery_title,
+                            content.clone(),
+                            if content.starts_with("http://") || content.starts_with("https://") {
+                                "url".to_string()
+                            } else {
+                                "note".to_string()
+                            },
+                            existing_item.created_at.clone(),
+                            existing_item.updated_at.clone(),
+                            Some(format!("vault/{}/item/{}", vault_id, recovery_id)),
+                            vec![],
+                        );
+                    }
+                }
+
                 conn.execute(
                     "UPDATE vault_items SET deleted_at = ?1, updated_at = ?2 WHERE id = ?3",
                     rusqlite::params![sync_item.deleted_at, sync_item.updated_at, existing_item.id],
                 )
                 .map_err(|e| e.to_string())?;
                 remove_indexed_item(existing_item.id);
-                return Ok(ImportItemResult::Deleted);
+                return if is_conflict {
+                    Ok(ImportItemResult::Conflict(existing_item.title))
+                } else {
+                    Ok(ImportItemResult::Deleted)
+                };
             }
 
             // Skip if remote item is deleted (already handled above if local wasn't)
@@ -1099,21 +1131,10 @@ fn import_item(
                 return Ok(ImportItemResult::Skipped);
             }
 
-            let local_updated_at = existing_item.updated_at.clone();
-            let remote_updated_at = &sync_item.updated_at;
-
-            // Check for conflict: both modified since last sync
-            let is_conflict = if let Some(ref last) = last_sync_at {
-                local_updated_at > *last
-                    && *remote_updated_at > *last
-                    && local_updated_at != *remote_updated_at
-            } else {
-                false
-            };
-
             if is_conflict {
                 // Create conflict copy
-                let conflict_title = format!("{} [Conflict]", sync_item.title);
+                let conflict_title =
+                    format!("{} [Conflict from {}]", sync_item.title, remote_device_name);
                 let encrypted_content = encrypt_content(key, &sync_item.content)?;
                 let new_uuid = uuid::Uuid::new_v4().to_string();
 
@@ -1144,7 +1165,7 @@ fn import_item(
                 let encrypted_content = encrypt_content(key, &sync_item.content)?;
 
                 conn.execute(
-                    "UPDATE vault_items SET title = ?1, content = ?2, updated_at = ?3, image = ?4, summary = ?5, sort_order = ?6 WHERE id = ?7",
+                    "UPDATE vault_items SET title = ?1, content = ?2, updated_at = ?3, image = ?4, summary = ?5, sort_order = ?6, deleted_at = NULL WHERE id = ?7",
                     rusqlite::params![
                         sync_item.title,
                         encrypted_content,
@@ -1202,244 +1223,522 @@ pub struct VaultPasswordInfo {
     pub name: String,
 }
 
-/// Get information about the remote sync file (preview before import)
-#[derive(Debug, Serialize, Deserialize)]
-pub struct SyncPreview {
-    pub device_name: String,
-    pub exported_at: String,
-    pub vault_count: usize,
-    pub item_count: usize,
-    pub capture_count: usize,
-    #[serde(default)]
-    pub encrypted: bool,
-    #[serde(default)]
-    pub needs_sync_passphrase: bool,
-    pub vaults_needing_password: Vec<VaultPasswordInfo>, // Vaults that need passwords (with UUID and name)
-}
-
-// --- Purge Functions ---
-
-/// Result of purging deleted items
-#[derive(Debug, Serialize, Deserialize)]
-pub struct PurgeResult {
-    pub purged_vaults: usize,
-    pub purged_items: usize,
-}
-
-/// Purge items and vaults that have been soft-deleted for more than X days
-pub fn purge_deleted_items(conn: &Connection, days: i32) -> Result<PurgeResult, String> {
-    Vault::create_table(conn).map_err(|e| e.to_string())?;
-    VaultItem::create_table(conn).map_err(|e| e.to_string())?;
-
-    // Calculate cutoff date
-    let cutoff = chrono::Utc::now() - chrono::Duration::days(days as i64);
-    let cutoff_str = cutoff.to_rfc3339();
-
-    // First, hard delete items that were soft-deleted before cutoff
-    let purged_items = conn
-        .execute(
-            "DELETE FROM vault_items WHERE deleted_at IS NOT NULL AND deleted_at < ?1",
-            rusqlite::params![cutoff_str],
-        )
-        .map_err(|e| e.to_string())?;
-
-    // Then, hard delete vaults (and their remaining items) that were soft-deleted before cutoff
-    // First get the vault IDs to delete
-    let mut stmt = conn
-        .prepare("SELECT id FROM vaults WHERE deleted_at IS NOT NULL AND deleted_at < ?1")
-        .map_err(|e| e.to_string())?;
-    let vault_ids: Vec<i64> = stmt
-        .query_map([&cutoff_str], |row| row.get(0))
-        .map_err(|e| e.to_string())?
-        .filter_map(|r| r.ok())
-        .collect();
-
-    let purged_vaults = vault_ids.len();
-
-    // Delete items belonging to these vaults, then the vaults themselves
-    for vault_id in vault_ids {
-        conn.execute("DELETE FROM vault_items WHERE vault_id = ?1", [vault_id])
-            .map_err(|e| e.to_string())?;
-        conn.execute("DELETE FROM vaults WHERE id = ?1", [vault_id])
-            .map_err(|e| e.to_string())?;
-    }
-
-    Ok(PurgeResult {
-        purged_vaults,
-        purged_items,
-    })
-}
-
-/// Get the configured purge days (default 30)
-pub fn get_purge_days(conn: &Connection) -> Result<i32, String> {
-    SyncSettings::create_table(conn).map_err(|e| e.to_string())?;
-
-    if let Some(days_str) =
-        SyncSettings::get(conn, "purge_deleted_after_days").map_err(|e| e.to_string())?
-    {
-        days_str
-            .parse()
-            .map_err(|_| "Invalid purge days value".to_string())
-    } else {
-        Ok(30) // Default
-    }
-}
-
-/// Set the configured purge days
-#[allow(dead_code)]
-pub fn set_purge_days(conn: &Connection, days: i32) -> Result<(), String> {
-    SyncSettings::create_table(conn).map_err(|e| e.to_string())?;
-    SyncSettings::set(conn, "purge_deleted_after_days", &days.to_string())
-        .map_err(|e| e.to_string())
-}
-
-/// Check if sync is enabled and auto-purge should run
-pub fn should_auto_purge(conn: &Connection) -> Result<bool, String> {
-    SyncSettings::create_table(conn).map_err(|e| e.to_string())?;
-
-    // Purge is only relevant if sync is enabled
-    let sync_folder = get_sync_folder(conn)?;
-    Ok(sync_folder.is_some())
-}
-
-// --- Auto-trigger settings ---
-
-/// Check if "sync on close" is enabled
-pub fn is_sync_on_close_enabled(conn: &Connection) -> Result<bool, String> {
-    SyncSettings::create_table(conn).map_err(|e| e.to_string())?;
-
-    if let Some(val) = SyncSettings::get(conn, "sync_on_close").map_err(|e| e.to_string())? {
-        Ok(val == "true" || val == "1")
-    } else {
-        Ok(false) // Default to disabled
-    }
-}
-
-/// Set "sync on close" setting
-pub fn set_sync_on_close(conn: &Connection, enabled: bool) -> Result<(), String> {
-    SyncSettings::create_table(conn).map_err(|e| e.to_string())?;
-    SyncSettings::set(
-        conn,
-        "sync_on_close",
-        if enabled { "true" } else { "false" },
-    )
-    .map_err(|e| e.to_string())
-}
-
-/// Check if "check for sync on startup" is enabled
-pub fn is_check_sync_on_startup_enabled(conn: &Connection) -> Result<bool, String> {
-    SyncSettings::create_table(conn).map_err(|e| e.to_string())?;
-
-    if let Some(val) =
-        SyncSettings::get(conn, "check_sync_on_startup").map_err(|e| e.to_string())?
-    {
-        Ok(val == "true" || val == "1")
-    } else {
-        Ok(true) // Default to enabled
-    }
-}
-
-/// Set "check for sync on startup" setting  
-pub fn set_check_sync_on_startup(conn: &Connection, enabled: bool) -> Result<(), String> {
-    SyncSettings::create_table(conn).map_err(|e| e.to_string())?;
-    SyncSettings::set(
-        conn,
-        "check_sync_on_startup",
-        if enabled { "true" } else { "false" },
-    )
-    .map_err(|e| e.to_string())
-}
-
 /// Set device name
 pub fn set_device_name(conn: &Connection, name: &str) -> Result<(), String> {
     SyncSettings::create_table(conn).map_err(|e| e.to_string())?;
-    SyncSettings::set(conn, "device_name", name).map_err(|e| e.to_string())
+    SyncSettings::set(conn, "device_name", name).map_err(|e| e.to_string())?;
+    SyncSettings::delete(conn, "folder_sync_export_digest").map_err(|e| e.to_string())
 }
 
-pub fn get_sync_preview(
-    conn: &Connection,
-    sync_passphrase: Option<&str>,
-) -> Result<Option<SyncPreview>, String> {
-    SyncSettings::create_table(conn).map_err(|e| e.to_string())?;
+fn snapshot_paths(folder: &Path) -> Result<Vec<PathBuf>, String> {
+    let mut paths = Vec::new();
+    let devices_dir = folder.join(SYNC_DEVICES_DIR);
+    if devices_dir.exists() {
+        for entry in fs::read_dir(&devices_dir)
+            .map_err(|e| format!("Failed to read sync devices folder: {}", e))?
+        {
+            let path = entry.map_err(|e| e.to_string())?.path();
+            if path.is_file()
+                && path.extension().and_then(|value| value.to_str()) == Some(SYNC_DEVICE_EXTENSION)
+            {
+                paths.push(path);
+            }
+        }
+    }
+    let legacy = folder.join(SYNC_FILE_NAME);
+    if legacy.is_file() {
+        paths.push(legacy);
+    }
+    paths.sort();
+    Ok(paths)
+}
 
-    let sync_folder_str = match get_sync_folder(conn)? {
-        Some(f) => f,
-        None => return Ok(None),
+fn snapshot_hash(contents: &[u8]) -> String {
+    bytes_to_hex(&Sha256::digest(contents))
+}
+
+fn snapshot_device_id(path: &Path) -> Option<String> {
+    (path.extension().and_then(|value| value.to_str()) == Some(SYNC_DEVICE_EXTENSION))
+        .then(|| path.file_stem()?.to_str().map(str::to_string))
+        .flatten()
+}
+
+fn own_snapshot_path(folder: &Path, device_id: &str) -> PathBuf {
+    folder
+        .join(SYNC_DEVICES_DIR)
+        .join(format!("{}.{}", device_id, SYNC_DEVICE_EXTENSION))
+}
+
+fn local_sync_digest(conn: &Connection) -> Result<String, String> {
+    Vault::create_table(conn).map_err(|e| e.to_string())?;
+    VaultItem::create_table(conn).map_err(|e| e.to_string())?;
+    let mut stmt = conn
+        .prepare(
+            "SELECT kind, uuid, updated_at, deleted_at FROM (
+                SELECT 'vault' AS kind, COALESCE(uuid, '') AS uuid, COALESCE(updated_at, '') AS updated_at, COALESCE(deleted_at, '') AS deleted_at FROM vaults
+                UNION ALL
+                SELECT 'item' AS kind, COALESCE(uuid, '') AS uuid, updated_at, COALESCE(deleted_at, '') AS deleted_at FROM vault_items
+             ) ORDER BY kind, uuid",
+        )
+        .map_err(|e| e.to_string())?;
+    let rows = stmt
+        .query_map([], |row| {
+            Ok(format!(
+                "{}\0{}\0{}\0{}\n",
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, String>(3)?,
+            ))
+        })
+        .map_err(|e| e.to_string())?;
+    let mut hasher = Sha256::new();
+    for row in rows {
+        hasher.update(row.map_err(|e| e.to_string())?.as_bytes());
+    }
+    Ok(bytes_to_hex(&hasher.finalize()))
+}
+
+pub fn validate_sync_folder(path: &str) -> Result<String, String> {
+    let folder = Path::new(path);
+    if !folder.is_dir() {
+        return Err("Choose an existing local folder.".to_string());
+    }
+    let canonical = folder
+        .canonicalize()
+        .map_err(|e| format!("Failed to resolve sync folder: {}", e))?;
+    let probe = canonical.join(format!(".brainbox-write-test-{}", uuid::Uuid::new_v4()));
+    let result = (|| {
+        let mut file = OpenOptions::new()
+            .create_new(true)
+            .write(true)
+            .open(&probe)
+            .map_err(|e| format!("Sync folder is not writable: {}", e))?;
+        file.write_all(b"brainbox")
+            .and_then(|_| file.sync_all())
+            .map_err(|e| format!("Sync folder is not writable: {}", e))
+    })();
+    let cleanup = if probe.exists() {
+        fs::remove_file(&probe).map_err(|e| format!("Failed to clean sync folder test: {}", e))
+    } else {
+        Ok(())
     };
-    let sync_folder = Path::new(&sync_folder_str);
-    let sync_file_path = sync_folder.join(SYNC_FILE_NAME);
+    result?;
+    cleanup?;
+    canonical
+        .to_str()
+        .map(str::to_string)
+        .ok_or_else(|| "Sync folder path is not valid UTF-8.".to_string())
+}
 
-    if !sync_file_path.exists() {
-        return Ok(None);
+pub fn inspect_folder_sync(
+    conn: &Connection,
+    path: &str,
+    sync_passphrase: Option<&str>,
+) -> Result<SyncFolderInspection, String> {
+    let folder = Path::new(path);
+    if !folder.is_dir() {
+        return Ok(SyncFolderInspection {
+            state: "invalid".to_string(),
+            folder: path.to_string(),
+            devices: Vec::new(),
+            vault_count: 0,
+            item_count: 0,
+            needs_sync_passphrase: false,
+            vaults_needing_password: Vec::new(),
+            message: Some("Choose an existing local folder.".to_string()),
+        });
+    }
+    let paths = snapshot_paths(folder)?;
+    if paths.is_empty() {
+        return Ok(SyncFolderInspection {
+            state: "empty".to_string(),
+            folder: path.to_string(),
+            devices: Vec::new(),
+            vault_count: 0,
+            item_count: 0,
+            needs_sync_passphrase: false,
+            vaults_needing_password: Vec::new(),
+            message: None,
+        });
     }
 
-    let contents = fs::read_to_string(&sync_file_path)
-        .map_err(|e| format!("Failed to read sync file: {}", e))?;
-    let loaded_sync = match read_sync_file(&contents, sync_passphrase) {
-        Ok(loaded_sync) => loaded_sync,
-        Err(err) if err.contains("passphrase is required") => {
-            let (exported_at, device_name, encrypted) = read_sync_file_metadata(&contents)?;
-            return Ok(Some(SyncPreview {
-                device_name,
-                exported_at,
-                vault_count: 0,
-                item_count: 0,
-                capture_count: 0,
-                encrypted,
-                needs_sync_passphrase: encrypted,
-                vaults_needing_password: Vec::new(),
-            }));
-        }
-        Err(err) => return Err(err),
-    };
-    let sync_file = loaded_sync.sync_file;
-
-    // Count only non-deleted items from non-deleted vaults
-    let item_count: usize = sync_file
-        .vaults
-        .iter()
-        .filter(|v| v.deleted_at.is_none())
-        .map(|v| v.items.iter().filter(|i| i.deleted_at.is_none()).count())
-        .sum();
-
-    // Find vaults that need passwords (either new vaults with password or existing with password)
-    let local_vaults = Vault::list(conn).map_err(|e| e.to_string())?;
-    let local_vault_uuids: std::collections::HashSet<String> =
-        local_vaults.iter().filter_map(|v| v.uuid.clone()).collect();
-
-    let vaults_needing_password: Vec<VaultPasswordInfo> = sync_file
-        .vaults
-        .iter()
-        .filter(|v| {
-            v.has_password
-                && v.deleted_at.is_none()
-                && (
-                    // New vault with password
-                    !local_vault_uuids.contains(&v.uuid) ||
-                // Existing vault with password
-                local_vaults.iter().any(|lv| lv.uuid.as_ref() == Some(&v.uuid) && lv.has_password)
-                )
-        })
-        .map(|v| VaultPasswordInfo {
-            uuid: v.uuid.clone(),
-            name: v.name.clone(),
-        })
+    let imported_peers: HashMap<String, SyncPeerInfo> = list_peers(conn)?
+        .into_iter()
+        .map(|peer| (peer.device_id.clone(), peer))
         .collect();
+    let mut devices = Vec::new();
+    let mut protected = HashMap::<String, String>::new();
+    let mut vault_uuids = HashSet::new();
+    let mut item_uuids = HashSet::new();
+    let mut needs_sync_passphrase = false;
+    for snapshot in paths {
+        let contents = fs::read_to_string(&snapshot)
+            .map_err(|e| format!("Failed to read sync snapshot: {}", e))?;
+        match read_sync_file(&contents, sync_passphrase) {
+            Ok(loaded) => {
+                let file = loaded.sync_file;
+                if file.format_version != SYNC_FORMAT_VERSION {
+                    return Err(format!(
+                        "Unsupported sync file format version: {}",
+                        file.format_version
+                    ));
+                }
+                for vault in &file.vaults {
+                    if vault.deleted_at.is_none() {
+                        vault_uuids.insert(vault.uuid.clone());
+                        item_uuids.extend(
+                            vault
+                                .items
+                                .iter()
+                                .filter(|item| item.deleted_at.is_none())
+                                .map(|item| item.uuid.clone()),
+                        );
+                    }
+                    if vault.has_password && vault.deleted_at.is_none() {
+                        protected.insert(vault.uuid.clone(), vault.name.clone());
+                    }
+                }
+                devices.push(SyncPeerInfo {
+                    device_id: file.device_id.clone(),
+                    device_name: file.device_name,
+                    exported_at: file.exported_at,
+                    last_imported_at: imported_peers
+                        .get(&file.device_id)
+                        .and_then(|peer| peer.last_imported_at.clone()),
+                });
+            }
+            Err(error) if error.contains("passphrase is required") => {
+                needs_sync_passphrase = true;
+            }
+            Err(error) => return Err(error),
+        }
+    }
+    devices.sort_by(|a, b| a.device_id.cmp(&b.device_id));
+    let mut vaults_needing_password: Vec<VaultPasswordInfo> = protected
+        .into_iter()
+        .map(|(uuid, name)| VaultPasswordInfo { uuid, name })
+        .collect();
+    vaults_needing_password.sort_by(|a, b| a.name.cmp(&b.name));
 
-    Ok(Some(SyncPreview {
-        device_name: sync_file.device_name,
-        exported_at: sync_file.exported_at,
-        vault_count: sync_file
-            .vaults
-            .iter()
-            .filter(|v| v.deleted_at.is_none())
-            .count(),
-        item_count,
-        capture_count: sync_file.captures.len(),
-        encrypted: loaded_sync.encrypted,
-        needs_sync_passphrase: false,
+    Ok(SyncFolderInspection {
+        state: "existing".to_string(),
+        folder: path.to_string(),
+        devices,
+        vault_count: vault_uuids.len(),
+        item_count: item_uuids.len(),
+        needs_sync_passphrase,
         vaults_needing_password,
-    }))
+        message: None,
+    })
+}
+
+pub fn folder_sync_status(
+    conn: &Connection,
+    sync_passphrase: Option<&str>,
+) -> Result<FolderSyncStatus, String> {
+    SyncSettings::create_table(conn).map_err(|e| e.to_string())?;
+    let device_name = get_device_name(conn)?;
+    let last_success_at =
+        SyncSettings::get(conn, "folder_sync_last_success_at").map_err(|e| e.to_string())?;
+    let Some(folder) = get_sync_folder(conn)? else {
+        return Ok(FolderSyncStatus {
+            state: "disabled".to_string(),
+            folder: None,
+            device_name,
+            last_success_at,
+            peers: Vec::new(),
+            message: None,
+        });
+    };
+    if !Path::new(&folder).is_dir() {
+        return Ok(FolderSyncStatus {
+            state: "folder_unavailable".to_string(),
+            folder: Some(folder),
+            device_name,
+            last_success_at,
+            peers: list_peers(conn)?,
+            message: Some(
+                "The sync folder is unavailable. Local data was not changed.".to_string(),
+            ),
+        });
+    }
+    if sync_passphrase.is_none() {
+        return Ok(FolderSyncStatus {
+            state: "passphrase_required".to_string(),
+            folder: Some(folder),
+            device_name,
+            last_success_at,
+            peers: list_peers(conn)?,
+            message: Some("Enter the sync passphrase to resume.".to_string()),
+        });
+    }
+
+    let device_id = get_or_create_device_id(conn)?;
+    let digest = local_sync_digest(conn)?;
+    let exported_digest =
+        SyncSettings::get(conn, "folder_sync_export_digest").map_err(|e| e.to_string())?;
+    let mut has_changes = exported_digest.as_deref() != Some(&digest)
+        || !own_snapshot_path(Path::new(&folder), &device_id).exists();
+    for path in snapshot_paths(Path::new(&folder))? {
+        let contents = fs::read(&path).map_err(|e| e.to_string())?;
+        if let Some(peer_id) = snapshot_device_id(&path) {
+            if peer_id != device_id
+                && peer_snapshot_hash(conn, &peer_id)?.as_deref() != Some(&snapshot_hash(&contents))
+            {
+                has_changes = true;
+            }
+            continue;
+        }
+        let text = String::from_utf8(contents.clone())
+            .map_err(|_| "Sync snapshot is not valid UTF-8.".to_string())?;
+        match read_sync_file(&text, sync_passphrase) {
+            Ok(loaded)
+                if loaded.sync_file.device_id != device_id
+                    && peer_snapshot_hash(conn, &loaded.sync_file.device_id)?.as_deref()
+                        != Some(&snapshot_hash(&contents)) =>
+            {
+                has_changes = true;
+            }
+            Ok(_) => {}
+            Err(_) => has_changes = true,
+        }
+    }
+    Ok(FolderSyncStatus {
+        state: if has_changes {
+            "changes_waiting".to_string()
+        } else {
+            "up_to_date".to_string()
+        },
+        folder: Some(folder),
+        device_name,
+        last_success_at,
+        peers: list_peers(conn)?,
+        message: None,
+    })
+}
+
+pub fn run_folder_sync(
+    conn: &Connection,
+    passwords: HashMap<String, String>,
+    sync_passphrase: &str,
+) -> Result<FolderSyncResult, String> {
+    normalize_sync_passphrase(Some(sync_passphrase))?;
+    Vault::create_table(conn).map_err(|e| e.to_string())?;
+    VaultItem::create_table(conn).map_err(|e| e.to_string())?;
+    SyncSettings::create_table(conn).map_err(|e| e.to_string())?;
+    create_sync_peers_table(conn)?;
+
+    let folder_string = get_sync_folder(conn)?
+        .ok_or("Sync folder not configured. Please choose a sync folder in settings.")?;
+    let folder = Path::new(&folder_string);
+    if !folder.is_dir() {
+        return Err("The sync folder is unavailable. Local data was not changed.".to_string());
+    }
+    let device_id = get_or_create_device_id(conn)?;
+    let local_vaults = Vault::list_all_for_sync(conn).map_err(|e| e.to_string())?;
+    let mut missing = HashMap::<String, String>::new();
+    let mut export_passwords = HashMap::new();
+    for vault in &local_vaults {
+        if !vault.has_password {
+            continue;
+        }
+        let uuid = vault.uuid.clone().unwrap_or_default();
+        match passwords.get(&uuid) {
+            Some(password) => {
+                let key = derive_key_from_password(password, &vault.id.to_string(), 100_000);
+                let verified = decrypt_content(&key, &vault.encrypted_password)
+                    .map_err(|_| format!("Invalid password for vault '{}'.", vault.name))?;
+                if verified != *password {
+                    return Err(format!("Invalid password for vault '{}'.", vault.name));
+                }
+                export_passwords.insert(vault.id, password.clone());
+            }
+            None => {
+                missing.insert(uuid, vault.name.clone());
+            }
+        }
+    }
+
+    struct PreparedSnapshot {
+        path: PathBuf,
+        hash: String,
+        file: SyncFile,
+    }
+    let mut prepared = Vec::new();
+    let mut skipped_peers = Vec::new();
+    let mut warnings = Vec::new();
+    for path in snapshot_paths(folder)? {
+        if snapshot_device_id(&path).as_deref() == Some(&device_id) {
+            continue;
+        }
+        let contents = match fs::read(&path) {
+            Ok(contents) => contents,
+            Err(error) => {
+                warnings.push(format!("Skipped '{}': {}", path.display(), error));
+                skipped_peers.push(path.display().to_string());
+                continue;
+            }
+        };
+        let hash = snapshot_hash(&contents);
+        if let Some(peer_id) = snapshot_device_id(&path) {
+            if peer_snapshot_hash(conn, &peer_id)?.as_deref() == Some(&hash) {
+                continue;
+            }
+        }
+        let text = match String::from_utf8(contents.clone()) {
+            Ok(text) => text,
+            Err(_) => {
+                warnings.push(format!("Skipped '{}': invalid UTF-8", path.display()));
+                skipped_peers.push(path.display().to_string());
+                continue;
+            }
+        };
+        let loaded = match read_sync_file(&text, Some(sync_passphrase)) {
+            Ok(loaded) => loaded,
+            Err(error) if error.contains("Failed to decrypt sync file") => return Err(error),
+            Err(error) => {
+                warnings.push(format!("Skipped '{}': {}", path.display(), error));
+                skipped_peers.push(path.display().to_string());
+                continue;
+            }
+        };
+        let file = loaded.sync_file;
+        if file.format_version != SYNC_FORMAT_VERSION {
+            warnings.push(format!(
+                "Skipped '{}': unsupported format {}",
+                file.device_name, file.format_version
+            ));
+            skipped_peers.push(file.device_name);
+            continue;
+        }
+        if file.device_id == device_id {
+            continue;
+        }
+        if peer_snapshot_hash(conn, &file.device_id)?.as_deref() == Some(&hash) {
+            continue;
+        }
+        for vault in &file.vaults {
+            let local = Vault::get_by_uuid(conn, &vault.uuid).map_err(|e| e.to_string())?;
+            if (vault.has_password || local.as_ref().is_some_and(|value| value.has_password))
+                && !passwords.contains_key(&vault.uuid)
+            {
+                missing.insert(vault.uuid.clone(), vault.name.clone());
+                continue;
+            }
+            let password = passwords.get(&vault.uuid);
+            for item in &vault.items {
+                sync_item_plaintext(vault, item, password)?;
+            }
+        }
+        prepared.push(PreparedSnapshot { path, hash, file });
+    }
+
+    if !missing.is_empty() {
+        let mut vaults_needing_password: Vec<VaultPasswordInfo> = missing
+            .into_iter()
+            .map(|(uuid, name)| VaultPasswordInfo { uuid, name })
+            .collect();
+        vaults_needing_password.sort_by(|a, b| a.name.cmp(&b.name));
+        return Ok(FolderSyncResult {
+            state: "unlock_required".to_string(),
+            imported_vaults: 0,
+            imported_items: 0,
+            exported_vaults: 0,
+            exported_items: 0,
+            conflicts: Vec::new(),
+            data_changed: false,
+            skipped_peers,
+            warnings,
+            vaults_needing_password,
+        });
+    }
+
+    prepared.sort_by(|a, b| a.file.device_id.cmp(&b.file.device_id));
+    let mut imported_vaults = 0;
+    let mut imported_items = 0;
+    let mut conflicts = Vec::new();
+    for snapshot in prepared {
+        let baseline = peer_exported_at(conn, &snapshot.file.device_id)?;
+        let result = sync_import_from_path(
+            conn,
+            &snapshot.path,
+            &passwords,
+            Some(sync_passphrase),
+            baseline,
+        )?;
+        imported_vaults += result.imported_vaults;
+        imported_items += result.imported_items;
+        conflicts.extend(result.conflicts);
+        warnings.extend(result.warnings);
+        save_peer(conn, &snapshot.file, &snapshot.hash)?;
+    }
+
+    let digest = local_sync_digest(conn)?;
+    let exported_digest =
+        SyncSettings::get(conn, "folder_sync_export_digest").map_err(|e| e.to_string())?;
+    let own_path = own_snapshot_path(folder, &device_id);
+    let (exported_vaults, exported_items) = if exported_digest.as_deref() != Some(&digest)
+        || !own_path.exists()
+    {
+        let result = sync_export(conn, export_passwords, Some(sync_passphrase))?;
+        SyncSettings::set(conn, "folder_sync_export_digest", &digest).map_err(|e| e.to_string())?;
+        (result.exported_vaults, result.exported_items)
+    } else {
+        (0, 0)
+    };
+    SyncSettings::set(
+        conn,
+        "folder_sync_last_success_at",
+        &chrono::Utc::now().to_rfc3339(),
+    )
+    .map_err(|e| e.to_string())?;
+
+    Ok(FolderSyncResult {
+        state: "up_to_date".to_string(),
+        imported_vaults,
+        imported_items,
+        exported_vaults,
+        exported_items,
+        conflicts,
+        data_changed: imported_vaults > 0 || imported_items > 0,
+        skipped_peers,
+        warnings,
+        vaults_needing_password: Vec::new(),
+    })
+}
+
+pub fn disconnect_folder_sync(conn: &Connection) -> Result<Option<String>, String> {
+    SyncSettings::create_table(conn).map_err(|e| e.to_string())?;
+    create_sync_peers_table(conn)?;
+    let mut warning = None;
+    if let (Some(folder), Some(device_id)) = (
+        get_sync_folder(conn)?,
+        SyncSettings::get(conn, "device_id").map_err(|e| e.to_string())?,
+    ) {
+        let snapshot = own_snapshot_path(Path::new(&folder), &device_id);
+        if snapshot.exists() {
+            if let Err(error) = fs::remove_file(&snapshot) {
+                warning = Some(format!(
+                    "Disconnected locally, but '{}' could not be removed: {}",
+                    snapshot.display(),
+                    error
+                ));
+            }
+        }
+    }
+    for key in [
+        "sync_folder",
+        "folder_sync_export_digest",
+        "folder_sync_last_success_at",
+        "last_sync_at",
+        "last_sync_device",
+    ] {
+        SyncSettings::delete(conn, key).map_err(|e| e.to_string())?;
+    }
+    conn.execute("DELETE FROM sync_peers", [])
+        .map_err(|e| e.to_string())?;
+    Ok(warning)
 }
 
 #[cfg(test)]
@@ -1462,6 +1761,13 @@ mod tests {
         SyncSettings::set(&conn, "sync_folder", sync_dir.to_str().expect("utf-8 path"))
             .expect("sync folder setting should be stored");
         conn
+    }
+
+    fn device_snapshot(conn: &Connection, sync_dir: &Path) -> PathBuf {
+        own_snapshot_path(
+            sync_dir,
+            &get_or_create_device_id(conn).expect("device id should exist"),
+        )
     }
 
     fn insert_password_vault(conn: &Connection, password: &str) -> (i64, String) {
@@ -1523,7 +1829,7 @@ mod tests {
         assert_eq!(export_result.exported_items, 1);
         assert_eq!(export_result.exported_captures, 0);
 
-        let sync_path = sync_dir.join(SYNC_FILE_NAME);
+        let sync_path = device_snapshot(&export_conn, &sync_dir);
         let sync_json = fs::read_to_string(&sync_path).expect("sync file should exist");
         assert!(sync_json.contains("ciphertext"));
         assert!(!sync_json.contains("Private Laptop"));
@@ -1532,23 +1838,28 @@ mod tests {
         assert!(!sync_json.contains("Secret body"));
         assert!(!sync_json.contains("Secret summary"));
 
-        let locked_preview = get_sync_preview(&export_conn, None)
-            .expect("encrypted sync preview should parse")
-            .expect("preview should exist");
-        assert!(locked_preview.encrypted);
+        let locked_preview =
+            inspect_folder_sync(&export_conn, sync_dir.to_str().expect("utf-8 path"), None)
+                .expect("encrypted sync preview should parse");
         assert!(locked_preview.needs_sync_passphrase);
         assert_eq!(locked_preview.vault_count, 0);
 
-        let wrong_preview = get_sync_preview(&export_conn, Some("wrong passphrase"))
-            .expect_err("wrong sync passphrase should fail");
+        let wrong_preview = inspect_folder_sync(
+            &export_conn,
+            sync_dir.to_str().expect("utf-8 path"),
+            Some("wrong passphrase"),
+        )
+        .expect_err("wrong sync passphrase should fail");
         assert!(wrong_preview.contains("Failed to decrypt sync file"));
 
-        let unlocked_preview = get_sync_preview(&export_conn, Some(sync_passphrase))
-            .expect("encrypted sync preview should decrypt")
-            .expect("preview should exist");
-        assert!(unlocked_preview.encrypted);
+        let unlocked_preview = inspect_folder_sync(
+            &export_conn,
+            sync_dir.to_str().expect("utf-8 path"),
+            Some(sync_passphrase),
+        )
+        .expect("encrypted sync preview should decrypt");
         assert!(!unlocked_preview.needs_sync_passphrase);
-        assert_eq!(unlocked_preview.device_name, "Private Laptop");
+        assert_eq!(unlocked_preview.devices[0].device_name, "Private Laptop");
         assert_eq!(unlocked_preview.vault_count, 1);
         assert_eq!(unlocked_preview.item_count, 1);
         assert_eq!(unlocked_preview.vaults_needing_password.len(), 1);
@@ -1557,16 +1868,24 @@ mod tests {
         let mut import_passwords = HashMap::new();
         import_passwords.insert(vault_uuid.clone(), password.to_string());
 
-        let wrong_import = sync_import(
+        let wrong_import = sync_import_from_path(
             &import_conn,
-            import_passwords.clone(),
+            &sync_path,
+            &import_passwords,
             Some("wrong passphrase"),
+            None,
         )
         .expect_err("wrong sync passphrase should not import");
         assert!(wrong_import.contains("Failed to decrypt sync file"));
 
-        let import_result = sync_import(&import_conn, import_passwords, Some(sync_passphrase))
-            .expect("sync import should succeed");
+        let import_result = sync_import_from_path(
+            &import_conn,
+            &sync_path,
+            &import_passwords,
+            Some(sync_passphrase),
+            None,
+        )
+        .expect("sync import should succeed");
         assert_eq!(import_result.imported_vaults, 1);
         assert_eq!(import_result.imported_items, 1);
 
@@ -1648,9 +1967,11 @@ mod tests {
     #[test]
     fn sync_export_requires_every_protected_vault_before_replacing_snapshot() {
         let sync_dir = temp_sync_dir();
-        let sync_path = sync_dir.join(SYNC_FILE_NAME);
-        fs::write(&sync_path, "previous snapshot").expect("previous snapshot should write");
         let conn = setup_conn(&sync_dir);
+        let sync_path = device_snapshot(&conn, &sync_dir);
+        fs::create_dir_all(sync_path.parent().expect("snapshot parent"))
+            .expect("device folder should exist");
+        fs::write(&sync_path, "previous snapshot").expect("previous snapshot should write");
         insert_password_vault(&conn, "vault password");
 
         let error = sync_export(&conn, HashMap::new(), Some("sync passphrase"))
@@ -1661,8 +1982,18 @@ mod tests {
             fs::read_to_string(&sync_path).expect("previous snapshot should remain"),
             "previous snapshot"
         );
-        assert!(!sync_dir.join(format!("{}.tmp", SYNC_FILE_NAME)).exists());
-        assert!(!sync_dir.join(format!("{}.bak", SYNC_FILE_NAME)).exists());
+        assert!(!sync_path
+            .with_file_name(format!(
+                "{}.tmp",
+                sync_path.file_name().unwrap().to_string_lossy()
+            ))
+            .exists());
+        assert!(!sync_path
+            .with_file_name(format!(
+                "{}.bak",
+                sync_path.file_name().unwrap().to_string_lossy()
+            ))
+            .exists());
         let _ = fs::remove_dir_all(sync_dir);
     }
 
@@ -1675,16 +2006,136 @@ mod tests {
 
         sync_export(&conn, passwords.clone(), Some("sync passphrase"))
             .expect("first export should succeed");
-        let first = fs::read(sync_dir.join(SYNC_FILE_NAME)).expect("first snapshot should read");
+        let sync_path = device_snapshot(&conn, &sync_dir);
+        let first = fs::read(&sync_path).expect("first snapshot should read");
         SyncSettings::set(&conn, "device_name", "Changed Device")
             .expect("device name should update");
         sync_export(&conn, passwords, Some("sync passphrase"))
             .expect("replacement export should succeed");
-        let second = fs::read(sync_dir.join(SYNC_FILE_NAME)).expect("second snapshot should read");
+        let second = fs::read(&sync_path).expect("second snapshot should read");
 
         assert_ne!(first, second);
-        assert!(!sync_dir.join(format!("{}.tmp", SYNC_FILE_NAME)).exists());
-        assert!(!sync_dir.join(format!("{}.bak", SYNC_FILE_NAME)).exists());
+        assert!(!sync_path
+            .with_file_name(format!(
+                "{}.tmp",
+                sync_path.file_name().unwrap().to_string_lossy()
+            ))
+            .exists());
+        assert!(!sync_path
+            .with_file_name(format!(
+                "{}.bak",
+                sync_path.file_name().unwrap().to_string_lossy()
+            ))
+            .exists());
+        let _ = fs::remove_dir_all(sync_dir);
+    }
+
+    #[test]
+    fn folder_sync_converges_three_devices_without_shared_file_writes() {
+        let sync_dir = temp_sync_dir();
+        let first = setup_conn(&sync_dir);
+        let second = setup_conn(&sync_dir);
+        let third = setup_conn(&sync_dir);
+        SyncSettings::set(&first, "device_id", "device-a").unwrap();
+        SyncSettings::set(&first, "device_name", "Laptop").unwrap();
+        SyncSettings::set(&second, "device_id", "device-b").unwrap();
+        SyncSettings::set(&second, "device_name", "Desktop").unwrap();
+        SyncSettings::set(&third, "device_id", "device-c").unwrap();
+        SyncSettings::set(&third, "device_name", "Travel laptop").unwrap();
+
+        let now = chrono::Utc::now().to_rfc3339();
+        let vault_uuid = uuid::Uuid::new_v4().to_string();
+        first.execute(
+            "INSERT INTO vaults (name, encrypted_password, created_at, has_password, uuid, updated_at) VALUES (?1, ?2, ?3, 0, ?4, ?3)",
+            params!["Inbox", Vec::<u8>::new(), now, vault_uuid],
+        ).unwrap();
+        let first_vault_id = first.last_insert_rowid();
+        let key = derive_key_from_password("", &first_vault_id.to_string(), 100_000);
+        VaultItem::insert(&first, first_vault_id, "From laptop", "Hello", &key).unwrap();
+
+        run_folder_sync(&first, HashMap::new(), "shared passphrase").unwrap();
+        let imported = run_folder_sync(&second, HashMap::new(), "shared passphrase").unwrap();
+        assert!(imported.data_changed);
+        run_folder_sync(&first, HashMap::new(), "shared passphrase").unwrap();
+
+        let second_vault = Vault::get_by_uuid(&second, &vault_uuid).unwrap().unwrap();
+        let second_items = VaultItem::list_by_vault(&second, second_vault.id).unwrap();
+        VaultItem::update_title(&second, second_items[0].id, "Edited on desktop").unwrap();
+        let edited = run_folder_sync(&second, HashMap::new(), "shared passphrase").unwrap();
+        assert!(!edited.data_changed);
+        let merged = run_folder_sync(&first, HashMap::new(), "shared passphrase").unwrap();
+        assert!(merged.data_changed);
+        let repeated = run_folder_sync(&first, HashMap::new(), "shared passphrase").unwrap();
+        assert!(!repeated.data_changed);
+        run_folder_sync(&third, HashMap::new(), "shared passphrase").unwrap();
+
+        let snapshots = fs::read_dir(sync_dir.join(SYNC_DEVICES_DIR))
+            .unwrap()
+            .filter_map(Result::ok)
+            .filter(|entry| {
+                entry.path().extension().and_then(|value| value.to_str())
+                    == Some(SYNC_DEVICE_EXTENSION)
+            })
+            .count();
+        assert_eq!(snapshots, 3);
+        let first_vault = Vault::get_by_uuid(&first, &vault_uuid).unwrap().unwrap();
+        let first_items = VaultItem::list_by_vault(&first, first_vault.id).unwrap();
+        let third_vault = Vault::get_by_uuid(&third, &vault_uuid).unwrap().unwrap();
+        let third_items = VaultItem::list_by_vault(&third, third_vault.id).unwrap();
+        assert_eq!(first_items[0].title, "Edited on desktop");
+        assert_eq!(third_items[0].title, "Edited on desktop");
+
+        let _ = fs::remove_dir_all(sync_dir);
+    }
+
+    #[test]
+    fn concurrent_remote_delete_preserves_local_edit_as_recovery_copy() {
+        let sync_dir = temp_sync_dir();
+        let conn = setup_conn(&sync_dir);
+        conn.execute(
+            "INSERT INTO vaults (name, encrypted_password, created_at, has_password, uuid, updated_at) VALUES (?1, ?2, ?3, 0, ?4, ?3)",
+            params!["Inbox", Vec::<u8>::new(), "2026-07-15T08:00:00Z", uuid::Uuid::new_v4().to_string()],
+        ).unwrap();
+        let vault_id = conn.last_insert_rowid();
+        let key = derive_key_from_password("", &vault_id.to_string(), 100_000);
+        let item = VaultItem::insert(&conn, vault_id, "Local edit", "Keep me", &key).unwrap();
+        conn.execute(
+            "UPDATE vault_items SET updated_at = ?1 WHERE id = ?2",
+            params!["2026-07-15T10:00:00Z", item.id],
+        )
+        .unwrap();
+        let remote_delete = SyncItem {
+            uuid: item.uuid.clone().unwrap(),
+            title: item.title,
+            content: String::new(),
+            content_encrypted: false,
+            created_at: item.created_at,
+            updated_at: "2026-07-15T11:00:00Z".to_string(),
+            deleted_at: Some("2026-07-15T11:00:00Z".to_string()),
+            image: None,
+            summary: None,
+            summary_encrypted: false,
+            sort_order: None,
+        };
+
+        let result = import_item(
+            &conn,
+            vault_id,
+            &remote_delete,
+            &key,
+            &Some("2026-07-15T09:00:00Z".to_string()),
+            "Desktop",
+        )
+        .unwrap();
+        assert!(matches!(result, ImportItemResult::Conflict(_)));
+        let visible = VaultItem::list_by_vault(&conn, vault_id).unwrap();
+        assert_eq!(visible.len(), 1);
+        assert!(visible[0]
+            .title
+            .contains("Recovered after delete from Desktop"));
+        let content = decrypt_content(&key, &visible[0].content).unwrap();
+        assert_eq!(content, "Keep me");
+
         let _ = fs::remove_dir_all(sync_dir);
     }
 

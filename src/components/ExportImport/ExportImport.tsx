@@ -224,49 +224,55 @@ export const ExportImport: React.FC<ExportImportProps> = ({ onImportComplete }) 
           </div>
         </div>
 
-        {loading ? (
-          <div className={styles.loading}>Loading vaults...</div>
-        ) : vaults.length === 0 ? (
-          <div className={styles.emptyState}>No vaults to export</div>
-        ) : (
-          <div className={styles.vaultList}>
-            {vaults.map((vault) => (
-              <label key={vault.id} className={styles.vaultItem}>
-                <input
-                  type="checkbox"
-                  checked={selectedVaults.has(vault.id)}
-                  onChange={() => toggleVaultSelection(vault.id)}
-                  className={styles.checkbox}
-                />
-                <span className={styles.vaultName}>{vault.name}</span>
-              </label>
-            ))}
+        <div className={styles.exportGrid} data-testid="backup-export-grid">
+          <div>
+            {loading ? (
+              <div className={styles.loading}>Loading vaults...</div>
+            ) : vaults.length === 0 ? (
+              <div className={styles.emptyState}>No vaults to export</div>
+            ) : (
+              <div className={styles.vaultList}>
+                {vaults.map((vault) => (
+                  <label key={vault.id} className={styles.vaultItem}>
+                    <input
+                      type="checkbox"
+                      checked={selectedVaults.has(vault.id)}
+                      onChange={() => toggleVaultSelection(vault.id)}
+                      className={styles.checkbox}
+                    />
+                    <span className={styles.vaultName}>{vault.name}</span>
+                  </label>
+                ))}
+              </div>
+            )}
           </div>
-        )}
 
-        <div className={styles.field}>
-          <label htmlFor="export-passphrase" className={styles.fieldLabel}>Backup passphrase</label>
-          <input
-            id="export-passphrase"
-            type="password"
-            value={exportPassphrase}
-            onChange={(event) => setExportPassphrase(event.target.value)}
-            className={styles.input}
-            autoComplete="new-password"
-            placeholder="Required to restore this backup"
-          />
-          <span className={styles.fieldHint}>Keep this somewhere safe. brainbox cannot recover it.</span>
-        </div>
+          <div className={styles.exportControls}>
+            <div className={styles.field}>
+              <label htmlFor="export-passphrase" className={styles.fieldLabel}>Backup passphrase</label>
+              <input
+                id="export-passphrase"
+                type="password"
+                value={exportPassphrase}
+                onChange={(event) => setExportPassphrase(event.target.value)}
+                className={styles.input}
+                autoComplete="new-password"
+                placeholder="Required to restore this backup"
+              />
+              <span className={styles.fieldHint}>Keep this somewhere safe. brainbox cannot recover it.</span>
+            </div>
 
-        <div className={styles.actions}>
-          <button
-            type="button"
-            onClick={handleExport}
-            className={styles.primaryButton}
-            disabled={isExporting || selectedVaults.size === 0 || !exportPassphrase.trim()}
-          >
-            {isExporting ? 'Exporting...' : `Export ${selectedVaults.size} Vault(s)`}
-          </button>
+            <div className={styles.actions}>
+              <button
+                type="button"
+                onClick={handleExport}
+                className={styles.primaryButton}
+                disabled={isExporting || selectedVaults.size === 0 || !exportPassphrase.trim()}
+              >
+                {isExporting ? 'Exporting...' : `Export ${selectedVaults.size} Vault(s)`}
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -276,10 +282,6 @@ export const ExportImport: React.FC<ExportImportProps> = ({ onImportComplete }) 
           <span className={styles.sectionLabel}>Import Vaults</span>
         </div>
 
-        <p className={styles.description}>
-          Restore a passphrase-encrypted brainbox backup. Legacy JSON exports are accepted for migration.
-        </p>
-
         <input
           ref={fileInputRef}
           type="file"
@@ -288,9 +290,14 @@ export const ExportImport: React.FC<ExportImportProps> = ({ onImportComplete }) 
           className={styles.fileInput}
           id="import-file"
         />
-        <label htmlFor="import-file" className={styles.fileLabel}>
-          Choose Export File
-        </label>
+        <div className={styles.importRow} data-testid="backup-import-row">
+          <p className={styles.description}>
+            Restore a passphrase-encrypted brainbox backup. Legacy JSON exports are accepted for migration.
+          </p>
+          <label htmlFor="import-file" className={styles.fileLabel}>
+            Choose Export File
+          </label>
+        </div>
       </div>
 
       {/* Import Dialog */}
