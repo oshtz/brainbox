@@ -230,10 +230,10 @@ const Library: React.FC<Props> = ({
     if (selectedItem || !itemId || !scrollArea || !wrap) return;
 
     const restore = () => {
-      scrollArea.scrollTop = rememberedScrollTopRef.current;
       scrollArea
         .querySelector<HTMLElement>(`[data-item-id="${CSS.escape(itemId)}"] .masonry-card-bg`)
         ?.focus({ preventScroll: true });
+      scrollArea.scrollTop = rememberedScrollTopRef.current;
     };
     const finish = () => {
       restore();
