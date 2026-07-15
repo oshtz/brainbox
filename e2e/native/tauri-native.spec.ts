@@ -309,6 +309,15 @@ test('native localhost bookmarklet captures selected text as a sourced note', as
   const capturedCard = page.getByTestId('masonry-card').filter({ hasText: selectedText });
   await expect(capturedCard).toBeVisible();
   await expect(capturedCard).not.toContainText(sourceUrl);
+  const openDialogs = page.getByRole('dialog');
+  if (await openDialogs.count()) {
+    console.log(`NATIVE_DIALOG_DIAGNOSTICS ${JSON.stringify(await openDialogs.evaluateAll((dialogs) => dialogs.map((dialog) => ({
+      testId: dialog.getAttribute('data-testid'),
+      label: dialog.getAttribute('aria-labelledby'),
+      text: dialog.textContent?.slice(0, 200),
+    }))))}`);
+  }
+  await expect(openDialogs).toHaveCount(0);
   await capturedCard.getByRole('button', { name: /Open item/ }).click();
   await expect(page.getByRole('link', { name: 'Open source ↗' })).toHaveAttribute('href', sourceUrl);
   await expect(page.getByRole('button', { name: 'Edit content' })).not.toContainText('Source:');
