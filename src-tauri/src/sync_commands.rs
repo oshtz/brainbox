@@ -1,119 +1,108 @@
 use std::collections::HashMap;
+use std::sync::Mutex;
 
 use crate::paths::open_brainbox_db;
-use crate::sync;
+use crate::{secret_commands, sync};
+
+lazy_static::lazy_static! {
+    // ponytail: one app-wide lock is enough for personal sync; split per folder only if parallel profiles arrive.
+    static ref FOLDER_SYNC_LOCK: Mutex<()> = Mutex::new(());
+}
 
 #[tauri::command]
-pub fn sync_export_vaults(
-    passwords: HashMap<i64, String>,
+pub fn inspect_folder_sync(
+    path: String,
     sync_passphrase: Option<String>,
-) -> Result<sync::SyncExportResult, String> {
+) -> Result<sync::SyncFolderInspection, String> {
     let conn = open_brainbox_db()?;
-    sync::sync_export(&conn, passwords, sync_passphrase.as_deref())
+    sync::inspect_folder_sync(&conn, &path, sync_passphrase.as_deref())
 }
 
 #[tauri::command]
-pub fn get_sync_status() -> Result<sync::SyncStatus, String> {
-    let conn = open_brainbox_db()?;
-    sync::check_sync_status(&conn)
-}
-
-#[tauri::command]
-pub fn get_locked_vaults_for_sync() -> Result<Vec<(i64, String)>, String> {
-    let conn = open_brainbox_db()?;
-    sync::get_locked_vaults(&conn)
-}
-
-#[tauri::command]
-pub fn get_sync_settings() -> Result<HashMap<String, String>, String> {
-    let conn = open_brainbox_db()?;
-    sync::get_sync_settings(&conn)
-}
-
-#[tauri::command]
-pub fn set_sync_setting(key: String, value: String) -> Result<(), String> {
-    let conn = open_brainbox_db()?;
-    sync::set_sync_setting(&conn, &key, &value)
-}
-
-#[tauri::command]
-pub fn set_sync_folder(path: String) -> Result<(), String> {
-    let conn = open_brainbox_db()?;
-
-    if !std::path::Path::new(&path).exists() {
-        return Err(format!("Path does not exist: {}", path));
+pub fn configure_folder_sync(
+    path: String,
+    device_name: String,
+    sync_passphrase: String,
+) -> Result<sync::FolderSyncStatus, String> {
+    let _guard = FOLDER_SYNC_LOCK.lock().map_err(|e| e.to_string())?;
+    if sync_passphrase.trim().is_empty() {
+        return Err("A sync passphrase is required.".to_string());
     }
-
-    sync::set_sync_folder(&conn, &path)
-}
-
-#[tauri::command]
-pub fn sync_import_vaults(
-    passwords: HashMap<String, String>,
-    sync_passphrase: Option<String>,
-) -> Result<sync::SyncImportResult, String> {
+    let path = sync::validate_sync_folder(&path)?;
     let conn = open_brainbox_db()?;
-    sync::sync_import(&conn, passwords, sync_passphrase.as_deref())
-}
-
-#[tauri::command]
-pub fn get_sync_preview(
-    sync_passphrase: Option<String>,
-) -> Result<Option<sync::SyncPreview>, String> {
-    let conn = open_brainbox_db()?;
-    sync::get_sync_preview(&conn, sync_passphrase.as_deref())
-}
-
-#[tauri::command]
-pub fn purge_deleted_items(days: Option<i32>) -> Result<sync::PurgeResult, String> {
-    let conn = open_brainbox_db()?;
-
-    let purge_days = match days {
-        Some(d) => d,
-        None => sync::get_purge_days(&conn)?,
-    };
-
-    sync::purge_deleted_items(&conn, purge_days)
-}
-
-#[tauri::command]
-pub fn auto_purge_if_enabled() -> Result<Option<sync::PurgeResult>, String> {
-    let conn = open_brainbox_db()?;
-
-    if sync::should_auto_purge(&conn)? {
-        let days = sync::get_purge_days(&conn)?;
-        Ok(Some(sync::purge_deleted_items(&conn, days)?))
-    } else {
-        Ok(None)
+    let inspection = sync::inspect_folder_sync(&conn, &path, Some(&sync_passphrase))?;
+    if inspection.state == "invalid" {
+        return Err(inspection
+            .message
+            .unwrap_or_else(|| "The sync folder is invalid.".to_string()));
     }
+    sync::set_sync_folder(&conn, &path)?;
+    sync::set_device_name(
+        &conn,
+        if device_name.trim().is_empty() {
+            "Unknown device"
+        } else {
+            device_name.trim()
+        },
+    )?;
+    let persisted = secret_commands::set_sync_secret(Some(sync_passphrase))?;
+    let mut status =
+        sync::folder_sync_status(&conn, secret_commands::get_sync_secret()?.as_deref())?;
+    if !persisted {
+        status.message = Some(
+            "The OS keyring was unavailable; the passphrase will be remembered until Brainbox quits."
+                .to_string(),
+        );
+    }
+    Ok(status)
 }
 
 #[tauri::command]
-pub fn is_sync_on_close_enabled() -> Result<bool, String> {
+pub fn run_folder_sync(
+    passwords_by_vault_uuid: HashMap<String, String>,
+) -> Result<sync::FolderSyncResult, String> {
+    let _guard = FOLDER_SYNC_LOCK.lock().map_err(|e| e.to_string())?;
+    let passphrase =
+        secret_commands::get_sync_secret()?.ok_or("Enter the sync passphrase to resume.")?;
     let conn = open_brainbox_db()?;
-    sync::is_sync_on_close_enabled(&conn)
+    sync::run_folder_sync(&conn, passwords_by_vault_uuid, &passphrase)
 }
 
 #[tauri::command]
-pub fn set_sync_on_close(enabled: bool) -> Result<(), String> {
+pub fn get_folder_sync_status() -> Result<sync::FolderSyncStatus, String> {
     let conn = open_brainbox_db()?;
-    sync::set_sync_on_close(&conn, enabled)
+    let passphrase = secret_commands::get_sync_secret()?;
+    sync::folder_sync_status(&conn, passphrase.as_deref())
 }
 
 #[tauri::command]
-pub fn is_check_sync_on_startup_enabled() -> Result<bool, String> {
+pub fn unlock_folder_sync(sync_passphrase: String) -> Result<sync::FolderSyncStatus, String> {
+    let _guard = FOLDER_SYNC_LOCK.lock().map_err(|e| e.to_string())?;
+    if sync_passphrase.trim().is_empty() {
+        return Err("A sync passphrase is required.".to_string());
+    }
     let conn = open_brainbox_db()?;
-    sync::is_check_sync_on_startup_enabled(&conn)
+    let folder = sync::get_sync_folder(&conn)?.ok_or("Sync folder is not configured.")?;
+    sync::inspect_folder_sync(&conn, &folder, Some(&sync_passphrase))?;
+    secret_commands::set_sync_secret(Some(sync_passphrase))?;
+    let passphrase = secret_commands::get_sync_secret()?;
+    sync::folder_sync_status(&conn, passphrase.as_deref())
 }
 
 #[tauri::command]
-pub fn set_check_sync_on_startup(enabled: bool) -> Result<(), String> {
+pub fn set_folder_sync_device_name(name: String) -> Result<(), String> {
+    if name.trim().is_empty() {
+        return Err("Device name cannot be empty.".to_string());
+    }
     let conn = open_brainbox_db()?;
-    sync::set_check_sync_on_startup(&conn, enabled)
+    sync::set_device_name(&conn, name.trim())
 }
 
 #[tauri::command]
-pub fn set_device_name(name: String) -> Result<(), String> {
+pub fn disconnect_folder_sync() -> Result<Option<String>, String> {
+    let _guard = FOLDER_SYNC_LOCK.lock().map_err(|e| e.to_string())?;
     let conn = open_brainbox_db()?;
-    sync::set_device_name(&conn, &name)
+    let warning = sync::disconnect_folder_sync(&conn)?;
+    let _ = secret_commands::set_sync_secret(None);
+    Ok(warning)
 }

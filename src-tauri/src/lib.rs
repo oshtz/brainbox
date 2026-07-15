@@ -41,6 +41,42 @@ use crate::paths::brainbox_data_dir;
 use crate::search::{delete_document, index_document, search};
 use tiny_http::{Response, Server};
 
+const MAX_CAPTURE_SELECTION_CHARS: usize = 2_000;
+
+fn parse_capture_query(query: &str) -> (String, String, Option<String>) {
+    let mut url = String::new();
+    let mut title = String::new();
+    let mut selection = None;
+
+    for param in query.split('&') {
+        let mut parts = param.splitn(2, '=');
+        match (parts.next(), parts.next()) {
+            (Some("url"), Some(value)) => {
+                url = urlencoding::decode(value).unwrap_or_default().to_string()
+            }
+            (Some("title"), Some(value)) => {
+                title = urlencoding::decode(value).unwrap_or_default().to_string()
+            }
+            (Some("selection"), Some(value)) => {
+                let decoded = urlencoding::decode(value).unwrap_or_default().to_string();
+                if !decoded.trim().is_empty() {
+                    let mut chars = decoded.chars();
+                    let limited: String =
+                        chars.by_ref().take(MAX_CAPTURE_SELECTION_CHARS).collect();
+                    selection = Some(if chars.next().is_some() {
+                        format!("{limited}\n\n[Selection truncated]")
+                    } else {
+                        limited
+                    });
+                }
+            }
+            _ => {}
+        }
+    }
+
+    (url, title, selection)
+}
+
 #[tauri::command]
 fn greet(name: &str) -> String {
     format!("Hello, {}! You've been greeted from Rust!", name)
@@ -283,6 +319,17 @@ fn create_app_builder() -> tauri::Builder<tauri::Wry> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     create_app_builder()
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(
+            tauri_plugin_window_state::Builder::default()
+                .with_state_flags(
+                    tauri_plugin_window_state::StateFlags::SIZE
+                        | tauri_plugin_window_state::StateFlags::POSITION
+                        | tauri_plugin_window_state::StateFlags::MAXIMIZED
+                        | tauri_plugin_window_state::StateFlags::DECORATIONS,
+                )
+                .build(),
+        )
         .setup(|app| {
             // Initialize the search service with a path for the index
             let app_dir = brainbox_data_dir()?;
@@ -360,20 +407,11 @@ pub fn run() {
                 let server = Server::http("127.0.0.1:51234").unwrap();
                 for request in server.incoming_requests() {
                     if let Some(q) = request.url().strip_prefix("/capture?") {
-                        let mut url = String::new();
-                        let mut title = String::new();
-                        for param in q.split('&') {
-                            let mut parts = param.splitn(2, '=');
-                            match (parts.next(), parts.next()) {
-                                (Some("url"), Some(v)) => url = urlencoding::decode(v).unwrap_or_default().to_string(),
-                                (Some("title"), Some(v)) => title = urlencoding::decode(v).unwrap_or_default().to_string(),
-                                _ => {}
-                            }
-                        }
+                        let (url, title, selection) = parse_capture_query(q);
                         if let Some(window) = app_handle_http.get_webview_window("main") {
                             let _ = window.show();
                             let _ = window.set_focus();
-                            let _ = window.emit("capture-from-protocol", serde_json::json!({ "url": url, "title": title }));
+                            let _ = window.emit("capture-from-protocol", serde_json::json!({ "url": url, "title": title, "selection": selection }));
                         }
                     }
                     // Respond with a tiny page that attempts to close itself if it was opened by script
@@ -533,21 +571,13 @@ pub fn run() {
             vault_commands::import_vaults,
             vault_commands::get_vault_item,
             // Sync commands
-            sync_commands::sync_export_vaults,
-            sync_commands::sync_import_vaults,
-            sync_commands::get_sync_status,
-            sync_commands::get_sync_preview,
-            sync_commands::get_locked_vaults_for_sync,
-            sync_commands::get_sync_settings,
-            sync_commands::set_sync_setting,
-            sync_commands::set_sync_folder,
-            sync_commands::purge_deleted_items,
-            sync_commands::auto_purge_if_enabled,
-            sync_commands::is_sync_on_close_enabled,
-            sync_commands::set_sync_on_close,
-            sync_commands::is_check_sync_on_startup_enabled,
-            sync_commands::set_check_sync_on_startup,
-            sync_commands::set_device_name,
+            sync_commands::inspect_folder_sync,
+            sync_commands::configure_folder_sync,
+            sync_commands::run_folder_sync,
+            sync_commands::get_folder_sync_status,
+            sync_commands::unlock_folder_sync,
+            sync_commands::set_folder_sync_device_name,
+            sync_commands::disconnect_folder_sync,
             get_hostname,
             network_commands::fetch_url_metadata,
             // Scraping helpers
@@ -569,6 +599,40 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod capture_tests {
+    use super::{parse_capture_query, MAX_CAPTURE_SELECTION_CHARS};
+
+    #[test]
+    fn parses_and_limits_localhost_capture() {
+        let (url, title, selection) = parse_capture_query(
+            "url=https%3A%2F%2Fexample.com%2Farticle&title=Useful%20article&selection=chosen%20words",
+        );
+        assert_eq!(url, "https://example.com/article");
+        assert_eq!(title, "Useful article");
+        assert_eq!(selection.as_deref(), Some("chosen words"));
+
+        let long = "x".repeat(MAX_CAPTURE_SELECTION_CHARS + 1);
+        let query = format!(
+            "url=https%3A%2F%2Fexample.com&selection={}",
+            urlencoding::encode(&long)
+        );
+        let (_, _, selection) = parse_capture_query(&query);
+        assert_eq!(
+            selection.unwrap(),
+            format!(
+                "{}\n\n[Selection truncated]",
+                "x".repeat(MAX_CAPTURE_SELECTION_CHARS)
+            )
+        );
+
+        assert_eq!(
+            parse_capture_query("url=https%3A%2F%2Fexample.com&title=Page").2,
+            None
+        );
+    }
 }
 
 #[tauri::command]

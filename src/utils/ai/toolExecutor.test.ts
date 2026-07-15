@@ -92,27 +92,23 @@ describe('ToolExecutor', () => {
     });
   });
 
-  it('falls back to manual vault search when the backend search index is unavailable', async () => {
-    mockInvoke
-      .mockRejectedValueOnce(new Error('search unavailable'))
-      .mockResolvedValueOnce([
-        {
-          id: 12,
-          title: 'Research note',
-          content_preview: 'Needle in the local vault',
-        },
-      ]);
+  it('finds and returns context from an AI summary without the search index', async () => {
+    mockInvoke.mockResolvedValueOnce([
+      {
+        id: 12,
+        title: 'Research note',
+        content: 'Original note body',
+        summary: 'Retrieval alias connects the saved research to needlework.',
+      },
+    ]);
     const { executor } = createExecutor();
 
     const result = await executor.execute(toolCall('search_items', {
-      query: 'needle',
+      query: 'retrieval needlework',
     }));
 
-    expect(mockInvoke).toHaveBeenNthCalledWith(1, 'search', {
-      query: 'needle',
-      limit: 20,
-    });
-    expect(mockInvoke).toHaveBeenNthCalledWith(2, 'list_vault_items', {
+    expect(mockInvoke).toHaveBeenCalledOnce();
+    expect(mockInvoke).toHaveBeenCalledWith('list_vault_items', {
       vaultId: 2,
       key,
     });
@@ -123,7 +119,7 @@ describe('ToolExecutor', () => {
         vault_id: '2',
         vault_name: 'Research',
         title: 'Research note',
-        snippet: 'Needle in the local vault',
+        snippet: 'Retrieval alias connects the saved research to needlework.',
       },
     ]);
   });

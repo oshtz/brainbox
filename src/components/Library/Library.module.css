@@ -1,8 +1,228 @@
 .wrap {
   width: 100%;
-  max-width: var(--page-content-max-width, 1040px);
+  height: 100%;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 0;
+  overflow: hidden;
+  transition: grid-template-columns 180ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.inspectorOpen {
+  grid-template-columns: minmax(0, 1fr) minmax(0, var(--detail-panel-width, 420px));
+}
+
+.libraryMain {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.libraryInner {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  max-width: var(--page-content-max-width, 1440px);
   margin: 0 auto;
-  padding: 0 0 var(--space-xl);
+  padding: 0 clamp(20px, 3.5vw, 54px);
+  display: flex;
+  flex-direction: column;
+}
+
+.commandArea {
+  flex: 0 0 auto;
+  background: transparent;
+  padding: 16px 0 14px;
+  border-bottom: 1px solid var(--ui-hairline-border);
+}
+
+.commandBar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.scrollArea {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 20px 0 clamp(36px, 5vw, 72px);
+  -webkit-mask-image: linear-gradient(to bottom, transparent, #000 18px, #000 calc(100% - 18px), transparent);
+  mask-image: linear-gradient(to bottom, transparent, #000 18px, #000 calc(100% - 18px), transparent);
+}
+
+.rediscover {
+  display: grid;
+  grid-template-rows: 1fr;
+  margin-bottom: 24px;
+  opacity: 1;
+  transform: translateY(0);
+  transition: grid-template-rows 160ms cubic-bezier(0.77, 0, 0.175, 1),
+              opacity 120ms cubic-bezier(0.23, 1, 0.32, 1),
+              transform 160ms cubic-bezier(0.77, 0, 0.175, 1);
+}
+
+.rediscoverHiding {
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transform: translateY(-6px);
+  pointer-events: none;
+}
+
+.rediscoverInner {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.rediscoverHeader {
+  margin-bottom: 9px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.rediscoverHeader h2,
+.rediscoverHeader p {
+  margin: 0;
+}
+
+.rediscoverHeader h2 {
+  color: var(--color-text-primary);
+  font-size: 0.92rem;
+  letter-spacing: -0.02em;
+}
+
+.rediscoverHeader p {
+  margin-top: 2px;
+  color: var(--color-text-tertiary);
+  font-size: 12px;
+}
+
+.rediscoverActions {
+  display: flex;
+  gap: 3px;
+}
+
+.rediscoverActions button {
+  padding: 5px 8px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.rediscoverActions button:hover {
+  background: var(--ui-control-hover-bg);
+  color: var(--color-text-primary);
+}
+
+.rediscoverActions button:active,
+.rediscoverCard:active {
+  transform: scale(0.97);
+}
+
+.rediscoverGrid {
+  display: flex;
+  gap: 10px;
+  width: max-content;
+  min-width: 100%;
+}
+
+.rediscoverGridWrap {
+  position: relative;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  scrollbar-width: thin;
+}
+
+.rediscoverGridLeaving {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  animation: rediscoverGridOut 100ms cubic-bezier(0.23, 1, 0.32, 1) forwards;
+}
+
+.rediscoverGridEntering .rediscoverCard {
+  opacity: 0;
+  animation: rediscoverCardIn 180ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+.rediscoverGridEntering .rediscoverCard:nth-child(2) { animation-delay: 35ms; }
+.rediscoverGridEntering .rediscoverCard:nth-child(3) { animation-delay: 70ms; }
+
+@keyframes rediscoverGridOut {
+  to { opacity: 0; transform: translateY(-3px); }
+}
+
+@keyframes rediscoverCardIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.rediscoverCard {
+  position: relative;
+  flex: 0 0 clamp(240px, 26vw, 310px);
+  height: 124px;
+  padding: 0;
+  border: 1px solid var(--ui-soft-border);
+  border-radius: 13px;
+  overflow: hidden;
+  background: var(--ui-control-bg);
+  color: var(--color-text-primary);
+  text-align: left;
+  cursor: pointer;
+  transition: transform var(--transition-duration) var(--transition-timing), border-color var(--transition-duration) var(--transition-timing);
+}
+
+.rediscoverCard:hover {
+  transform: translateY(-2px);
+  border-color: var(--ui-muted-border);
+}
+
+.rediscoverCard > img {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.68;
+}
+
+.rediscoverCardBody {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  padding: 12px;
+  display: grid;
+  align-content: end;
+  gap: 4px;
+  overflow: hidden;
+  background: linear-gradient(to top, rgba(8, 8, 8, 0.94), rgba(8, 8, 8, 0.12) 78%);
+  color: #fff;
+}
+
+.rediscoverCardBody small {
+  color: rgba(255, 255, 255, 0.68);
+  font-size: 10px;
+}
+
+.rediscoverCardBody strong {
+  font-size: 12px;
+  line-height: 1.3;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.rediscoverCardBody > span {
+  display: none;
 }
 
 .heading {
@@ -10,7 +230,22 @@
   align-items: flex-end;
   justify-content: space-between;
   gap: var(--space-md);
-  margin-bottom: var(--space-md);
+  margin-bottom: 12px;
+}
+
+.headingCopy {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.headingIcon {
+  display: block;
+  width: auto;
+  height: 44px;
+  flex: 0 0 auto;
+  pointer-events: none;
 }
 
 .heading h1,
@@ -20,29 +255,61 @@
 }
 
 .heading h1 {
-  font-size: clamp(1.6rem, 3vw, 2.25rem);
-  letter-spacing: -0.035em;
+  font-size: 1.18rem;
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: -0.025em;
+  line-height: 1.1;
+  text-wrap: balance;
 }
 
 .heading p,
 .empty p {
-  margin: var(--space-xs) 0 0;
+  margin: var(--space-md) 0 0;
   color: var(--color-text-secondary);
+  line-height: 1.6;
 }
 
-.toolbar {
+.heading p {
+  max-width: 52rem;
+  margin-top: 3px;
+  font-size: 12px;
+  line-height: 1.35;
+  text-wrap: pretty;
+}
+
+.headingActions {
   display: flex;
   gap: var(--space-sm);
-  align-items: center;
-  flex-wrap: wrap;
-  margin-bottom: var(--space-md);
+  padding-top: 4px;
 }
 
 .searchBox {
   position: relative;
   display: flex;
   align-items: center;
-  flex: 1 1 280px;
+  flex: 1 1 320px;
+  min-width: 220px;
+  min-height: 42px;
+  border: 1px solid var(--ui-soft-border);
+  border-radius: 11px;
+  background: var(--ui-input-bg);
+  box-shadow: var(--shadow-sm), inset 0 1px 0 rgba(255, 255, 255, 0.34);
+  transition: border-color var(--transition-duration) var(--transition-timing),
+              box-shadow var(--transition-duration) var(--transition-timing);
+}
+
+.filterRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 0 1 auto;
+  margin-top: 0;
+}
+
+.searchBox:focus-within {
+  border-color: rgba(var(--color-primary-rgb), 0.52);
+  box-shadow: 0 0 0 4px rgba(var(--color-primary-rgb), 0.10), var(--shadow-sm);
 }
 
 .searchBox kbd {
@@ -52,17 +319,24 @@
   font-family: inherit;
   font-size: var(--font-size-xs);
   pointer-events: none;
+  padding: 3px 6px;
+  border: 1px solid var(--ui-soft-border);
+  border-radius: 6px;
+  background: var(--ui-control-bg);
 }
 
 .segmented {
   display: inline-flex;
   background: var(--ui-control-bg);
-  border-radius: var(--border-radius-md);
+  height: 38px;
+  border: 1px solid var(--ui-soft-border);
+  border-radius: 11px;
   padding: 2px;
 }
 
 .segmented button {
-  padding: 6px 10px;
+  height: 32px;
+  padding: 0 11px;
   border: 0;
   border-radius: calc(var(--border-radius-md) - 2px);
   background: transparent;
@@ -76,22 +350,143 @@
   color: var(--color-text-primary);
 }
 
-.select,
 .search {
-  padding: 8px 10px;
-  border-radius: var(--border-radius-md);
+  padding: 9px 11px;
+  border-radius: 11px;
   border: 1px solid var(--ui-muted-border);
   background: var(--ui-control-bg);
   color: var(--color-text-primary);
 }
 
-.search {
-  width: 100%;
-  padding-right: 58px;
+.toolbarSelect {
+  position: relative;
+  min-width: 0;
+  flex: 0 1 auto;
 }
 
-.select:focus-visible,
+.toolbarSelect:focus-within {
+  z-index: 20;
+}
+
+.toolbarSelectTrigger {
+  width: 100%;
+  min-width: 112px;
+  max-width: 180px;
+  height: 38px;
+  padding: 0 10px 0 11px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border: 1px solid var(--ui-muted-border);
+  border-radius: 11px;
+  background: var(--ui-control-bg);
+  color: var(--color-text-primary);
+  font: inherit;
+  cursor: pointer;
+}
+
+.toolbarSelectTrigger > span,
+.toolbarSelectOption > span {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.toolbarSelectChevron,
+.toolbarSelectCheck {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+}
+
+.toolbarSelectChevron {
+  color: var(--color-text-secondary);
+  transition: transform 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.toolbarSelectTrigger[aria-expanded='true'] .toolbarSelectChevron {
+  transform: rotate(180deg);
+}
+
+.sortSelect .toolbarSelectTrigger {
+  min-width: 156px;
+}
+
+.toolbarSelectMenu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 20;
+  min-width: 100%;
+  width: max-content;
+  max-width: min(320px, calc(100vw - 32px));
+  padding: 5px;
+  border: 1px solid var(--ui-muted-border);
+  border-radius: 11px;
+  background: var(--ui-popover-bg);
+  box-shadow: var(--shadow-md);
+}
+
+.toolbarSelectOption {
+  width: 100%;
+  height: 32px;
+  padding: 0 8px 0 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.toolbarSelectOption:hover,
+.toolbarSelectOption[aria-checked='true'] {
+  background: var(--ui-control-hover-bg);
+  color: var(--color-text-primary);
+}
+
+.search {
+  width: 100%;
+  min-height: 40px;
+  padding: 0 74px 0 17px;
+  border: 0;
+  background: transparent;
+  font-size: var(--font-size-sm);
+  outline: 0;
+}
+
+.zoomControls {
+  flex: 0 0 auto;
+}
+
+.zoomControls button {
+  width: 32px;
+  padding: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.zoomControls button:disabled {
+  color: var(--color-text-tertiary);
+  cursor: default;
+  opacity: 0.45;
+}
+
+.zoomIcon {
+  width: 15px;
+  height: 15px;
+}
+
 .search:focus-visible,
+.toolbarSelectTrigger:focus-visible,
+.toolbarSelectOption:focus-visible,
 .segmented button:focus-visible,
 .textButton:focus-visible,
 .primaryButton:focus-visible {
@@ -99,21 +494,60 @@
   outline-offset: 2px;
 }
 
+.rediscoverActions button:focus-visible,
+.rediscoverCard:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
 .hint {
   margin-left: auto;
   color: var(--color-text-secondary);
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-xs);
   font-variant-numeric: tabular-nums;
 }
 
 .empty {
-  width: min(100%, 560px);
-  margin: clamp(56px, 14vh, 120px) auto 0;
+  width: min(100%, 620px);
+  margin: clamp(70px, 14vh, 138px) auto 0;
   padding: var(--space-xl);
-  border-radius: var(--border-radius-lg);
-  background: var(--ui-panel-bg);
   text-align: center;
   color: var(--color-text-secondary);
+}
+
+.contextRail {
+  min-width: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  border-left: 1px solid var(--ui-hairline-border);
+  background: var(--ui-panel-strong-bg);
+  animation: contextRailIn 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+@keyframes contextRailIn {
+  from { opacity: 0; transform: translateX(16px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+.empty::before {
+  content: "";
+  display: block;
+  width: 62px;
+  height: 76px;
+  margin: 0 auto 34px;
+  border: 1px solid var(--ui-muted-border);
+  border-radius: 17px;
+  background: var(--ui-panel-bg);
+  box-shadow: 10px 10px 0 -2px var(--color-background), 10px 10px 0 -1px var(--ui-muted-border);
+  transform: rotate(-3deg);
+}
+
+.empty h2 {
+  font-size: clamp(2rem, 4vw, 3.2rem);
+  letter-spacing: -0.055em;
+  line-height: 1;
+  text-wrap: balance;
 }
 
 .empty p {
@@ -122,13 +556,17 @@
 
 .textButton,
 .primaryButton {
-  border-radius: var(--border-radius-md);
+  min-height: 38px;
+  border-radius: 10px;
   cursor: pointer;
   font-weight: var(--font-weight-medium);
+  transition: transform var(--transition-duration) var(--transition-timing),
+              background-color var(--transition-duration) var(--transition-timing),
+              border-color var(--transition-duration) var(--transition-timing);
 }
 
 .textButton {
-  border: 1px solid var(--ui-muted-border);
+  border: 1px solid transparent;
   background: transparent;
   color: var(--color-text-primary);
   padding: 7px 11px;
@@ -137,13 +575,18 @@
 .primaryButton {
   border: 1px solid var(--color-primary);
   background: var(--color-primary);
-  color: #fff;
+  color: var(--color-on-primary);
   padding: 8px 13px;
 }
 
 .textButton:hover,
 .primaryButton:hover {
   transform: translateY(-1px);
+}
+
+.textButton:hover {
+  border-color: var(--ui-soft-border);
+  background: var(--ui-control-bg);
 }
 
 .textButton:active,
@@ -164,12 +607,67 @@
 }
 
 @media (max-width: 760px) {
+  .wrap,
+  .inspectorOpen {
+    grid-template-columns: minmax(0, 1fr);
+    transition: none;
+  }
+
+  .inspectorOpen .libraryMain {
+    display: none;
+  }
+
+  .heading {
+    align-items: flex-start;
+  }
+
+  .heading h1 {
+    font-size: 1.12rem;
+  }
+
+  .headingIcon {
+    height: 40px;
+  }
+
+  .commandBar {
+    flex-wrap: wrap;
+  }
+
   .searchBox {
     flex-basis: 100%;
+  }
+
+  .filterRow {
+    flex-wrap: wrap;
   }
 
   .hint {
     width: 100%;
     margin-left: 0;
   }
+
+  .contextRail {
+    border-left: 0;
+  }
+}
+
+@media (max-width: 520px) {
+  .heading {
+    display: grid;
+  }
+
+  .headingActions {
+    padding-top: var(--space-sm);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wrap { transition: none; }
+  .contextRail { animation: none; }
+  .rediscoverHiding { transform: none; }
+  .rediscoverGridLeaving { animation-name: rediscoverFadeOut; }
+  .rediscoverGridEntering .rediscoverCard { animation-name: rediscoverFadeIn; }
+
+  @keyframes rediscoverFadeOut { to { opacity: 0; } }
+  @keyframes rediscoverFadeIn { from { opacity: 0; } to { opacity: 1; } }
 }

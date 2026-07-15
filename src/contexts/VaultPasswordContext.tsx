@@ -46,6 +46,9 @@ interface VaultPasswordContextType {
    */
   getUnlockedVaultIds: () => string[];
 
+  /** Get a read-only copy of session-only passwords for folder sync. */
+  getVaultPasswords: () => ReadonlyMap<string, string>;
+
   /**
    * Reset the inactivity timer (called on user activity)
    */
@@ -64,7 +67,7 @@ export const VaultPasswordProvider: React.FC<VaultPasswordProviderProps> = ({ ch
   const [keys, setKeys] = useState<Map<string, number[]>>(new Map());
 
   // Store vault passwords temporarily (for re-deriving keys if needed)
-  const [, setPasswords] = useState<Map<string, string>>(new Map());
+  const [passwords, setPasswords] = useState<Map<string, string>>(new Map());
 
   // Last activity timestamp for inactivity timeout
   const lastActivityRef = useRef<number>(Date.now());
@@ -197,6 +200,10 @@ export const VaultPasswordProvider: React.FC<VaultPasswordProviderProps> = ({ ch
     return Array.from(keys.keys());
   }, [keys]);
 
+  const getVaultPasswords = useCallback((): ReadonlyMap<string, string> => {
+    return new Map(passwords);
+  }, [passwords]);
+
   const contextValue: VaultPasswordContextType = {
     getVaultKey,
     hasKey,
@@ -204,6 +211,7 @@ export const VaultPasswordProvider: React.FC<VaultPasswordProviderProps> = ({ ch
     clearAllKeys,
     setVaultPassword,
     getUnlockedVaultIds,
+    getVaultPasswords,
     resetInactivityTimer,
   };
 

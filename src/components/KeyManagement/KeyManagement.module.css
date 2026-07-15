@@ -8,11 +8,31 @@
   gap: 1rem;
 }
 
+.sessionGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+  align-items: stretch;
+}
+
+.vaultAccess {
+  display: grid;
+  gap: 1rem;
+}
+
+.vaultStateGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1.5rem;
+  align-items: start;
+}
+
 .sectionHeader {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
+  flex-wrap: wrap;
 }
 
 .sectionLabel {
@@ -29,7 +49,7 @@
   padding: 0.35rem 0.75rem;
   border-radius: var(--border-radius-md);
   border: 1px solid transparent;
-  background: var(--color-accent-bg, rgba(99, 102, 241, 0.08));
+  background: var(--color-accent-bg, rgba(127, 127, 127, 0.08));
   font-size: 0.85rem;
   font-weight: 600;
   color: var(--color-accent);
@@ -56,16 +76,25 @@
 
 .emptyState {
   padding: 2rem 1.5rem;
-  text-align: center;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 1rem;
+  text-align: left;
   border-radius: var(--border-radius-lg);
   border: 1px dashed var(--ui-dashed-border);
   background: var(--ui-panel-bg);
 }
 
 .emptyState p {
-  margin: 0.5rem 0 0;
+  margin: 0;
   color: var(--color-text-secondary);
   font-size: 0.95rem;
+}
+
+.emptyStateCopy {
+  display: grid;
+  gap: 0.5rem;
 }
 
 .emptyStateMuted {
@@ -79,8 +108,6 @@
 .lockIcon {
   width: 2rem;
   height: 2rem;
-  display: block;
-  margin: 0 auto 0.5rem;
   color: var(--color-text-secondary);
 }
 
@@ -198,6 +225,7 @@
   background: var(--ui-control-bg);
   font-size: 0.9rem;
   color: var(--color-text-secondary);
+  min-width: 0;
 }
 
 .lockedIcon {
@@ -208,6 +236,13 @@
 
 .lockedName {
   font-weight: 500;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.accessStatus {
+  margin-left: auto;
+  font-size: 0.75rem !important;
 }
 
 .settingRow {
@@ -276,4 +311,51 @@
   font-size: 0.9rem;
   color: var(--color-text-secondary);
   line-height: 1.5;
+}
+
+@media (max-width: 700px) {
+  .sessionGrid,
+  .vaultStateGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 520px) {
+  .settingRow {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .select {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .vaultItem {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .vaultInfo {
+    min-width: 0;
+  }
+
+  .lockButton,
+  .lockAllButton {
+    width: 100%;
+  }
+
+  .actions {
+    width: 100%;
+  }
+
+  .lockedItem {
+    flex-wrap: wrap;
+  }
+
+  .accessStatus {
+    flex-basis: 100%;
+    margin-left: 1.35rem;
+  }
 }

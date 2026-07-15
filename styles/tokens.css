@@ -1,7 +1,7 @@
 :root {
   /* Typography */
-  --font-family-title: 'Manrope', sans-serif;
-  --font-family-body: 'Manrope', sans-serif;
+  --font-family-title: 'Geist', 'Segoe UI Variable Display', 'SF Pro Display', 'Helvetica Neue', sans-serif;
+  --font-family-body: 'Geist', 'Segoe UI Variable Text', 'SF Pro Text', 'Helvetica Neue', sans-serif;
   --font-family-sans: var(--font-family-body);
   --font-size-base: 16px;
   --font-size-2xs: 10px;
@@ -23,49 +23,49 @@
   --line-height-relaxed: 1.75;
 
   /* Base Colors - Light */
-  --color-text-primary: #0f172a;
-  --color-text-secondary: #475569;
-  --color-text-tertiary: #94a3b8;
-  --color-background: #ffffff;
-  --color-background-subtle: #f8fafc;
-  --color-surface: #f8fafc;
+  --color-text-primary: #171717;
+  --color-text-secondary: #626262;
+  --color-text-tertiary: #969696;
+  --color-background: #f5f5f5;
+  --color-background-subtle: #eeeeee;
+  --color-surface: #efefef;
   --color-surface-elevated: #ffffff;
   --color-elevated: var(--color-surface-elevated);
-  --color-surface-hover: #f1f5f9;
-  --color-border: #e2e8f0;
-  --color-border-subtle: #f1f5f9;
+  --color-surface-hover: #e7e7e7;
+  --color-border: #d8d8d8;
+  --color-border-subtle: #e8e8e8;
 
   /* Accent Colors */
-  --color-primary: #6366f1;
-  --color-primary-hover: #4f46e5;
-  --color-primary-rgb: 99, 102, 241;
+  --color-primary: #202020;
+  --color-primary-hover: #000000;
+  --color-primary-rgb: 32, 32, 32;
+  --color-on-primary: #ffffff;
   --color-primary-subtle: rgba(var(--color-primary-rgb), 0.16);
   --color-accent: var(--color-primary);
   --color-accent-hover: var(--color-primary-hover);
   --color-accent-bg: rgba(var(--color-primary-rgb), 0.12);
-  --color-secondary: #64748b;
+  --color-secondary: #747474;
   --color-focus: rgba(var(--color-primary-rgb), 0.35);
 
   /* App UI Surfaces */
   --ui-body-background:
-    radial-gradient(1200px 600px at -10% -10%, rgba(15, 23, 42, 0.045), transparent 60%),
-    radial-gradient(800px 500px at 110% 10%, rgba(15, 23, 42, 0.035), transparent 60%),
+    radial-gradient(1000px 560px at -8% -12%, rgba(0, 0, 0, 0.045), transparent 62%),
+    radial-gradient(900px 520px at 108% 4%, rgba(255, 255, 255, 0.82), transparent 64%),
     var(--color-background);
   --ui-main-background:
-    radial-gradient(760px 380px at 82% 4%, rgba(15, 23, 42, 0.04), transparent 62%),
-    radial-gradient(520px 280px at 18% 10%, rgba(15, 23, 42, 0.03), transparent 58%),
+    radial-gradient(760px 380px at 82% 2%, rgba(0, 0, 0, 0.035), transparent 64%),
     var(--color-background);
-  --ui-panel-bg: rgba(248, 250, 252, 0.78);
+  --ui-panel-bg: rgba(255, 255, 255, 0.76);
   --ui-panel-strong-bg: rgba(255, 255, 255, 0.96);
-  --ui-control-bg: rgba(15, 23, 42, 0.045);
-  --ui-control-hover-bg: rgba(15, 23, 42, 0.075);
-  --ui-input-bg: rgba(255, 255, 255, 0.82);
-  --ui-popover-bg: rgba(255, 255, 255, 0.96);
-  --ui-soft-border: rgba(15, 23, 42, 0.08);
-  --ui-muted-border: rgba(15, 23, 42, 0.12);
-  --ui-hairline-border: rgba(15, 23, 42, 0.06);
-  --ui-dashed-border: rgba(15, 23, 42, 0.14);
-  --ui-shimmer: rgba(15, 23, 42, 0.09);
+  --ui-control-bg: rgba(0, 0, 0, 0.045);
+  --ui-control-hover-bg: rgba(0, 0, 0, 0.075);
+  --ui-input-bg: rgba(255, 255, 255, 0.88);
+  --ui-popover-bg: rgba(255, 255, 255, 0.98);
+  --ui-soft-border: rgba(0, 0, 0, 0.08);
+  --ui-muted-border: rgba(0, 0, 0, 0.13);
+  --ui-hairline-border: rgba(0, 0, 0, 0.065);
+  --ui-dashed-border: rgba(0, 0, 0, 0.16);
+  --ui-shimmer: rgba(0, 0, 0, 0.08);
 
   /* Semantic Colors */
   --color-success: #16a34a; /* green-600 */
@@ -90,23 +90,23 @@
   --space-4xl: 80px;
 
   /* Borders */
-  --border-radius-sm: 4px;
-  --border-radius-md: 6px;
-  --border-radius-lg: 8px;
+  --border-radius-sm: 5px;
+  --border-radius-md: 9px;
+  --border-radius-lg: 16px;
 
   /* Shadows */
-  --shadow-xs: 0 1px 2px rgba(0,0,0,0.05);
-  --shadow-sm: 0 1px 3px rgba(15,23,42,0.06);
-  --shadow-md: 0 4px 12px rgba(15,23,42,0.08);
-  --shadow-lg: 0 12px 24px rgba(15,23,42,0.12);
-  --shadow-xl: 0 18px 36px rgba(15,23,42,0.16);
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-sm: 0 2px 7px rgba(0, 0, 0, 0.07);
+  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.09);
+  --shadow-lg: 0 18px 42px rgba(0, 0, 0, 0.13);
+  --shadow-xl: 0 28px 64px rgba(0, 0, 0, 0.17);
   
   /* Interactive Shadows */
-  --shadow-hover: 0 6px 16px rgba(15,23,42,0.10);
+  --shadow-hover: 0 14px 34px rgba(0, 0, 0, 0.13);
   --shadow-focus: 0 0 0 3px var(--color-focus);
 
   /* Transitions */
-  --transition-duration: 160ms;
+  --transition-duration: 180ms;
   --transition-timing: cubic-bezier(.2,.8,.2,1);
 
   /* Windowing */

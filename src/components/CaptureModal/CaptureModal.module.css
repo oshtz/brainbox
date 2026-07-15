@@ -22,6 +22,10 @@
   animation: slideUp 0.16s ease-out;
 }
 
+.createVaultModal {
+  width: min(100%, 440px);
+}
+
 .header {
   display: flex;
   align-items: center;
@@ -43,6 +47,17 @@
   margin: 3px 0 0;
   color: var(--color-text-secondary);
   font-size: var(--font-size-xs);
+}
+
+.createVaultHeader {
+  align-items: flex-start;
+  padding: 20px 20px 10px;
+  border-bottom: 0;
+}
+
+.createVaultTitle {
+  font-size: var(--font-size-lg);
+  letter-spacing: -0.02em;
 }
 
 .closeButton {
@@ -78,6 +93,11 @@
   padding: var(--space-md);
 }
 
+.createVaultForm {
+  gap: var(--space-lg);
+  padding: 10px 20px 20px;
+}
+
 .field {
   display: grid;
   gap: var(--space-xs);
@@ -87,6 +107,76 @@
   font-weight: 500;
   color: var(--color-text-secondary);
   font-size: var(--font-size-xs);
+}
+
+.passwordOption {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-lg);
+  padding: 12px;
+  border: 1px solid var(--ui-soft-border);
+  border-radius: var(--border-radius-md);
+  background: var(--ui-control-bg);
+  cursor: pointer;
+}
+
+.passwordOptionCopy {
+  display: grid;
+  gap: 2px;
+}
+
+.passwordOptionTitle {
+  color: var(--color-text-primary);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+}
+
+.passwordOptionDescription {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-normal);
+}
+
+.switch {
+  appearance: none;
+  flex: 0 0 auto;
+  width: 36px;
+  height: 20px;
+  margin: 0;
+  padding: 2px;
+  border: 1px solid var(--ui-muted-border);
+  border-radius: 999px;
+  background: var(--color-text-tertiary);
+  cursor: pointer;
+  transition:
+    background-color var(--transition-duration) var(--transition-timing),
+    border-color var(--transition-duration) var(--transition-timing);
+}
+
+.switch::after {
+  content: '';
+  display: block;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--color-surface-elevated);
+  box-shadow: var(--shadow-xs);
+  transition: transform var(--transition-duration) var(--transition-timing);
+}
+
+.switch:checked {
+  border-color: var(--color-primary);
+  background: var(--color-primary);
+}
+
+.switch:checked::after {
+  transform: translateX(16px);
+}
+
+.switch:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
 }
 
 .input,
@@ -114,7 +204,7 @@
 
 .textarea {
   resize: vertical;
-  min-height: 120px;
+  min-height: 88px;
 }
 
 .details {

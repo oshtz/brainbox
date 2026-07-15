@@ -258,7 +258,7 @@ export class OpenAICompatibleProvider implements AIProvider {
       body: JSON.stringify({
         model,
         messages,
-        max_tokens: options.maxTokens || 2048,
+        max_tokens: options.maxTokens || 4096,
         temperature: options.temperature ?? 0.7,
         stream: false,
       }),
@@ -270,7 +270,11 @@ export class OpenAICompatibleProvider implements AIProvider {
     }
 
     const data = await response.json();
-    return data.choices?.[0]?.message?.content || '';
+    const choice = data.choices?.[0];
+    if (!choice?.message?.content && choice?.finish_reason === 'length') {
+      throw new Error('The model used its output budget before returning an answer.');
+    }
+    return choice?.message?.content || '';
   }
 
   async streamGenerate(
@@ -297,7 +301,7 @@ export class OpenAICompatibleProvider implements AIProvider {
           body: JSON.stringify({
             model,
             messages,
-            max_tokens: options.maxTokens || 2048,
+            max_tokens: options.maxTokens || 4096,
             temperature: options.temperature ?? 0.7,
             stream: true,
           }),
