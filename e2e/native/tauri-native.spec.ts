@@ -105,7 +105,7 @@ async function launchNativeApp(runDir: string, dataDir: string): Promise<NativeA
 
   let port = 0;
   const { browser, page } = await (async () => {
-    port = await getWebViewDebugPort(webViewDataDir);
+    port = await getWebViewDebugPort(path.join(webViewDataDir, 'EBWebView'));
     return connectToNativePage(port);
   })().catch((error) => {
     const processState = child.exitCode === null ? 'still running' : `exited with code ${child.exitCode}`;
