@@ -10,6 +10,7 @@ Set-Location $repoRoot
 $devServer = $null
 $webView2DebugPort = 9222
 $qaConfigPath = Join-Path ([System.IO.Path]::GetTempPath()) "brainbox-tauri-native-qa-$PID.json"
+$qaWebViewDataPath = Join-Path ([System.IO.Path]::GetTempPath()) "brainbox-tauri-native-qa-webview-$PID"
 
 function Invoke-Pnpm {
   param([Parameter(ValueFromRemainingArguments = $true)][string[]]$Arguments)
@@ -81,6 +82,10 @@ try {
       -NotePropertyName additionalBrowserArgs `
       -NotePropertyValue "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --remote-debugging-port=$webView2DebugPort" `
       -Force
+    $qaConfig.app.windows[0] | Add-Member `
+      -NotePropertyName dataDirectory `
+      -NotePropertyValue $qaWebViewDataPath `
+      -Force
     [System.IO.File]::WriteAllText($qaConfigPath, ($qaConfig | ConvertTo-Json -Depth 100))
     Invoke-Pnpm tauri build --debug --no-bundle --ci --config $qaConfigPath
   }
@@ -102,4 +107,5 @@ try {
   }
 
   Remove-Item -Path $qaConfigPath -Force -ErrorAction SilentlyContinue
+  Remove-Item -Path $qaWebViewDataPath -Recurse -Force -ErrorAction SilentlyContinue
 }

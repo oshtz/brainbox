@@ -85,7 +85,6 @@ async function launchNativeApp(runDir: string, dataDir: string): Promise<NativeA
     env: {
       ...process.env,
       BRAINBOX_DATA_DIR: dataDir,
-      WEBVIEW2_USER_DATA_FOLDER: path.join(runDir, 'webview2'),
     },
   });
 
