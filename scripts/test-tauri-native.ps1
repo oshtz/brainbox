@@ -8,6 +8,12 @@ $ErrorActionPreference = 'Stop'
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot '..')
 Set-Location $repoRoot
 $devServer = $null
+$webView2ArgumentsKey = 'HKCU:\Software\Policies\Microsoft\Edge\WebView2\AdditionalBrowserArguments'
+$webView2ArgumentsName = 'brainbox.exe'
+$webView2ArgumentsKeyExisted = $false
+$webView2ArgumentsValueExisted = $false
+$webView2ArgumentsPreviousValue = $null
+$webView2ArgumentsConfigured = $false
 
 function Invoke-Pnpm {
   param([Parameter(ValueFromRemainingArguments = $true)][string[]]$Arguments)
@@ -68,6 +74,24 @@ if ($existingBrainbox) {
 }
 
 try {
+  $webView2ArgumentsKeyExisted = Test-Path $webView2ArgumentsKey
+  if ($webView2ArgumentsKeyExisted) {
+    $webView2ArgumentsPreviousValue = Get-ItemPropertyValue `
+      -Path $webView2ArgumentsKey `
+      -Name $webView2ArgumentsName `
+      -ErrorAction SilentlyContinue
+    $webView2ArgumentsValueExisted = $null -ne $webView2ArgumentsPreviousValue
+  }
+
+  New-Item -Path $webView2ArgumentsKey -Force | Out-Null
+  New-ItemProperty `
+    -Path $webView2ArgumentsKey `
+    -Name $webView2ArgumentsName `
+    -Value '--remote-debugging-port=0' `
+    -PropertyType String `
+    -Force | Out-Null
+  $webView2ArgumentsConfigured = $true
+
   if (-not $SkipBuild) {
     Invoke-Pnpm tauri build --debug --no-bundle --ci
   }
@@ -86,5 +110,27 @@ try {
   if ($devServer -and -not $devServer.HasExited) {
     Stop-ProcessTree -ProcessId $devServer.Id
     $devServer.WaitForExit(5000) | Out-Null
+  }
+
+  if ($webView2ArgumentsConfigured) {
+    if ($webView2ArgumentsValueExisted) {
+      Set-ItemProperty `
+        -Path $webView2ArgumentsKey `
+        -Name $webView2ArgumentsName `
+        -Value $webView2ArgumentsPreviousValue
+    } else {
+      Remove-ItemProperty `
+        -Path $webView2ArgumentsKey `
+        -Name $webView2ArgumentsName `
+        -ErrorAction SilentlyContinue
+    }
+
+    if (-not $webView2ArgumentsKeyExisted) {
+      $remainingValues = (Get-ItemProperty -Path $webView2ArgumentsKey).PSObject.Properties |
+        Where-Object { $_.Name -notmatch '^PS(Path|ParentPath|ChildName|Drive|Provider)$' }
+      if (-not $remainingValues) {
+        Remove-Item -Path $webView2ArgumentsKey -ErrorAction SilentlyContinue
+      }
+    }
   }
 }
