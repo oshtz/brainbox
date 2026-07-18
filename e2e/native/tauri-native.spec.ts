@@ -46,15 +46,6 @@ async function waitFor<T>(
   throw new Error(`${options.message}${lastError instanceof Error ? `: ${lastError.message}` : ''}`);
 }
 
-async function getWebViewDebugPort(userDataDir: string): Promise<number> {
-  return waitFor(async () => {
-    const value = await fsp.readFile(path.join(userDataDir, 'DevToolsActivePort'), 'utf8');
-    const port = Number.parseInt(value.split(/\r?\n/, 1)[0], 10);
-    if (!Number.isInteger(port) || port <= 0) throw new Error('Invalid DevToolsActivePort');
-    return port;
-  }, { message: 'Timed out waiting for WebView2 DevToolsActivePort', timeoutMs: 45_000 });
-}
-
 function resolveTauriExecutable(): string {
   if (process.env.BRAINBOX_TAURI_QA_EXE) {
     return process.env.BRAINBOX_TAURI_QA_EXE;
@@ -84,13 +75,17 @@ async function launchNativeApp(runDir: string, dataDir: string): Promise<NativeA
     throw new Error(`Tauri debug executable not found at ${exe}. Run pnpm tauri build --debug --no-bundle --ci first.`);
   }
 
-  const webViewDataDir = path.join(runDir, 'webview2');
+  const port = Number.parseInt(process.env.BRAINBOX_WEBVIEW2_DEBUG_PORT ?? '', 10);
+  if (!Number.isInteger(port) || port <= 0) {
+    throw new Error('BRAINBOX_WEBVIEW2_DEBUG_PORT is not set. Run pnpm test:tauri:qa to configure WebView2 debugging.');
+  }
+
   const child = spawn(exe, {
     cwd: path.dirname(exe),
     env: {
       ...process.env,
       BRAINBOX_DATA_DIR: dataDir,
-      WEBVIEW2_USER_DATA_FOLDER: webViewDataDir,
+      WEBVIEW2_USER_DATA_FOLDER: path.join(runDir, 'webview2'),
     },
   });
 
@@ -102,11 +97,7 @@ async function launchNativeApp(runDir: string, dataDir: string): Promise<NativeA
   child.stdout.pipe(stdout);
   child.stderr.pipe(stderr);
 
-  let port = 0;
-  const { browser, page } = await (async () => {
-    port = await getWebViewDebugPort(path.join(webViewDataDir, 'EBWebView'));
-    return connectToNativePage(port);
-  })().catch((error) => {
+  const { browser, page } = await connectToNativePage(port).catch((error) => {
     const processState = child.exitCode === null ? 'still running' : `exited with code ${child.exitCode}`;
     child.kill();
     throw new Error(`${error instanceof Error ? error.message : error}\nNative process was ${processState}.\nNative stderr:\n${stderrOutput.trim() || '<empty>'}`);

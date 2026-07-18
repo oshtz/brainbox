@@ -74,6 +74,11 @@ if ($existingBrainbox) {
 }
 
 try {
+  $portListener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback, 0)
+  $portListener.Start()
+  $env:BRAINBOX_WEBVIEW2_DEBUG_PORT = $portListener.LocalEndpoint.Port
+  $portListener.Stop()
+
   $webView2ArgumentsKeyExisted = Test-Path $webView2ArgumentsKey
   if ($webView2ArgumentsKeyExisted) {
     $webView2ArgumentsPreviousValue = Get-ItemPropertyValue `
@@ -87,7 +92,7 @@ try {
   New-ItemProperty `
     -Path $webView2ArgumentsKey `
     -Name $webView2ArgumentsName `
-    -Value '--remote-debugging-port=0' `
+    -Value "--remote-debugging-port=$env:BRAINBOX_WEBVIEW2_DEBUG_PORT" `
     -PropertyType String `
     -Force | Out-Null
   $webView2ArgumentsConfigured = $true
