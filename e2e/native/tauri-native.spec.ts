@@ -2,7 +2,6 @@ import { test, expect, chromium, type Browser, type Page } from '@playwright/tes
 import { execFile, spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
-import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
@@ -26,23 +25,6 @@ type NativeApp = {
 
 let app: NativeApp | null = null;
 
-async function getAvailablePort(): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const server = net.createServer();
-    server.unref();
-    server.once('error', reject);
-    server.listen(0, '127.0.0.1', () => {
-      const address = server.address();
-      if (!address || typeof address === 'string') {
-        server.close(() => reject(new Error('Could not allocate a TCP port')));
-        return;
-      }
-      const port = address.port;
-      server.close(() => resolve(port));
-    });
-  });
-}
-
 async function waitFor<T>(
   action: () => Promise<T>,
   options: { message: string; timeoutMs?: number; intervalMs?: number }
@@ -62,6 +44,15 @@ async function waitFor<T>(
   }
 
   throw new Error(`${options.message}${lastError instanceof Error ? `: ${lastError.message}` : ''}`);
+}
+
+async function getWebViewDebugPort(userDataDir: string): Promise<number> {
+  return waitFor(async () => {
+    const value = await fsp.readFile(path.join(userDataDir, 'DevToolsActivePort'), 'utf8');
+    const port = Number.parseInt(value.split(/\r?\n/, 1)[0], 10);
+    if (!Number.isInteger(port) || port <= 0) throw new Error('Invalid DevToolsActivePort');
+    return port;
+  }, { message: 'Timed out waiting for WebView2 DevToolsActivePort', timeoutMs: 45_000 });
 }
 
 function resolveTauriExecutable(): string {
@@ -93,14 +84,14 @@ async function launchNativeApp(runDir: string, dataDir: string): Promise<NativeA
     throw new Error(`Tauri debug executable not found at ${exe}. Run pnpm tauri build --debug --no-bundle --ci first.`);
   }
 
-  const port = await getAvailablePort();
+  const webViewDataDir = path.join(runDir, 'webview2');
   const child = spawn(exe, {
     cwd: path.dirname(exe),
     env: {
       ...process.env,
       BRAINBOX_DATA_DIR: dataDir,
-      WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${port}`,
-      WEBVIEW2_USER_DATA_FOLDER: path.join(runDir, 'webview2'),
+      WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: '--remote-debugging-port=0',
+      WEBVIEW2_USER_DATA_FOLDER: webViewDataDir,
     },
   });
 
@@ -112,7 +103,11 @@ async function launchNativeApp(runDir: string, dataDir: string): Promise<NativeA
   child.stdout.pipe(stdout);
   child.stderr.pipe(stderr);
 
-  const { browser, page } = await connectToNativePage(port).catch((error) => {
+  let port = 0;
+  const { browser, page } = await (async () => {
+    port = await getWebViewDebugPort(webViewDataDir);
+    return connectToNativePage(port);
+  })().catch((error) => {
     const processState = child.exitCode === null ? 'still running' : `exited with code ${child.exitCode}`;
     child.kill();
     throw new Error(`${error instanceof Error ? error.message : error}\nNative process was ${processState}.\nNative stderr:\n${stderrOutput.trim() || '<empty>'}`);
