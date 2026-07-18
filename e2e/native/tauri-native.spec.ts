@@ -106,10 +106,17 @@ async function launchNativeApp(runDir: string, dataDir: string): Promise<NativeA
 
   const stdout = fs.createWriteStream(path.join(runDir, 'brainbox.stdout.log'), { flags: 'a' });
   const stderr = fs.createWriteStream(path.join(runDir, 'brainbox.stderr.log'), { flags: 'a' });
+  let stderrOutput = '';
+  child.stderr.setEncoding('utf8');
+  child.stderr.on('data', (chunk) => { stderrOutput += chunk; });
   child.stdout.pipe(stdout);
   child.stderr.pipe(stderr);
 
-  const { browser, page } = await connectToNativePage(port);
+  const { browser, page } = await connectToNativePage(port).catch((error) => {
+    const processState = child.exitCode === null ? 'still running' : `exited with code ${child.exitCode}`;
+    child.kill();
+    throw new Error(`${error instanceof Error ? error.message : error}\nNative process was ${processState}.\nNative stderr:\n${stderrOutput.trim() || '<empty>'}`);
+  });
   await page.bringToFront();
 
   return { browser, dataDir, page, port, process: child, runDir };
