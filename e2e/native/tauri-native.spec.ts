@@ -2,7 +2,6 @@ import { test, expect, chromium, type Browser, type Page } from '@playwright/tes
 import { execFile, spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
-import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
@@ -25,23 +24,6 @@ type NativeApp = {
 };
 
 let app: NativeApp | null = null;
-
-async function getAvailablePort(): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const server = net.createServer();
-    server.unref();
-    server.once('error', reject);
-    server.listen(0, '127.0.0.1', () => {
-      const address = server.address();
-      if (!address || typeof address === 'string') {
-        server.close(() => reject(new Error('Could not allocate a TCP port')));
-        return;
-      }
-      const port = address.port;
-      server.close(() => resolve(port));
-    });
-  });
-}
 
 async function waitFor<T>(
   action: () => Promise<T>,
@@ -93,22 +75,32 @@ async function launchNativeApp(runDir: string, dataDir: string): Promise<NativeA
     throw new Error(`Tauri debug executable not found at ${exe}. Run pnpm tauri build --debug --no-bundle --ci first.`);
   }
 
-  const port = await getAvailablePort();
+  const port = Number.parseInt(process.env.BRAINBOX_WEBVIEW2_DEBUG_PORT ?? '', 10);
+  if (!Number.isInteger(port) || port <= 0) {
+    throw new Error('BRAINBOX_WEBVIEW2_DEBUG_PORT is not set. Run pnpm test:tauri:qa to configure WebView2 debugging.');
+  }
+
   const child = spawn(exe, {
     cwd: path.dirname(exe),
     env: {
       ...process.env,
       BRAINBOX_DATA_DIR: dataDir,
-      WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${port}`,
     },
   });
 
   const stdout = fs.createWriteStream(path.join(runDir, 'brainbox.stdout.log'), { flags: 'a' });
   const stderr = fs.createWriteStream(path.join(runDir, 'brainbox.stderr.log'), { flags: 'a' });
+  let stderrOutput = '';
+  child.stderr.setEncoding('utf8');
+  child.stderr.on('data', (chunk) => { stderrOutput += chunk; });
   child.stdout.pipe(stdout);
   child.stderr.pipe(stderr);
 
-  const { browser, page } = await connectToNativePage(port);
+  const { browser, page } = await connectToNativePage(port).catch((error) => {
+    const processState = child.exitCode === null ? 'still running' : `exited with code ${child.exitCode}`;
+    child.kill();
+    throw new Error(`${error instanceof Error ? error.message : error}\nNative process was ${processState}.\nNative stderr:\n${stderrOutput.trim() || '<empty>'}`);
+  });
   await page.bringToFront();
 
   return { browser, dataDir, page, port, process: child, runDir };
