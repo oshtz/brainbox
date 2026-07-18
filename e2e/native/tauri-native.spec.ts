@@ -100,6 +100,7 @@ async function launchNativeApp(runDir: string, dataDir: string): Promise<NativeA
       ...process.env,
       BRAINBOX_DATA_DIR: dataDir,
       WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${port}`,
+      WEBVIEW2_USER_DATA_FOLDER: path.join(runDir, 'webview2'),
     },
   });
 
