@@ -29,7 +29,7 @@ urlencoding = "2"
 
 # brainbox Core Dependencies
 rusqlite = { version = "0.31", features = ["bundled", "limits"] } # Bundled for easy setup, limits for safety
-tantivy = "0.22"
+tantivy = "0.26.1"
 chacha20poly1305 = { version = "0.10", features = ["alloc"] } # Using XChaCha20 variant
 rand = "0.8"
 chrono = { version = "0.4", features = ["serde"] } # Timestamps

@@ -154,7 +154,7 @@ impl SearchService {
         // Initialize the index writer
         let mut index_writer: tantivy::IndexWriter = index.writer(50_000_000)?; // 50MB buffer
 
-        // BM25 is used by default in Tantivy 0.22, no need to explicitly set it
+        // BM25 is Tantivy's default, so no explicit configuration is needed.
 
         index_writer.commit()?;
 
@@ -268,7 +268,7 @@ impl SearchService {
 
         // Parse query and search
         let query = query_parser.parse_query(query_str)?;
-        let top_docs = searcher.search(&query, &TopDocs::with_limit(limit))?;
+        let top_docs = searcher.search(&query, &TopDocs::with_limit(limit).order_by_score())?;
 
         // Process results
         let mut results = Vec::with_capacity(top_docs.len());
