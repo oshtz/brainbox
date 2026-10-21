@@ -2,7 +2,6 @@ version: 2
 updates:
   - package-ecosystem: npm
     directory: /
-    target-branch: dev
     schedule:
       interval: weekly
     # Version-update PRs are disabled; security updates still open PRs.
@@ -14,7 +13,6 @@ updates:
 
   - package-ecosystem: cargo
     directory: /src-tauri
-    target-branch: dev
     schedule:
       interval: weekly
     open-pull-requests-limit: 0
@@ -25,7 +23,6 @@ updates:
 
   - package-ecosystem: github-actions
     directory: /
-    target-branch: dev
     schedule:
       interval: weekly
     open-pull-requests-limit: 0
